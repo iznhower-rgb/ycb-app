@@ -44,6 +44,7 @@
       border: none;
       margin-bottom: 15px;
       font-size: 16px;
+      box-sizing: border-box;
     }
 
     button {
@@ -58,8 +59,9 @@
       cursor: pointer;
     }
 
-    button:active {
-      transform: scale(0.98);
+    button:disabled {
+      opacity: 0.6;
+      cursor: wait;
     }
 
     #result {
@@ -78,6 +80,22 @@
     .rank {
       font-size: 20px;
       font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .probability {
+      color: #22c55e;
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    #status {
+      margin-top: 15px;
+      color: #94a3b8;
+    }
+
+    .error {
+      color: #f87171;
     }
   </style>
 </head>
@@ -102,9 +120,11 @@
         placeholder="مثال: Barcelona vs Real Madrid"
       >
 
-      <button onclick="analyze()">
+      <button id="analyzeButton" onclick="analyze()">
         تحليل المباراة
       </button>
+
+      <div id="status"></div>
 
     </div>
 
@@ -114,17 +134,20 @@
 
       <div class="prediction">
         <div class="rank">🥇 التوقع الأول</div>
-        <div>سيظهر هنا بعد بناء محرك Y.C.B</div>
+        <div id="prediction1">---</div>
+        <div class="probability" id="probability1"></div>
       </div>
 
       <div class="prediction">
         <div class="rank">🥈 التوقع الثاني</div>
-        <div>سيظهر هنا بعد بناء محرك Y.C.B</div>
+        <div id="prediction2">---</div>
+        <div class="probability" id="probability2"></div>
       </div>
 
       <div class="prediction">
         <div class="rank">🥉 التوقع الثالث</div>
-        <div>سيظهر هنا بعد بناء محرك Y.C.B</div>
+        <div id="prediction3">---</div>
+        <div class="probability" id="probability3"></div>
       </div>
 
     </div>
@@ -132,17 +155,72 @@
   </div>
 
   <script>
-    function analyze() {
+
+    async function analyze() {
 
       const match = document.getElementById("match").value.trim();
+      const button = document.getElementById("analyzeButton");
+      const status = document.getElementById("status");
+      const result = document.getElementById("result");
 
       if (!match) {
         alert("اكتب اسم المباراة أولاً");
         return;
       }
 
-      document.getElementById("result").style.display = "block";
+      button.disabled = true;
+      status.className = "";
+      status.textContent = "جاري تحليل المباراة...";
+      result.style.display = "none";
+
+      try {
+
+        const response = await fetch("/api/analyze", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            match: match
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+          throw new Error(data.error || "حدث خطأ أثناء التحليل");
+        }
+
+        const predictions = data.predictions || [];
+
+        if (predictions.length < 3) {
+          throw new Error("لم يسترجع محرك Y.C.B التوقعات بشكل صحيح");
+        }
+
+        for (let i = 0; i < 3; i++) {
+
+          document.getElementById("prediction" + (i + 1)).textContent =
+            predictions[i].label;
+
+          document.getElementById("probability" + (i + 1)).textContent =
+            predictions[i].probability + "%";
+        }
+
+        result.style.display = "block";
+        status.textContent = "تم التحليل بواسطة محرك Y.C.B";
+
+      } catch (error) {
+
+        status.className = "error";
+        status.textContent = error.message;
+
+      } finally {
+
+        button.disabled = false;
+
+      }
     }
+
   </script>
 
 </body>
