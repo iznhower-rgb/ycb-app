@@ -1,227 +1,302 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Y.C.B</title>
 
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #0f172a;
-      color: white;
-      text-align: center;
-    }
+<meta charset="UTF-8">
 
-    .app {
-      max-width: 500px;
-      margin: auto;
-      padding: 30px 20px;
-    }
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0"
+>
 
-    h1 {
-      font-size: 42px;
-      margin-bottom: 5px;
-    }
+<title>Y.C.B</title>
 
-    .subtitle {
-      color: #94a3b8;
-      margin-bottom: 40px;
-    }
+<style>
 
-    .card {
-      background: #1e293b;
-      border-radius: 18px;
-      padding: 25px;
-      margin-bottom: 20px;
-    }
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #0f172a;
+  color: white;
+  text-align: center;
+}
 
-    input {
-      width: 90%;
-      padding: 14px;
-      border-radius: 10px;
-      border: none;
-      margin-bottom: 15px;
-      font-size: 16px;
-      box-sizing: border-box;
-    }
+.app {
+  max-width: 500px;
+  margin: auto;
+  padding: 30px 20px;
+}
 
-    button {
-      width: 95%;
-      padding: 15px;
-      border: none;
-      border-radius: 10px;
-      background: #22c55e;
-      color: white;
-      font-size: 18px;
-      font-weight: bold;
-      cursor: pointer;
-    }
+h1 {
+  font-size: 42px;
+  margin-bottom: 5px;
+}
 
-    button:disabled {
-      opacity: 0.6;
-      cursor: wait;
-    }
+.subtitle {
+  color: #94a3b8;
+  margin-bottom: 40px;
+}
 
-    #result {
-      display: none;
-      margin-top: 25px;
-    }
+.card {
+  background: #1e293b;
+  border-radius: 18px;
+  padding: 25px;
+  margin-bottom: 20px;
+}
 
-    .prediction {
-      background: #334155;
-      border-radius: 12px;
-      padding: 15px;
-      margin: 10px 0;
-      text-align: right;
-    }
+input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 15px;
+  border-radius: 10px;
+  border: none;
+  margin-bottom: 15px;
+  font-size: 16px;
+  text-align: center;
+}
 
-    .rank {
-      font-size: 20px;
-      font-weight: bold;
-      margin-bottom: 8px;
-    }
+button {
+  width: 100%;
+  padding: 15px;
+  border: none;
+  border-radius: 10px;
+  background: #22c55e;
+  color: white;
+  font-size: 18px;
+  font-weight: bold;
+}
 
-    .probability {
-      color: #22c55e;
-      font-size: 18px;
-      font-weight: bold;
-    }
+button:disabled {
+  opacity: 0.6;
+}
 
-    #status {
-      margin-top: 15px;
-      color: #94a3b8;
-    }
+#message {
+  margin-top: 15px;
+  color: #fbbf24;
+}
 
-    .error {
-      color: #f87171;
-    }
-  </style>
+#result {
+  display: none;
+  margin-top: 25px;
+}
+
+.prediction {
+  background: #334155;
+  border-radius: 12px;
+  padding: 18px;
+  margin: 10px 0;
+  text-align: right;
+}
+
+.rank {
+  font-size: 20px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.probability {
+  color: #4ade80;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+</style>
+
 </head>
 
 <body>
 
-  <div class="app">
+<div class="app">
 
-    <h1>Y.C.B</h1>
+<h1>Y.C.B</h1>
 
-    <div class="subtitle">
-      Football Prediction Engine
-    </div>
+<div class="subtitle">
+Football Prediction Engine
+</div>
 
-    <div class="card">
+<div class="card">
 
-      <h2>اختر مباراة</h2>
+<h2>اختر مباراة</h2>
 
-      <input
-        type="text"
-        id="match"
-        placeholder="مثال: Barcelona vs Real Madrid"
-      >
+<input
+  type="text"
+  id="match"
+  value="Barcelona vs Real Madrid"
+  placeholder="مثال: Barcelona vs Real Madrid"
+>
 
-      <button id="analyzeButton" onclick="analyze()">
-        تحليل المباراة
-      </button>
+<button
+  id="analyzeButton"
+  onclick="analyze()"
+>
+تحليل المباراة
+</button>
 
-      <div id="status"></div>
+<div id="message"></div>
 
-    </div>
+</div>
 
-    <div id="result">
+<div id="result">
 
-      <h2>أفضل التوقعات</h2>
+<h2>أفضل التوقعات</h2>
 
-      <div class="prediction">
-        <div class="rank">🥇 التوقع الأول</div>
-        <div id="prediction1">---</div>
-        <div class="probability" id="probability1"></div>
-      </div>
+<div class="prediction">
+  <div class="rank" id="prediction1"></div>
+  <div class="probability" id="probability1"></div>
+</div>
 
-      <div class="prediction">
-        <div class="rank">🥈 التوقع الثاني</div>
-        <div id="prediction2">---</div>
-        <div class="probability" id="probability2"></div>
-      </div>
+<div class="prediction">
+  <div class="rank" id="prediction2"></div>
+  <div class="probability" id="probability2"></div>
+</div>
 
-      <div class="prediction">
-        <div class="rank">🥉 التوقع الثالث</div>
-        <div id="prediction3">---</div>
-        <div class="probability" id="probability3"></div>
-      </div>
+<div class="prediction">
+  <div class="rank" id="prediction3"></div>
+  <div class="probability" id="probability3"></div>
+</div>
 
-    </div>
+</div>
 
-  </div>
+</div>
 
-  <script>
 
-    async function analyze() {
+<script>
 
-      const match = document.getElementById("match").value.trim();
-      const button = document.getElementById("analyzeButton");
-      const status = document.getElementById("status");
-      const result = document.getElementById("result");
+async function analyze() {
 
-      if (!match) {
-        alert("اكتب اسم المباراة أولاً");
-        return;
+  const match =
+    document.getElementById("match").value.trim();
+
+  const button =
+    document.getElementById("analyzeButton");
+
+  const message =
+    document.getElementById("message");
+
+  const result =
+    document.getElementById("result");
+
+  if (!match) {
+
+    message.textContent =
+      "اكتب اسم المباراة أولاً";
+
+    return;
+  }
+
+  button.disabled = true;
+
+  message.textContent =
+    "جاري تحليل المباراة...";
+
+  result.style.display = "none";
+
+  try {
+
+    const response = await fetch(
+      "/api/analyze",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+          match: match
+        })
       }
+    );
 
-      button.disabled = true;
-      status.className = "";
-      status.textContent = "جاري تحليل المباراة...";
-      result.style.display = "none";
+    // نقرأ النص أولاً
+    // حتى لا يحدث خطأ JSON مرة أخرى
+    const text = await response.text();
 
-      try {
-
-        const response = await fetch("/api/analyze", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            match: match
-          })
-        });
-
-        const data = await response.json();
-
-        if (!response.ok || data.error) {
-          throw new Error(data.error || "حدث خطأ أثناء التحليل");
-        }
-
-        const predictions = data.predictions || [];
-
-        if (predictions.length < 3) {
-          throw new Error("لم يسترجع محرك Y.C.B التوقعات بشكل صحيح");
-        }
-
-        for (let i = 0; i < 3; i++) {
-
-          document.getElementById("prediction" + (i + 1)).textContent =
-            predictions[i].label;
-
-          document.getElementById("probability" + (i + 1)).textContent =
-            predictions[i].probability + "%";
-        }
-
-        result.style.display = "block";
-        status.textContent = "تم التحليل بواسطة محرك Y.C.B";
-
-      } catch (error) {
-
-        status.className = "error";
-        status.textContent = error.message;
-
-      } finally {
-
-        button.disabled = false;
-
-      }
+    if (!text) {
+      throw new Error(
+        "الخادم أعاد استجابة فارغة"
+      );
     }
 
-  </script>
+    let data;
+
+    try {
+
+      data = JSON.parse(text);
+
+    } catch (e) {
+
+      throw new Error(
+        "الخادم لم يُرجع JSON صالحاً"
+      );
+    }
+
+    if (!response.ok) {
+
+      throw new Error(
+        data.error || "حدث خطأ في الخادم"
+      );
+    }
+
+    if (!data.success) {
+
+      throw new Error(
+        data.error || "فشل التحليل"
+      );
+    }
+
+    const predictions =
+      data.predictions;
+
+    for (let i = 0; i < 3; i++) {
+
+      const prediction =
+        predictions[i];
+
+      document.getElementById(
+        "prediction" + (i + 1)
+      ).textContent =
+        getMedal(i) +
+        " " +
+        prediction.label;
+
+      document.getElementById(
+        "probability" + (i + 1)
+      ).textContent =
+        prediction.probability +
+        "%";
+    }
+
+    result.style.display = "block";
+
+    message.textContent =
+      "تم تحليل المباراة بواسطة Y.C.B";
+
+  } catch (error) {
+
+    message.textContent =
+      "خطأ: " + error.message;
+
+    result.style.display = "none";
+
+  } finally {
+
+    button.disabled = false;
+  }
+}
+
+
+function getMedal(index) {
+
+  if (index === 0) return "🥇";
+  if (index === 1) return "🥈";
+
+  return "🥉";
+}
+
+</script>
 
 </body>
+
 </html>
