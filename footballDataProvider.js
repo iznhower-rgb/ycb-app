@@ -9,7 +9,20 @@ import {
 
 
 // ==========================================
-// PROVIDER
+// CONFIGURATION
+// ==========================================
+
+const API_BASE =
+  "https://api.football-data.org/v4";
+
+
+// Premier League
+const COMPETITION_CODE =
+  "PL";
+
+
+// ==========================================
+// FOOTBALL-DATA.ORG PROVIDER
 // ==========================================
 
 class FootballDataProvider extends DataProvider {
@@ -28,13 +41,41 @@ class FootballDataProvider extends DataProvider {
   async getMatchData(home, away, env) {
 
     // --------------------------------------
-    // Check API token
+    // Validate environment
     // --------------------------------------
 
-    if (
-      !env ||
-      !env.FOOTBALL_DATA_TOKEN
-    ) {
+    if (!env) {
+
+      return {
+
+        provider: this.name,
+
+        status: "environment_missing",
+
+        home,
+        away,
+
+        data: null,
+
+        message:
+          "Worker environment is missing"
+
+      };
+
+    }
+
+
+    // --------------------------------------
+    // Validate token
+    // --------------------------------------
+
+    const token =
+      String(
+        env.FOOTBALL_DATA_TOKEN || ""
+      ).trim();
+
+
+    if (!token) {
 
       return {
 
@@ -43,135 +84,337 @@ class FootballDataProvider extends DataProvider {
         status: "not_configured",
 
         home,
-
         away,
 
         data: null,
 
+        dataSource:
+          "Football-Data.org",
+
         message:
-          "FOOTBALL_DATA_TOKEN is not configured"
+          "FOOTBALL_DATA_TOKEN is missing"
 
       };
 
     }
 
 
-    const token =
-      env.FOOTBALL_DATA_TOKEN;
+    // ======================================
+    // DATE RANGE
+    // ======================================
+
+    const today =
+      new Date();
 
 
-    // --------------------------------------
-    // Request Football-Data.org
-    // --------------------------------------
+    const startDate =
+      new Date(today);
 
-    const response = await fetch(
 
-      "https://api.football-data.org/v4/matches",
-
-      {
-
-        method: "GET",
-
-        headers: {
-
-          "X-Auth-Token":
-            token,
-
-          "Accept":
-            "application/json"
-
-        }
-
-      }
-
+    startDate.setDate(
+      today.getDate() - 30
     );
 
 
-    // --------------------------------------
-    // API error
-    // --------------------------------------
+    const endDate =
+      new Date(today);
 
-    if (!response.ok) {
 
-      const errorText =
-        await response.text();
+    endDate.setDate(
+      today.getDate() + 365
+    );
 
-      throw new Error(
 
-        `Football-Data.org error ${response.status}: ${errorText}`
+    const dateFrom =
+      formatDate(startDate);
 
+
+    const dateTo =
+      formatDate(endDate);
+
+
+    // ======================================
+    // BUILD API URL
+    // ======================================
+
+    const apiUrl =
+      new URL(
+        `${API_BASE}/competitions/${COMPETITION_CODE}/matches`
       );
+
+
+    apiUrl.searchParams.set(
+      "dateFrom",
+      dateFrom
+    );
+
+
+    apiUrl.searchParams.set(
+      "dateTo",
+      dateTo
+    );
+
+
+    // ======================================
+    // API REQUEST
+    // ======================================
+
+    let response;
+
+
+    try {
+
+      response =
+        await fetch(
+          apiUrl.toString(),
+          {
+
+            method: "GET",
+
+            headers: {
+
+              "X-Auth-Token":
+                token,
+
+              "Accept":
+                "application/json"
+
+            }
+
+          }
+        );
+
+    } catch (error) {
+
+      return {
+
+        provider: this.name,
+
+        status: "network_error",
+
+        home,
+        away,
+
+        data: null,
+
+        message:
+          error?.message ||
+          String(error)
+
+      };
 
     }
 
 
-    // --------------------------------------
-    // Parse response
-    // --------------------------------------
+    // ======================================
+    // READ RESPONSE
+    // ======================================
 
-    const result =
-      await response.json();
+    const responseText =
+      await response.text();
 
+
+    // ======================================
+    // HTTP ERROR
+    // ======================================
+
+    if (!response.ok) {
+
+      let apiMessage =
+        responseText;
+
+
+      try {
+
+        const parsed =
+          JSON.parse(
+            responseText
+          );
+
+
+        if (
+          parsed &&
+          parsed.error
+        ) {
+
+          apiMessage =
+            parsed.error;
+
+        }
+
+      } catch (_) {
+
+        // Keep raw response
+
+      }
+
+
+      let status =
+        "api_error";
+
+
+      if (
+        response.status === 401
+      ) {
+
+        status =
+          "unauthorized";
+
+      }
+
+
+      if (
+        response.status === 403
+      ) {
+
+        status =
+          "forbidden";
+
+      }
+
+
+      if (
+        response.status === 429
+      ) {
+
+        status =
+          "rate_limited";
+
+      }
+
+
+      return {
+
+        provider: this.name,
+
+        status: status,
+
+        httpStatus:
+          response.status,
+
+        home,
+        away,
+
+        data: null,
+
+        message:
+          `Football-Data.org HTTP ${response.status}: ${apiMessage}`
+
+      };
+
+    }
+
+
+    // ======================================
+    // PARSE JSON
+    // ======================================
+
+    let result;
+
+
+    try {
+
+      result =
+        JSON.parse(
+          responseText
+        );
+
+    } catch (error) {
+
+      return {
+
+        provider: this.name,
+
+        status:
+          "invalid_json",
+
+        httpStatus:
+          response.status,
+
+        home,
+        away,
+
+        data: null,
+
+        message:
+          "Football-Data.org returned invalid JSON"
+
+      };
+
+    }
+
+
+    // ======================================
+    // EXTRACT MATCHES
+    // ======================================
 
     const matches =
-      Array.isArray(result.matches)
+      Array.isArray(
+        result?.matches
+      )
         ? result.matches
         : [];
 
 
-    // --------------------------------------
-    // Normalize search names
-    // --------------------------------------
+    // ======================================
+    // NORMALIZE SEARCH NAMES
+    // ======================================
 
     const homeSearch =
       normalizeName(home);
+
 
     const awaySearch =
       normalizeName(away);
 
 
-    // --------------------------------------
-    // Find requested match
-    // --------------------------------------
+    // ======================================
+    // FIND MATCH
+    // ======================================
 
     const match =
-      matches.find(item => {
+      matches.find(
+        item => {
 
-        const apiHome =
-          normalizeName(
-            item.homeTeam?.name ||
-            ""
+          const apiHome =
+            normalizeName(
+              item?.homeTeam?.name ||
+              item?.homeTeam?.shortName ||
+              ""
+            );
+
+
+          const apiAway =
+            normalizeName(
+              item?.awayTeam?.name ||
+              item?.awayTeam?.shortName ||
+              ""
+            );
+
+
+          return (
+
+            namesMatch(
+              apiHome,
+              homeSearch
+            )
+
+            &&
+
+            namesMatch(
+              apiAway,
+              awaySearch
+            )
+
           );
 
-        const apiAway =
-          normalizeName(
-            item.awayTeam?.name ||
-            ""
-          );
+        }
+      );
 
 
-        return (
-
-          (
-            apiHome.includes(homeSearch) ||
-            homeSearch.includes(apiHome)
-          )
-
-          &&
-
-          (
-            apiAway.includes(awaySearch) ||
-            awaySearch.includes(apiAway)
-          )
-
-        );
-
-      });
-
-
-    // --------------------------------------
-    // Match not found
-    // --------------------------------------
+    // ======================================
+    // MATCH NOT FOUND
+    // ======================================
 
     if (!match) {
 
@@ -179,50 +422,93 @@ class FootballDataProvider extends DataProvider {
 
         provider: this.name,
 
-        status: "no_match_found",
+        status:
+          "api_ok_no_match",
+
+        httpStatus:
+          response.status,
 
         home,
-
         away,
 
         data: {
 
           matchesChecked:
-            matches.length
+            matches.length,
 
-        }
+          dateFrom:
+            dateFrom,
+
+          dateTo:
+            dateTo,
+
+          competition:
+            result?.competition?.name ||
+            "Premier League",
+
+          competitionCode:
+            result?.competition?.code ||
+            COMPETITION_CODE
+
+        },
+
+        message:
+          "Football-Data.org connection works, but the requested match was not found"
 
       };
 
     }
 
 
-    // --------------------------------------
-    // Return normalized data
-    // --------------------------------------
+    // ======================================
+    // MATCH FOUND
+    // ======================================
 
     return {
 
       provider: this.name,
 
-      status: "success",
+      status:
+        "success",
+
+      httpStatus:
+        response.status,
 
       home,
-
       away,
 
       data: {
 
         id:
-          match.id || null,
+          match.id ||
+          null,
+
 
         utcDate:
-          match.utcDate || null,
+          match.utcDate ||
+          null,
+
 
         status:
-          match.status || null,
+          match.status ||
+          null,
+
+
+        stage:
+          match.stage ||
+          null,
+
+
+        group:
+          match.group ||
+          null,
+
 
         competition: {
+
+          id:
+            match.competition?.id ||
+            null,
 
           name:
             match.competition?.name ||
@@ -234,6 +520,24 @@ class FootballDataProvider extends DataProvider {
 
         },
 
+
+        season: {
+
+          id:
+            match.season?.id ||
+            null,
+
+          startDate:
+            match.season?.startDate ||
+            null,
+
+          endDate:
+            match.season?.endDate ||
+            null
+
+        },
+
+
         homeTeam: {
 
           id:
@@ -242,9 +546,18 @@ class FootballDataProvider extends DataProvider {
 
           name:
             match.homeTeam?.name ||
+            null,
+
+          shortName:
+            match.homeTeam?.shortName ||
+            null,
+
+          tla:
+            match.homeTeam?.tla ||
             null
 
         },
+
 
         awayTeam: {
 
@@ -254,18 +567,72 @@ class FootballDataProvider extends DataProvider {
 
           name:
             match.awayTeam?.name ||
+            null,
+
+          shortName:
+            match.awayTeam?.shortName ||
+            null,
+
+          tla:
+            match.awayTeam?.tla ||
             null
 
         },
 
-        score:
-          match.score || null
 
-      }
+        score:
+          match.score ||
+          null,
+
+
+        odds:
+          match.odds ||
+          null
+
+      },
+
+
+      message:
+        "Match data received successfully"
 
     };
 
   }
+
+}
+
+
+// ==========================================
+// FORMAT DATE
+// ==========================================
+
+function formatDate(date) {
+
+  const year =
+    date.getUTCFullYear();
+
+
+  const month =
+    String(
+      date.getUTCMonth() + 1
+    ).padStart(
+      2,
+      "0"
+    );
+
+
+  const day =
+    String(
+      date.getUTCDate()
+    ).padStart(
+      2,
+      "0"
+    );
+
+
+  return (
+    `${year}-${month}-${day}`
+  );
 
 }
 
@@ -276,16 +643,88 @@ class FootballDataProvider extends DataProvider {
 
 function normalizeName(name) {
 
-  return String(name)
+  return String(
+    name || ""
+  )
 
     .toLowerCase()
 
     .trim()
 
+    .normalize("NFD")
+
+    .replace(
+      /[\u0300-\u036f]/g,
+      ""
+    )
+
+    .replace(
+      /\b(fc|cf|afc)\b/gi,
+      ""
+    )
+
+    .replace(
+      /[^a-z0-9\s]/gi,
+      " "
+    )
+
     .replace(
       /\s+/g,
       " "
-    );
+    )
+
+    .trim();
+
+}
+
+
+// ==========================================
+// COMPARE TEAM NAMES
+// ==========================================
+
+function namesMatch(
+  apiName,
+  searchName
+) {
+
+  if (
+    !apiName ||
+    !searchName
+  ) {
+
+    return false;
+
+  }
+
+
+  if (
+    apiName === searchName
+  ) {
+
+    return true;
+
+  }
+
+
+  if (
+    apiName.includes(searchName)
+  ) {
+
+    return true;
+
+  }
+
+
+  if (
+    searchName.includes(apiName)
+  ) {
+
+    return true;
+
+  }
+
+
+  return false;
 
 }
 
