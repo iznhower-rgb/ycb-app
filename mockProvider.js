@@ -1,60 +1,43 @@
-// ============================================
-// Y.C.B - MOCK DATA PROVIDER
-// ============================================
-
 import {
   DataProvider,
   registerProvider
 } from "./providers.js";
 
 
-// --------------------------------------------
-// Mock Provider
-// --------------------------------------------
+// ==========================================
+// Y.C.B MOCK PROVIDER
+// ==========================================
 
 class MockProvider extends DataProvider {
 
   constructor() {
-
     super("Mock Provider");
-
   }
 
 
-  // ------------------------------------------
-  // Get Match Data
-  // ------------------------------------------
+  // ========================================
+  // GET MATCH DATA
+  // ========================================
 
   async getMatchData(home, away) {
-
-    if (!home || !away) {
-
-      throw new Error(
-        "Home and away teams are required"
-      );
-
-    }
 
     return {
 
       provider: this.name,
 
-      home: home,
+      home,
 
-      away: away,
+      away,
 
       status: "success",
 
       data: {
 
-        message:
-          "Mock data received successfully",
+        message: "Mock data received successfully",
 
-        source:
-          "Y.C.B Mock Provider",
+        source: "mock",
 
-        timestamp:
-          new Date().toISOString()
+        available: true
 
       }
 
@@ -65,25 +48,17 @@ class MockProvider extends DataProvider {
 }
 
 
-// --------------------------------------------
-// Create Provider
-// --------------------------------------------
+// ==========================================
+// REGISTER PROVIDER
+// ==========================================
 
-const mockProvider =
-  new MockProvider();
+const mockProvider = new MockProvider();
 
-
-// --------------------------------------------
-// Register Provider
-// --------------------------------------------
-
-registerProvider(
-  mockProvider
-);
+registerProvider(mockProvider);
 
 
-// --------------------------------------------
-// Export Provider
-// --------------------------------------------
+// ==========================================
+// EXPORT
+// ==========================================
 
 export default mockProvider;
