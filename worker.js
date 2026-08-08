@@ -454,6 +454,18 @@ url.pathname ===
 "/api/providers"
 ){
 
+// =========================
+// Providers
+// =========================
+
+if(url.pathname === "/api/providers"){
+
+  return json({
+    success:true,
+    providers:getProviders()
+  });
+
+}
 return json({
 
 success:true,
