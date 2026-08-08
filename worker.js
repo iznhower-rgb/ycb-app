@@ -1,3 +1,5 @@
+import "./mockProvider.js";
+
 const HTML = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
