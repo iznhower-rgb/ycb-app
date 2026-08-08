@@ -97,6 +97,10 @@ button:disabled{
   color:#f87171 !important;
 }
 
+.warning{
+  color:#fbbf24 !important;
+}
+
 #result{
   display:none;
   margin-top:35px;
@@ -129,6 +133,15 @@ button:disabled{
   line-height:2;
 }
 
+.data-warning{
+  margin-top:20px;
+  padding:15px;
+  border-radius:12px;
+  background:#422006;
+  color:#fbbf24;
+  line-height:1.7;
+}
+
 </style>
 
 </head>
@@ -151,8 +164,8 @@ Football Prediction Engine
 
 <input
   id="match"
-  value="Barcelona vs Real Madrid"
-  placeholder="Barcelona vs Real Madrid"
+  value="Arsenal vs Coventry City"
+  placeholder="Arsenal vs Coventry City"
 >
 
 
@@ -171,7 +184,7 @@ Football Prediction Engine
 
 <div id="result">
 
-<h2>أفضل التوقعات</h2>
+<h2>حالة التحليل</h2>
 
 
 <div class="prediction">
@@ -180,7 +193,7 @@ Football Prediction Engine
   id="prediction1"
   class="rank"
 >
-🥇 التوقع الأول
+🥇 -
 </div>
 
 <div
@@ -199,7 +212,7 @@ Football Prediction Engine
   id="prediction2"
   class="rank"
 >
-🥈 التوقع الثاني
+🥈 -
 </div>
 
 <div
@@ -218,7 +231,7 @@ Football Prediction Engine
   id="prediction3"
   class="rank"
 >
-🥉 التوقع الثالث
+🥉 -
 </div>
 
 <div
@@ -234,6 +247,14 @@ Football Prediction Engine
 <div
   id="providerInfo"
   class="provider-info"
+>
+</div>
+
+
+<div
+  id="dataWarning"
+  class="data-warning"
+  style="display:none"
 >
 </div>
 
@@ -261,6 +282,9 @@ async function analyzeMatch(){
   const providerInfo =
     document.getElementById("providerInfo");
 
+  const dataWarning =
+    document.getElementById("dataWarning");
+
 
   const match =
     input.value.trim();
@@ -282,10 +306,12 @@ async function analyzeMatch(){
 
   result.style.display="none";
 
+  dataWarning.style.display="none";
+
   status.className="";
 
   status.textContent=
-    "جاري تحليل المباراة...";
+    "جاري الاتصال بمصادر البيانات...";
 
 
   try{
@@ -364,38 +390,30 @@ async function analyzeMatch(){
     }
 
 
-    if(
-      !Array.isArray(
-        data.predictions
-      )
-    ){
-
-      throw new Error(
-        "نتيجة التوقعات غير موجودة."
-      );
-
-    }
+    const predictions =
+      data.predictions;
 
 
     if(
-      data.predictions.length < 3
+      !Array.isArray(predictions) ||
+      predictions.length !== 3
     ){
 
       throw new Error(
-        "نتيجة التوقعات غير مكتملة."
+        "نتيجة Y.C.B غير مكتملة."
       );
 
     }
 
 
     const p1 =
-      data.predictions[0];
+      predictions[0];
 
     const p2 =
-      data.predictions[1];
+      predictions[1];
 
     const p3 =
-      data.predictions[2];
+      predictions[2];
 
 
     document.getElementById(
@@ -407,7 +425,7 @@ async function analyzeMatch(){
     document.getElementById(
       "probability1"
     ).textContent =
-      p1.probability + "%";
+      p1.probability;
 
 
     document.getElementById(
@@ -419,7 +437,7 @@ async function analyzeMatch(){
     document.getElementById(
       "probability2"
     ).textContent =
-      p2.probability + "%";
+      p2.probability;
 
 
     document.getElementById(
@@ -431,7 +449,7 @@ async function analyzeMatch(){
     document.getElementById(
       "probability3"
     ).textContent =
-      p3.probability + "%";
+      p3.probability;
 
 
     if(
@@ -465,14 +483,36 @@ async function analyzeMatch(){
     }
 
 
+    if(
+      data.analysisStatus ===
+      "insufficient_data"
+    ){
+
+      dataWarning.style.display=
+        "block";
+
+      dataWarning.textContent=
+        data.message ||
+        "البيانات الحالية غير كافية لإصدار توقع موثوق.";
+
+      status.className=
+        "warning";
+
+      status.textContent=
+        "تم الاتصال بمصادر البيانات، لكن البيانات غير كافية للتوقع.";
+
+    }else{
+
+      status.className="";
+
+      status.textContent=
+        "تم تحليل البيانات بواسطة Y.C.B";
+
+    }
+
+
     result.style.display=
       "block";
-
-
-    status.className="";
-
-    status.textContent=
-      "تم التحليل بواسطة Y.C.B";
 
 
   }catch(error){
@@ -514,7 +554,7 @@ export default {
 
 
     // =================================================
-    // OPTIONS / CORS
+    // OPTIONS
     // =================================================
 
     if(
@@ -547,7 +587,7 @@ export default {
         engine:
           "Y.C.B Prediction Engine",
 
-        version:"1.2.0",
+        version:"1.3.0",
 
         architecture:
           "Multi Provider Architecture"
@@ -604,6 +644,10 @@ export default {
 
       try{
 
+        // ---------------------------------------------
+        // READ BODY
+        // ---------------------------------------------
+
         const body =
           await request.json();
 
@@ -630,8 +674,7 @@ export default {
 
 
         // ---------------------------------------------
-        // Parse:
-        // Barcelona vs Real Madrid
+        // PARSE MATCH
         // ---------------------------------------------
 
         const parts =
@@ -649,7 +692,7 @@ export default {
               success:false,
 
               error:
-                "اكتب المباراة بهذا الشكل: Barcelona vs Real Madrid"
+                "اكتب المباراة بهذا الشكل: Arsenal vs Coventry City"
             },
             400
           );
@@ -684,8 +727,7 @@ export default {
 
 
         // =================================================
-        // IMPORTANT:
-        // إرسال env إلى جميع مزودي البيانات
+        // REAL DATA PROVIDERS
         // =================================================
 
         const providerResults =
@@ -697,13 +739,59 @@ export default {
 
 
         // =================================================
-        // Y.C.B TEMPORARY PREDICTION
+        // CHECK REAL DATA
         // =================================================
 
-        const prediction =
-          calculatePrediction(
+        const successfulProviders =
+          providerResults.filter(
+            item =>
+              item.success === true
+          );
+
+
+        const footballDataResult =
+          providerResults.find(
+            item =>
+              item.provider ===
+              "Football-Data.org"
+          );
+
+
+        const realMatchData =
+          footballDataResult &&
+          footballDataResult.success
+            ? footballDataResult.data
+            : null;
+
+
+        // =================================================
+        // IMPORTANT
+        // =================================================
+        //
+        // لا نستخدم calculatePrediction الوهمية.
+        //
+        // البيانات الحالية من endpoint /matches
+        // تكفي لإثبات الاتصال والعثور على المباراة،
+        // لكنها لا تحتوي وحدها على تاريخ الفريقين
+        // أو xG أو الإصابات أو التشكيلات أو odds.
+        //
+        // لذلك Y.C.B لا يصنع احتمالات مزيفة.
+        //
+        // =================================================
+
+
+        const predictions =
+          buildDataStatusPredictions(
             home,
-            away
+            away,
+            realMatchData
+          );
+
+
+        const hasRealMatch =
+          Boolean(
+            realMatchData &&
+            realMatchData.data
           );
 
 
@@ -716,7 +804,7 @@ export default {
           engine:
             "Y.C.B Prediction Engine",
 
-          version:"1.2.0",
+          version:"1.3.0",
 
           architecture:
             "Multi Provider Architecture",
@@ -731,16 +819,40 @@ export default {
           },
 
 
+          analysisStatus:
+            hasRealMatch
+              ? "data_connected"
+              : "insufficient_data",
+
+
+          realData:
+
+            realMatchData || null,
+
+
+          providerCount:
+            providerResults.length,
+
+
+          successfulProviderCount:
+            successfulProviders.length,
+
+
           providers:
             providerResults,
 
 
-          probabilities:
-            prediction.probabilities,
+          message:
+            hasRealMatch
+
+              ? "تم العثور على بيانات المباراة. نحتاج الآن إلى طبقة الإحصائيات التاريخية لبناء الاحتمالات."
+
+              : "لم يتم العثور على بيانات كافية. لا توجد توقعات موثوقة بعد.",
 
 
           predictions:
-            prediction.predictions
+
+            predictions
 
         });
 
@@ -799,88 +911,64 @@ export default {
 
 
 // =====================================================
-// TEMPORARY Y.C.B PREDICTION
+// DATA STATUS PREDICTIONS
+// =====================================================
+//
+// هذه ليست توقعات رياضية.
+// الهدف منها منع عرض نسب وهمية أثناء بناء
+// طبقة البيانات الحقيقية.
+//
 // =====================================================
 
-function calculatePrediction(
+function buildDataStatusPredictions(
   home,
-  away
+  away,
+  matchData
 ){
 
-  let homeRating = 50;
+  if(
+    matchData &&
+    matchData.data
+  ){
 
-  let awayRating = 50;
+    return [
 
+      {
+        outcome:"data",
 
-  // أفضلية الأرض
-  homeRating += 7;
+        label:
+          "بيانات " + home,
 
+        probability:
+          "متصلة ✓"
+      },
 
-  const difference =
-    homeRating -
-    awayRating;
+      {
+        outcome:"data",
 
+        label:
+          "بيانات " + away,
 
-  let homeProb =
-    45 +
-    difference * 0.5;
+        probability:
+          "متصلة ✓"
+      },
 
+      {
+        outcome:"model",
 
-  let drawProb =
-    27;
+        label:
+          "انتظار الإحصائيات",
 
+        probability:
+          "غير متاح"
+      }
 
-  let awayProb =
-    28 -
-    difference * 0.5;
+    ];
 
-
-  homeProb =
-    Math.max(
-      5,
-      homeProb
-    );
-
-
-  drawProb =
-    Math.max(
-      5,
-      drawProb
-    );
-
-
-  awayProb =
-    Math.max(
-      5,
-      awayProb
-    );
+  }
 
 
-  const total =
-    homeProb +
-    drawProb +
-    awayProb;
-
-
-  homeProb =
-    homeProb /
-    total *
-    100;
-
-
-  drawProb =
-    drawProb /
-    total *
-    100;
-
-
-  awayProb =
-    awayProb /
-    total *
-    100;
-
-
-  const predictions = [
+  return [
 
     {
       outcome:"homeWin",
@@ -889,7 +977,7 @@ function calculatePrediction(
         "فوز " + home,
 
       probability:
-        round(homeProb)
+        "غير متاح"
     },
 
     {
@@ -899,7 +987,7 @@ function calculatePrediction(
         "التعادل",
 
       probability:
-        round(drawProb)
+        "غير متاح"
     },
 
     {
@@ -909,61 +997,10 @@ function calculatePrediction(
         "فوز " + away,
 
       probability:
-        round(awayProb)
+        "غير متاح"
     }
 
   ];
-
-
-  predictions.sort(
-    (a,b) =>
-      b.probability -
-      a.probability
-  );
-
-
-  predictions.forEach(
-    (item,index) => {
-
-      item.rank =
-        index + 1;
-
-    }
-  );
-
-
-  return {
-
-    probabilities:{
-
-      homeWin:
-        round(homeProb),
-
-      draw:
-        round(drawProb),
-
-      awayWin:
-        round(awayProb)
-
-    },
-
-    predictions:
-      predictions
-
-  };
-
-}
-
-
-// =====================================================
-// ROUND
-// =====================================================
-
-function round(value){
-
-  return Math.round(
-    value * 10
-  ) / 10;
 
 }
 
@@ -979,7 +1016,11 @@ function json(
 
   return new Response(
 
-    JSON.stringify(data),
+    JSON.stringify(
+      data,
+      null,
+      2
+    ),
 
     {
 
