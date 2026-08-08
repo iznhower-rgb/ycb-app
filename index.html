@@ -14,146 +14,307 @@
 
 <style>
 
+* {
+  box-sizing: border-box;
+}
+
 body {
+
   margin: 0;
-  font-family: Arial, sans-serif;
-  background: #0f172a;
-  color: white;
-  text-align: center;
+
+  font-family:
+    Arial,
+    sans-serif;
+
+  background:
+    #0f172a;
+
+  color:
+    white;
+
+  text-align:
+    center;
+
 }
 
 .app {
-  max-width: 500px;
-  margin: auto;
-  padding: 30px 20px;
+
+  max-width:
+    500px;
+
+  margin:
+    auto;
+
+  padding:
+    30px 20px;
+
 }
 
 h1 {
-  font-size: 42px;
-  margin-bottom: 5px;
+
+  font-size:
+    42px;
+
+  margin:
+    10px 0 5px;
+
 }
 
 .subtitle {
-  color: #94a3b8;
-  margin-bottom: 40px;
+
+  color:
+    #94a3b8;
+
+  margin-bottom:
+    35px;
+
 }
 
 .card {
-  background: #1e293b;
-  border-radius: 18px;
-  padding: 25px;
-  margin-bottom: 20px;
+
+  background:
+    #1e293b;
+
+  border-radius:
+    18px;
+
+  padding:
+    22px;
+
+  margin-bottom:
+    20px;
+
 }
 
 input {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 15px;
-  border-radius: 10px;
-  border: none;
-  margin-bottom: 15px;
-  font-size: 16px;
-  text-align: center;
+
+  width:
+    100%;
+
+  padding:
+    15px;
+
+  border:
+    none;
+
+  border-radius:
+    10px;
+
+  font-size:
+    16px;
+
+  margin-bottom:
+    15px;
+
+  text-align:
+    center;
+
 }
 
 button {
-  width: 100%;
-  padding: 15px;
-  border: none;
-  border-radius: 10px;
-  background: #22c55e;
-  color: white;
-  font-size: 18px;
-  font-weight: bold;
+
+  width:
+    100%;
+
+  padding:
+    15px;
+
+  border:
+    none;
+
+  border-radius:
+    10px;
+
+  background:
+    #22c55e;
+
+  color:
+    white;
+
+  font-size:
+    18px;
+
+  font-weight:
+    bold;
+
 }
 
 button:disabled {
-  opacity: 0.6;
+
+  opacity:
+    0.6;
+
 }
 
-#message {
-  margin-top: 15px;
-  color: #fbbf24;
+#status {
+
+  margin-top:
+    15px;
+
+  color:
+    #94a3b8;
+
 }
 
 #result {
-  display: none;
-  margin-top: 25px;
+
+  display:
+    none;
+
+  margin-top:
+    25px;
+
 }
 
 .prediction {
-  background: #334155;
-  border-radius: 12px;
-  padding: 18px;
-  margin: 10px 0;
-  text-align: right;
+
+  background:
+    #334155;
+
+  border-radius:
+    12px;
+
+  padding:
+    15px;
+
+  margin:
+    10px 0;
+
+  text-align:
+    right;
+
 }
 
 .rank {
-  font-size: 20px;
-  font-weight: bold;
-  margin-bottom: 8px;
+
+  font-size:
+    20px;
+
+  font-weight:
+    bold;
+
+  margin-bottom:
+    8px;
+
 }
 
 .probability {
-  color: #4ade80;
-  font-size: 18px;
-  font-weight: bold;
+
+  color:
+    #4ade80;
+
+  font-size:
+    19px;
+
+  font-weight:
+    bold;
+
+}
+
+.error {
+
+  color:
+    #f87171 !important;
+
 }
 
 </style>
 
 </head>
 
+
 <body>
 
 <div class="app">
 
-<h1>Y.C.B</h1>
+<h1>
+Y.C.B
+</h1>
 
 <div class="subtitle">
 Football Prediction Engine
 </div>
 
+
 <div class="card">
 
-<h2>اختر مباراة</h2>
+<h2>
+اختر مباراة
+</h2>
 
 <input
-  type="text"
   id="match"
-  value="Barcelona vs Real Madrid"
-  placeholder="مثال: Barcelona vs Real Madrid"
+  type="text"
+  placeholder="Barcelona vs Real Madrid"
 >
 
 <button
-  id="analyzeButton"
+  id="button"
   onclick="analyze()"
 >
 تحليل المباراة
 </button>
 
-<div id="message"></div>
+<div id="status"></div>
 
 </div>
+
 
 <div id="result">
 
-<h2>أفضل التوقعات</h2>
+<h2>
+أفضل التوقعات
+</h2>
+
 
 <div class="prediction">
-  <div class="rank" id="prediction1"></div>
-  <div class="probability" id="probability1"></div>
+
+<div
+  class="rank"
+  id="p1"
+>
+🥇 التوقع الأول
 </div>
 
-<div class="prediction">
-  <div class="rank" id="prediction2"></div>
-  <div class="probability" id="probability2"></div>
+<div
+  class="probability"
+  id="v1"
+></div>
+
 </div>
 
+
 <div class="prediction">
-  <div class="rank" id="prediction3"></div>
-  <div class="probability" id="probability3"></div>
+
+<div
+  class="rank"
+  id="p2"
+>
+🥈 التوقع الثاني
+</div>
+
+<div
+  class="probability"
+  id="v2"
+></div>
+
+</div>
+
+
+<div class="prediction">
+
+<div
+  class="rank"
+  id="p3"
+>
+🥉 التوقع الثالث
+</div>
+
+<div
+  class="probability"
+  id="v3"
+></div>
+
 </div>
 
 </div>
@@ -165,134 +326,193 @@ Football Prediction Engine
 
 async function analyze() {
 
-  const match =
-    document.getElementById("match").value.trim();
+  const input =
+    document.getElementById(
+      "match"
+    );
 
   const button =
-    document.getElementById("analyzeButton");
+    document.getElementById(
+      "button"
+    );
 
-  const message =
-    document.getElementById("message");
+  const status =
+    document.getElementById(
+      "status"
+    );
 
   const result =
-    document.getElementById("result");
+    document.getElementById(
+      "result"
+    );
+
+
+  const match =
+    input.value.trim();
+
 
   if (!match) {
 
-    message.textContent =
-      "اكتب اسم المباراة أولاً";
+    status.className =
+      "error";
+
+    status.textContent =
+      "اكتب المباراة أولاً";
 
     return;
+
   }
 
-  button.disabled = true;
 
-  message.textContent =
-    "جاري تحليل المباراة...";
+  button.disabled =
+    true;
 
-  result.style.display = "none";
+  status.className =
+    "";
+
+  status.textContent =
+    "جاري التحليل...";
+
+  result.style.display =
+    "none";
+
 
   try {
 
-    const response = await fetch(
-      "/api/analyze",
-      {
-        method: "POST",
+    const response =
+      await fetch(
+        "/api/analyze",
+        {
 
-        headers: {
-          "Content-Type": "application/json"
-        },
+          method:
+            "POST",
 
-        body: JSON.stringify({
-          match: match
-        })
-      }
-    );
+          headers: {
 
-    // نقرأ النص أولاً
-    // حتى لا يحدث خطأ JSON مرة أخرى
-    const text = await response.text();
+            "Content-Type":
+              "application/json"
 
-    if (!text) {
-      throw new Error(
-        "الخادم أعاد استجابة فارغة"
+          },
+
+          body:
+            JSON.stringify({
+
+              match:
+                match
+
+            })
+
+        }
       );
-    }
 
-    let data;
 
-    try {
+    const data =
+      await response.json();
 
-      data = JSON.parse(text);
 
-    } catch (e) {
-
-      throw new Error(
-        "الخادم لم يُرجع JSON صالحاً"
-      );
-    }
-
-    if (!response.ok) {
+    if (
+      !response.ok ||
+      !data.success
+    ) {
 
       throw new Error(
-        data.error || "حدث خطأ في الخادم"
+
+        data.error ||
+        "فشل التحليل"
+
       );
+
     }
 
-    if (!data.success) {
-
-      throw new Error(
-        data.error || "فشل التحليل"
-      );
-    }
 
     const predictions =
       data.predictions;
 
-    for (let i = 0; i < 3; i++) {
 
-      const prediction =
-        predictions[i];
+    if (
+      !Array.isArray(
+        predictions
+      ) ||
+      predictions.length !== 3
+    ) {
 
-      document.getElementById(
-        "prediction" + (i + 1)
-      ).textContent =
-        getMedal(i) +
-        " " +
-        prediction.label;
+      throw new Error(
+        "نتيجة Y.C.B غير مكتملة"
+      );
 
-      document.getElementById(
-        "probability" + (i + 1)
-      ).textContent =
-        prediction.probability +
-        "%";
     }
 
-    result.style.display = "block";
 
-    message.textContent =
-      "تم تحليل المباراة بواسطة Y.C.B";
+    document
+      .getElementById("p1")
+      .textContent =
+        "🥇 " +
+        predictions[0].label;
+
+
+    document
+      .getElementById("v1")
+      .textContent =
+        predictions[0].probability +
+        "%";
+
+
+    document
+      .getElementById("p2")
+      .textContent =
+        "🥈 " +
+        predictions[1].label;
+
+
+    document
+      .getElementById("v2")
+      .textContent =
+        predictions[1].probability +
+        "%";
+
+
+    document
+      .getElementById("p3")
+      .textContent =
+        "🥉 " +
+        predictions[2].label;
+
+
+    document
+      .getElementById("v3")
+      .textContent =
+        predictions[2].probability +
+        "%";
+
+
+    result.style.display =
+      "block";
+
+
+    status.className =
+      "";
+
+    status.textContent =
+      "تم التحليل بواسطة Y.C.B";
+
 
   } catch (error) {
 
-    message.textContent =
-      "خطأ: " + error.message;
+    status.className =
+      "error";
 
-    result.style.display = "none";
+    status.textContent =
+      error.message ||
+      "حدث خطأ";
+
 
   } finally {
 
-    button.disabled = false;
+    button.disabled =
+      false;
+
   }
-}
 
-
-function getMedal(index) {
-
-  if (index === 0) return "🥇";
-  if (index === 1) return "🥈";
-
-  return "🥉";
 }
 
 </script>
