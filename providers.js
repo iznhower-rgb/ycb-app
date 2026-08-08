@@ -2,16 +2,20 @@
 // Y.C.B DATA PROVIDER SYSTEM
 // ==========================================
 
+
 export class DataProvider {
 
   constructor(name) {
     this.name = name;
   }
 
-  async getMatchData(home, away) {
+
+  async getMatchData(home, away, env) {
+
     throw new Error(
       `getMatchData() not implemented by ${this.name}`
     );
+
   }
 
 }
@@ -31,16 +35,25 @@ export const providers = [];
 export function registerProvider(provider) {
 
   if (!(provider instanceof DataProvider)) {
-    throw new Error("Invalid data provider");
+
+    throw new Error(
+      "Invalid data provider"
+    );
+
   }
 
+
   // منع تسجيل نفس المزود مرتين
+
   const exists = providers.some(
     p => p.name === provider.name
   );
 
+
   if (!exists) {
+
     providers.push(provider);
+
   }
 
 }
@@ -53,8 +66,11 @@ export function registerProvider(provider) {
 export function getProviders() {
 
   return providers.map(provider => ({
+
     name: provider.name,
+
     status: "registered"
+
   }));
 
 }
@@ -64,36 +80,55 @@ export function getProviders() {
 // GET MATCH DATA FROM ALL PROVIDERS
 // ==========================================
 
-export async function getAllMatchData(home, away) {
+export async function getAllMatchData(
+  home,
+  away,
+  env
+) {
 
   const results = [];
+
 
   for (const provider of providers) {
 
     try {
 
-      const data = await provider.getMatchData(
-        home,
-        away
-      );
+      const data =
+        await provider.getMatchData(
+          home,
+          away,
+          env
+        );
+
 
       results.push({
+
         provider: provider.name,
+
         success: true,
+
         data
+
       });
 
     } catch (error) {
 
       results.push({
+
         provider: provider.name,
+
         success: false,
-        error: error.message
+
+        error:
+          error?.message ||
+          String(error)
+
       });
 
     }
 
   }
+
 
   return results;
 
