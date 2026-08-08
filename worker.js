@@ -1,9 +1,9 @@
 import {
-  getProviders,
-  getAllMatchData
+  getProviders
 } from "./providers.js";
 
 import "./mockProvider.js";
+import "./footballDataProvider.js";
 
 
 // =====================================================
