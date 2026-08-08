@@ -3,10 +3,16 @@
 // ==========================================
 
 
+// ==========================================
+// BASE DATA PROVIDER
+// ==========================================
+
 export class DataProvider {
 
   constructor(name) {
+
     this.name = name;
+
   }
 
 
@@ -43,11 +49,10 @@ export function registerProvider(provider) {
   }
 
 
-  // منع تسجيل نفس المزود مرتين
-
-  const exists = providers.some(
-    p => p.name === provider.name
-  );
+  const exists =
+    providers.some(
+      p => p.name === provider.name
+    );
 
 
   if (!exists) {
@@ -65,13 +70,15 @@ export function registerProvider(provider) {
 
 export function getProviders() {
 
-  return providers.map(provider => ({
+  return providers.map(
+    provider => ({
 
-    name: provider.name,
+      name: provider.name,
 
-    status: "registered"
+      status: "registered"
 
-  }));
+    })
+  );
 
 }
 
@@ -80,7 +87,11 @@ export function getProviders() {
 // GET MATCH DATA FROM ALL PROVIDERS
 // ==========================================
 
-export async function getAllMatchData(home, away, env) {
+export async function getAllMatchData(
+  home,
+  away,
+  env
+) {
 
   const results = [];
 
@@ -99,21 +110,27 @@ export async function getAllMatchData(home, away, env) {
 
       results.push({
 
-        provider: provider.name,
+        provider:
+          provider.name,
 
-        success: true,
+        success:
+          true,
 
-        data
+        data:
+          data
 
       });
+
 
     } catch (error) {
 
       results.push({
 
-        provider: provider.name,
+        provider:
+          provider.name,
 
-        success: false,
+        success:
+          false,
 
         error:
           error?.message ||
