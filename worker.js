@@ -552,14 +552,35 @@ error:
 }
 
 
-const prediction =
-calculatePrediction(
-home,
-away
-);
+const providerResults = [];
 
+for (const provider of getProviders()) {
+
+  providerResults.push({
+    provider: provider.name,
+    status: provider.status
+  });
+
+}
+
+const prediction = calculatePrediction(home, away);
 
 return json({
+  success:true,
+  app:"Y.C.B",
+  engine:"Y.C.B Prediction Engine",
+  version:"1.0.0",
+
+  match:{
+    home,
+    away
+  },
+
+  providers: providerResults,
+
+  probabilities:prediction.probabilities,
+  predictions:prediction.predictions
+});
 
 success:true,
 
