@@ -1,75 +1,54 @@
-// ============================================
-// Y.C.B - DATA PROVIDER SYSTEM
-// ============================================
-
-// --------------------------------------------
-// Base Data Provider
-// --------------------------------------------
+// ==========================================
+// Y.C.B DATA PROVIDER SYSTEM
+// ==========================================
 
 export class DataProvider {
 
   constructor(name) {
-
-    if (!name) {
-      throw new Error("Provider name is required");
-    }
-
     this.name = name;
   }
 
   async getMatchData(home, away) {
-
     throw new Error(
-      `${this.name}: getMatchData() is not implemented`
+      `getMatchData() not implemented by ${this.name}`
     );
-
   }
 
 }
 
 
-// --------------------------------------------
-// Provider Registry
-// --------------------------------------------
+// ==========================================
+// PROVIDER REGISTRY
+// ==========================================
 
-const providers = [];
+export const providers = [];
 
 
-// --------------------------------------------
-// Register Provider
-// --------------------------------------------
+// ==========================================
+// REGISTER PROVIDER
+// ==========================================
 
 export function registerProvider(provider) {
 
   if (!(provider instanceof DataProvider)) {
-
-    throw new Error(
-      "Invalid data provider"
-    );
-
+    throw new Error("Invalid data provider");
   }
 
+  // منع تسجيل نفس المزود مرتين
   const exists = providers.some(
-    item => item.name === provider.name
+    p => p.name === provider.name
   );
 
-  if (exists) {
-
-    throw new Error(
-      `Provider already registered: ${provider.name}`
-    );
-
+  if (!exists) {
+    providers.push(provider);
   }
 
-  providers.push(provider);
-
-  return provider;
 }
 
 
-// --------------------------------------------
-// Get All Providers
-// --------------------------------------------
+// ==========================================
+// GET PROVIDERS
+// ==========================================
 
 export function getProviders() {
 
@@ -81,53 +60,11 @@ export function getProviders() {
 }
 
 
-// --------------------------------------------
-// Get Provider By Name
-// --------------------------------------------
+// ==========================================
+// GET MATCH DATA FROM ALL PROVIDERS
+// ==========================================
 
-export function getProvider(name) {
-
-  return providers.find(
-    provider => provider.name === name
-  ) || null;
-
-}
-
-
-// --------------------------------------------
-// Get First Available Provider
-// --------------------------------------------
-
-export function getFirstProvider() {
-
-  return providers.length > 0
-    ? providers[0]
-    : null;
-
-}
-
-
-// --------------------------------------------
-// Get Match Data From Providers
-// --------------------------------------------
-
-export async function getMatchData(home, away) {
-
-  if (!home || !away) {
-
-    throw new Error(
-      "Home and away teams are required"
-    );
-
-  }
-
-  if (providers.length === 0) {
-
-    throw new Error(
-      "No data providers registered"
-    );
-
-  }
+export async function getAllMatchData(home, away) {
 
   const results = [];
 
@@ -135,13 +72,15 @@ export async function getMatchData(home, away) {
 
     try {
 
-      const result =
-        await provider.getMatchData(home, away);
+      const data = await provider.getMatchData(
+        home,
+        away
+      );
 
       results.push({
         provider: provider.name,
         success: true,
-        data: result
+        data
       });
 
     } catch (error) {
@@ -157,15 +96,5 @@ export async function getMatchData(home, away) {
   }
 
   return results;
-}
-
-
-// --------------------------------------------
-// Provider Count
-// --------------------------------------------
-
-export function getProviderCount() {
-
-  return providers.length;
 
 }
