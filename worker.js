@@ -1,205 +1,416 @@
+const HTML = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Y.C.B</title>
+<style>
+body{
+margin:0;
+font-family:Arial,sans-serif;
+background:#0f172a;
+color:white;
+text-align:center
+}
+.app{
+max-width:500px;
+margin:auto;
+padding:30px 20px
+}
+h1{
+font-size:42px;
+margin-bottom:5px
+}
+.subtitle{
+color:#94a3b8;
+margin-bottom:35px
+}
+.card,.prediction{
+background:#1e293b;
+border-radius:18px;
+padding:22px;
+margin-bottom:18px
+}
+input{
+box-sizing:border-box;
+width:100%;
+padding:15px;
+border:0;
+border-radius:10px;
+font-size:16px;
+margin-bottom:15px;
+text-align:center
+}
+button{
+width:100%;
+padding:15px;
+border:0;
+border-radius:10px;
+background:#22c55e;
+color:white;
+font-size:18px;
+font-weight:bold
+}
+button:disabled{
+opacity:.6
+}
+#status{
+margin-top:15px;
+color:#94a3b8
+}
+#result{
+display:none;
+margin-top:25px
+}
+.prediction{
+text-align:right;
+background:#334155
+}
+.rank{
+font-size:20px;
+font-weight:bold;
+margin-bottom:8px
+}
+.probability{
+color:#4ade80;
+font-size:19px;
+font-weight:bold
+}
+.error{
+color:#f87171!important
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+
+<h1>Y.C.B</h1>
+
+<div class="subtitle">
+Football Prediction Engine
+</div>
+
+<div class="card">
+
+<h2>اختر مباراة</h2>
+
+<input
+id="match"
+type="text"
+placeholder="Barcelona vs Real Madrid"
+>
+
+<button id="button" onclick="analyze()">
+تحليل المباراة
+</button>
+
+<div id="status"></div>
+
+</div>
+
+<div id="result">
+
+<h2>أفضل التوقعات</h2>
+
+<div class="prediction">
+<div class="rank" id="p1">🥇 التوقع الأول</div>
+<div class="probability" id="v1"></div>
+</div>
+
+<div class="prediction">
+<div class="rank" id="p2">🥈 التوقع الثاني</div>
+<div class="probability" id="v2"></div>
+</div>
+
+<div class="prediction">
+<div class="rank" id="p3">🥉 التوقع الثالث</div>
+<div class="probability" id="v3"></div>
+</div>
+
+</div>
+</div>
+
+<script>
+async function analyze(){
+
+const input=document.getElementById("match");
+const button=document.getElementById("button");
+const status=document.getElementById("status");
+const result=document.getElementById("result");
+
+const match=input.value.trim();
+
+if(!match){
+status.className="error";
+status.textContent="اكتب المباراة أولاً";
+return;
+}
+
+button.disabled=true;
+status.className="";
+status.textContent="جاري التحليل...";
+result.style.display="none";
+
+try{
+
+const response=await fetch("/api/analyze",{
+method:"POST",
+headers:{
+"Content-Type":"application/json"
+},
+body:JSON.stringify({match})
+});
+
+const text=await response.text();
+
+if(!text){
+throw new Error("الخادم أعاد استجابة فارغة");
+}
+
+let data;
+
+try{
+data=JSON.parse(text);
+}catch{
+throw new Error("استجابة الخادم غير صالحة");
+}
+
+if(!response.ok || !data.success){
+throw new Error(data.error || "فشل التحليل");
+}
+
+const predictions=data.predictions;
+
+if(!predictions || predictions.length!==3){
+throw new Error("نتيجة Y.C.B غير مكتملة");
+}
+
+document.getElementById("p1").textContent=
+"🥇 "+predictions[0].label;
+
+document.getElementById("v1").textContent=
+predictions[0].probability+"%";
+
+document.getElementById("p2").textContent=
+"🥈 "+predictions[1].label;
+
+document.getElementById("v2").textContent=
+predictions[1].probability+"%";
+
+document.getElementById("p3").textContent=
+"🥉 "+predictions[2].label;
+
+document.getElementById("v3").textContent=
+predictions[2].probability+"%";
+
+result.style.display="block";
+
+status.textContent="تم التحليل بواسطة Y.C.B";
+
+}catch(error){
+
+status.className="error";
+status.textContent=error.message;
+
+}finally{
+
+button.disabled=false;
+
+}
+}
+</script>
+</body>
+</html>`;
+
 export default {
   async fetch(request) {
+
     const url = new URL(request.url);
 
-    // CORS
-    if (request.method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: corsHeaders()
-      });
-    }
+    // =========================
+    // Health
+    // =========================
 
-    // اختبار الخادم
     if (url.pathname === "/api/health") {
+
       return json({
-        status: "ok",
-        app: "Y.C.B",
-        engine: "Y.C.B Prediction Engine",
-        version: "1.0.0"
+        success:true,
+        status:"ok",
+        app:"Y.C.B",
+        engine:"Y.C.B Prediction Engine",
+        version:"1.0.0"
       });
     }
 
-    // تحليل المباراة
+    // =========================
+    // Analyze
+    // =========================
+
     if (url.pathname === "/api/analyze") {
 
-      if (request.method !== "POST") {
+      if(request.method !== "POST"){
+
         return json({
-          error: "يجب استخدام POST"
-        }, 405);
+          success:false,
+          error:"POST required"
+        },405);
       }
 
-      try {
-        const body = await request.json();
+      try{
 
-        const match = String(body.match || "").trim();
+        const body=await request.json();
 
-        if (!match) {
+        const match=String(body.match || "").trim();
+
+        const parts=match.split(/\s+vs\s+/i);
+
+        if(parts.length!==2){
+
           return json({
-            error: "لم يتم إدخال المباراة"
-          }, 400);
+            success:false,
+            error:"اكتب المباراة بهذا الشكل: Team A vs Team B"
+          },400);
         }
 
-        const parts = match.split(/\s+vs\s+/i);
+        const home=parts[0].trim();
+        const away=parts[1].trim();
 
-        if (parts.length !== 2) {
+        if(!home || !away){
+
           return json({
-            error: "اكتب المباراة بهذا الشكل: Barcelona vs Real Madrid"
-          }, 400);
+            success:false,
+            error:"يجب إدخال الفريقين"
+          },400);
         }
 
-        const home = parts[0].trim();
-        const away = parts[1].trim();
-
-        if (!home || !away) {
-          return json({
-            error: "يجب إدخال الفريقين"
-          }, 400);
-        }
-
-        const prediction = calculatePrediction(home, away);
+        const prediction=calculatePrediction(home,away);
 
         return json({
-          success: true,
-          app: "Y.C.B",
-          engine: "Y.C.B Prediction Engine",
-          version: "1.0.0",
-
-          match: {
-            home: home,
-            away: away
+          success:true,
+          app:"Y.C.B",
+          engine:"Y.C.B Prediction Engine",
+          version:"1.0.0",
+          match:{
+            home,
+            away
           },
-
-          probabilities: prediction.probabilities,
-
-          predictions: prediction.predictions
+          probabilities:prediction.probabilities,
+          predictions:prediction.predictions
         });
 
-      } catch (error) {
+      }catch(error){
 
         return json({
-          success: false,
-          error: "تعذر تحليل البيانات",
-          details: error.message
-        }, 500);
+          success:false,
+          error:error.message
+        },500);
       }
     }
 
-    // الصفحة الرئيسية
-    return new Response("Y.C.B Server Online", {
-      status: 200,
-      headers: {
-        "Content-Type": "text/plain; charset=UTF-8"
+    // =========================
+    // Main App
+    // =========================
+
+    return new Response(HTML,{
+      status:200,
+      headers:{
+        "Content-Type":"text/html;charset=UTF-8",
+        "Cache-Control":"no-store"
       }
     });
   }
 };
 
 
-// ======================================
-// Y.C.B Prediction Engine
-// ======================================
+// =================================
+// Y.C.B ENGINE
+// =================================
 
-function calculatePrediction(home, away) {
+function calculatePrediction(home,away){
 
-  // الإصدار الأول من محرك Y.C.B
-  // سيتم تطويره لاحقاً ببيانات حقيقية
-
-  let homeRating = 50;
-  let awayRating = 50;
+  let homeRating=50;
+  let awayRating=50;
 
   // أفضلية الأرض
-  homeRating += 7;
+  homeRating+=7;
 
-  const difference = homeRating - awayRating;
+  const difference=homeRating-awayRating;
 
-  let homeProb = 45 + difference * 0.5;
-  let drawProb = 27;
-  let awayProb = 28 - difference * 0.5;
+  let homeProb=45+(difference*0.5);
+  let drawProb=27;
+  let awayProb=28-(difference*0.5);
 
-  homeProb = Math.max(5, homeProb);
-  drawProb = Math.max(5, drawProb);
-  awayProb = Math.max(5, awayProb);
+  homeProb=Math.max(5,homeProb);
+  drawProb=Math.max(5,drawProb);
+  awayProb=Math.max(5,awayProb);
 
-  const total =
-    homeProb +
-    drawProb +
+  const total=
+    homeProb+
+    drawProb+
     awayProb;
 
-  homeProb = (homeProb / total) * 100;
-  drawProb = (drawProb / total) * 100;
-  awayProb = (awayProb / total) * 100;
+  homeProb=(homeProb/total)*100;
+  drawProb=(drawProb/total)*100;
+  awayProb=(awayProb/total)*100;
 
-  const probabilities = {
-    homeWin: round(homeProb),
-    draw: round(drawProb),
-    awayWin: round(awayProb)
-  };
+  const predictions=[
 
-  const predictions = [
     {
-      rank: 1,
-      outcome: "homeWin",
-      label: `فوز ${home}`,
-      probability: probabilities.homeWin
+      outcome:"homeWin",
+      label:"فوز "+home,
+      probability:round(homeProb)
     },
 
     {
-      rank: 2,
-      outcome: "draw",
-      label: "التعادل",
-      probability: probabilities.draw
+      outcome:"draw",
+      label:"التعادل",
+      probability:round(drawProb)
     },
 
     {
-      rank: 3,
-      outcome: "awayWin",
-      label: `فوز ${away}`,
-      probability: probabilities.awayWin
+      outcome:"awayWin",
+      label:"فوز "+away,
+      probability:round(awayProb)
     }
+
   ];
 
   predictions.sort(
-    (a, b) => b.probability - a.probability
+    (a,b)=>b.probability-a.probability
   );
 
-  predictions.forEach((item, index) => {
-    item.rank = index + 1;
-  });
+  predictions.forEach(
+    (p,i)=>p.rank=i+1
+  );
 
-  return {
-    probabilities,
+  return{
+    probabilities:{
+      homeWin:round(homeProb),
+      draw:round(drawProb),
+      awayWin:round(awayProb)
+    },
     predictions
   };
 }
 
 
-// ======================================
-// Helpers
-// ======================================
-
-function round(value) {
-  return Math.round(value * 10) / 10;
+function round(value){
+  return Math.round(value*10)/10;
 }
 
-function corsHeaders() {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
-  };
-}
 
-function json(data, status = 200) {
+function json(data,status=200){
 
   return new Response(
     JSON.stringify(data),
     {
-      status: status,
-
-      headers: {
-        "Content-Type": "application/json; charset=UTF-8",
-        ...corsHeaders()
+      status,
+      headers:{
+        "Content-Type":"application/json;charset=UTF-8",
+        "Access-Control-Allow-Origin":"*",
+        "Access-Control-Allow-Methods":"GET,POST,OPTIONS",
+        "Access-Control-Allow-Headers":"Content-Type"
       }
     }
   );
