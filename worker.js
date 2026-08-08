@@ -12,7 +12,6 @@ import "./footballDataProvider.js";
 // =====================================================
 
 const HTML = `<!DOCTYPE html>
-
 <html lang="ar" dir="rtl">
 
 <head>
@@ -56,32 +55,30 @@ h1{
   margin-bottom:35px;
 }
 
-.card,
-.prediction{
+.card{
   background:#1e293b;
   border-radius:18px;
-  padding:22px;
-  margin-bottom:18px;
+  padding:25px;
 }
 
 input{
   width:100%;
-  padding:15px;
+  padding:16px;
   border:0;
-  border-radius:10px;
-  font-size:16px;
-  margin-bottom:15px;
+  border-radius:12px;
+  font-size:17px;
   text-align:center;
+  margin-bottom:16px;
 }
 
 button{
   width:100%;
-  padding:15px;
+  padding:17px;
   border:0;
-  border-radius:10px;
+  border-radius:12px;
   background:#22c55e;
   color:white;
-  font-size:18px;
+  font-size:19px;
   font-weight:bold;
 }
 
@@ -90,46 +87,52 @@ button:disabled{
 }
 
 #status{
-  margin-top:15px;
+  margin-top:18px;
   color:#94a3b8;
+  font-size:16px;
+  line-height:1.6;
+}
+
+.error{
+  color:#f87171 !important;
 }
 
 #result{
   display:none;
-  margin-top:25px;
+  margin-top:35px;
 }
 
 .prediction{
-  text-align:right;
   background:#334155;
+  border-radius:18px;
+  padding:25px;
+  margin:18px 0;
+  text-align:center;
 }
 
 .rank{
-  font-size:20px;
+  font-size:22px;
   font-weight:bold;
-  margin-bottom:8px;
 }
 
 .probability{
+  margin-top:12px;
   color:#4ade80;
-  font-size:19px;
+  font-size:22px;
   font-weight:bold;
 }
 
-.error{
-  color:#f87171!important;
-}
-
 .provider-info{
-  margin-top:20px;
+  margin-top:25px;
   color:#94a3b8;
   font-size:14px;
-  line-height:1.8;
+  line-height:2;
 }
 
 </style>
 
 </head>
+
 
 <body>
 
@@ -141,97 +144,113 @@ button:disabled{
 Football Prediction Engine
 </div>
 
+
 <div class="card">
 
 <h2>اختر مباراة</h2>
 
 <input
   id="match"
-  type="text"
+  value="Barcelona vs Real Madrid"
   placeholder="Barcelona vs Real Madrid"
 >
 
+
 <button
-  id="button"
-  onclick="analyze()"
+  id="analyzeButton"
+  onclick="analyzeMatch()"
 >
 تحليل المباراة
 </button>
+
 
 <div id="status"></div>
 
 </div>
 
+
 <div id="result">
 
 <h2>أفضل التوقعات</h2>
 
+
 <div class="prediction">
 
 <div
+  id="prediction1"
   class="rank"
-  id="p1"
 >
 🥇 التوقع الأول
 </div>
 
 <div
+  id="probability1"
   class="probability"
-  id="v1"
-></div>
+>
+-
+</div>
 
 </div>
+
 
 <div class="prediction">
 
 <div
+  id="prediction2"
   class="rank"
-  id="p2"
 >
 🥈 التوقع الثاني
 </div>
 
 <div
+  id="probability2"
   class="probability"
-  id="v2"
-></div>
+>
+-
+</div>
 
 </div>
+
 
 <div class="prediction">
 
 <div
+  id="prediction3"
   class="rank"
-  id="p3"
 >
 🥉 التوقع الثالث
 </div>
 
 <div
+  id="probability3"
   class="probability"
-  id="v3"
-></div>
+>
+-
+</div>
 
 </div>
+
 
 <div
-  class="provider-info"
   id="providerInfo"
-></div>
-
+  class="provider-info"
+>
 </div>
 
 </div>
+
+</div>
+
 
 <script>
 
-async function analyze(){
+async function analyzeMatch(){
 
   const input =
     document.getElementById("match");
 
   const button =
-    document.getElementById("button");
+    document.getElementById("analyzeButton");
 
   const status =
     document.getElementById("status");
@@ -242,28 +261,32 @@ async function analyze(){
   const providerInfo =
     document.getElementById("providerInfo");
 
+
   const match =
     input.value.trim();
+
 
   if(!match){
 
     status.className="error";
 
     status.textContent=
-      "اكتب المباراة أولاً";
+      "أدخل اسم المباراة أولاً.";
 
     return;
 
   }
 
+
   button.disabled=true;
+
+  result.style.display="none";
 
   status.className="";
 
   status.textContent=
-    "جاري التحليل...";
+    "جاري تحليل المباراة...";
 
-  result.style.display="none";
 
   try{
 
@@ -278,136 +301,190 @@ async function analyze(){
               "application/json"
           },
 
-          body:
-            JSON.stringify({
-              match
-            })
+          body:JSON.stringify({
+            match:match
+          })
+
         }
       );
+
 
     const text =
       await response.text();
 
+
     if(!text){
 
       throw new Error(
-        "الخادم أعاد استجابة فارغة"
+        "الخادم أعاد استجابة فارغة."
       );
 
     }
 
+
     let data;
+
 
     try{
 
       data =
         JSON.parse(text);
 
-    }catch{
+    }catch(error){
+
+      console.error(
+        "Invalid JSON:",
+        text
+      );
 
       throw new Error(
-        "استجابة الخادم غير صالحة"
+        "الخادم أعاد بيانات غير صالحة."
       );
 
     }
 
-    if(
-      !response.ok ||
-      !data.success
-    ){
+
+    if(!response.ok){
 
       throw new Error(
         data.error ||
-        "فشل التحليل"
+        "حدث خطأ في الخادم."
       );
 
     }
 
-    const predictions =
-      data.predictions;
+
+    if(!data.success){
+
+      throw new Error(
+        data.error ||
+        "فشل تحليل المباراة."
+      );
+
+    }
+
 
     if(
-      !predictions ||
-      predictions.length !== 3
+      !Array.isArray(
+        data.predictions
+      )
     ){
 
       throw new Error(
-        "نتيجة Y.C.B غير مكتملة"
+        "نتيجة التوقعات غير موجودة."
       );
 
     }
 
-    document.getElementById("p1")
-      .textContent =
-      "🥇 " +
-      predictions[0].label;
-
-    document.getElementById("v1")
-      .textContent =
-      predictions[0].probability +
-      "%";
-
-    document.getElementById("p2")
-      .textContent =
-      "🥈 " +
-      predictions[1].label;
-
-    document.getElementById("v2")
-      .textContent =
-      predictions[1].probability +
-      "%";
-
-    document.getElementById("p3")
-      .textContent =
-      "🥉 " +
-      predictions[2].label;
-
-    document.getElementById("v3")
-      .textContent =
-      predictions[2].probability +
-      "%";
 
     if(
-      Array.isArray(data.providers)
+      data.predictions.length < 3
     ){
 
-      const providerLines =
-        data.providers.map(
-          provider => {
-
-            const status =
-              provider.success
-                ? "✓"
-                : "✗";
-
-            return (
-              status +
-              " " +
-              provider.provider
-            );
-
-          }
-        );
-
-      providerInfo.innerHTML =
-        providerLines.join("<br>");
+      throw new Error(
+        "نتيجة التوقعات غير مكتملة."
+      );
 
     }
+
+
+    const p1 =
+      data.predictions[0];
+
+    const p2 =
+      data.predictions[1];
+
+    const p3 =
+      data.predictions[2];
+
+
+    document.getElementById(
+      "prediction1"
+    ).textContent =
+      "🥇 " + p1.label;
+
+
+    document.getElementById(
+      "probability1"
+    ).textContent =
+      p1.probability + "%";
+
+
+    document.getElementById(
+      "prediction2"
+    ).textContent =
+      "🥈 " + p2.label;
+
+
+    document.getElementById(
+      "probability2"
+    ).textContent =
+      p2.probability + "%";
+
+
+    document.getElementById(
+      "prediction3"
+    ).textContent =
+      "🥉 " + p3.label;
+
+
+    document.getElementById(
+      "probability3"
+    ).textContent =
+      p3.probability + "%";
+
+
+    if(
+      Array.isArray(
+        data.providers
+      )
+    ){
+
+      providerInfo.innerHTML =
+        "<strong>مصادر البيانات</strong><br>" +
+
+        data.providers
+          .map(
+            provider => {
+
+              const icon =
+                provider.success
+                  ? "✓"
+                  : "✗";
+
+              return (
+                icon +
+                " " +
+                provider.provider
+              );
+
+            }
+          )
+          .join("<br>");
+
+    }
+
 
     result.style.display=
       "block";
 
+
+    status.className="";
+
     status.textContent=
       "تم التحليل بواسطة Y.C.B";
 
+
   }catch(error){
+
+    console.error(error);
 
     status.className=
       "error";
 
     status.textContent=
       error.message ||
-      "حدث خطأ";
+      "حدث خطأ غير معروف.";
 
   }finally{
 
@@ -437,7 +514,7 @@ export default {
 
 
     // =================================================
-    // CORS / OPTIONS
+    // OPTIONS / CORS
     // =================================================
 
     if(
@@ -515,7 +592,9 @@ export default {
         return json(
           {
             success:false,
-            error:"POST required"
+
+            error:
+              "POST method required"
           },
           405
         );
@@ -531,7 +610,7 @@ export default {
 
         const match =
           String(
-            body.match || ""
+            body?.match || ""
           ).trim();
 
 
@@ -540,14 +619,20 @@ export default {
           return json(
             {
               success:false,
+
               error:
-                "يجب إدخال المباراة"
+                "يجب إدخال المباراة."
             },
             400
           );
 
         }
 
+
+        // ---------------------------------------------
+        // Parse:
+        // Barcelona vs Real Madrid
+        // ---------------------------------------------
 
         const parts =
           match.split(
@@ -564,7 +649,7 @@ export default {
               success:false,
 
               error:
-                "اكتب المباراة بهذا الشكل: Team A vs Team B"
+                "اكتب المباراة بهذا الشكل: Barcelona vs Real Madrid"
             },
             400
           );
@@ -590,7 +675,7 @@ export default {
               success:false,
 
               error:
-                "يجب إدخال الفريقين"
+                "يجب إدخال الفريق المضيف والفريق الضيف."
             },
             400
           );
@@ -598,9 +683,10 @@ export default {
         }
 
 
-        // =============================================
-        // GET DATA FROM ALL PROVIDERS
-        // =============================================
+        // =================================================
+        // IMPORTANT:
+        // إرسال env إلى جميع مزودي البيانات
+        // =================================================
 
         const providerResults =
           await getAllMatchData(
@@ -610,9 +696,9 @@ export default {
           );
 
 
-        // =============================================
-        // TEMPORARY PREDICTION
-        // =============================================
+        // =================================================
+        // Y.C.B TEMPORARY PREDICTION
+        // =================================================
 
         const prediction =
           calculatePrediction(
@@ -635,16 +721,23 @@ export default {
           architecture:
             "Multi Provider Architecture",
 
+
           match:{
-            home,
-            away
+
+            home:home,
+
+            away:away
+
           },
+
 
           providers:
             providerResults,
 
+
           probabilities:
             prediction.probabilities,
+
 
           predictions:
             prediction.predictions
@@ -654,12 +747,19 @@ export default {
 
       }catch(error){
 
+        console.error(
+          "Analyze error:",
+          error
+        );
+
+
         return json(
           {
             success:false,
 
             error:
               error?.message ||
+              String(error) ||
               "Unknown server error"
           },
           500
@@ -671,11 +771,13 @@ export default {
 
 
     // =================================================
-    // MAIN APP
+    // FRONTEND
     // =================================================
 
     return new Response(
+
       HTML,
+
       {
         status:200,
 
@@ -686,7 +788,9 @@ export default {
           "Cache-Control":
             "no-store"
         }
+
       }
+
     );
 
   }
@@ -695,7 +799,7 @@ export default {
 
 
 // =====================================================
-// TEMPORARY PREDICTION ENGINE
+// TEMPORARY Y.C.B PREDICTION
 // =====================================================
 
 function calculatePrediction(
@@ -703,11 +807,12 @@ function calculatePrediction(
   away
 ){
 
-  let homeRating=50;
+  let homeRating = 50;
 
-  let awayRating=50;
+  let awayRating = 50;
 
 
+  // أفضلية الأرض
   homeRating += 7;
 
 
@@ -718,7 +823,7 @@ function calculatePrediction(
 
   let homeProb =
     45 +
-    (difference * 0.5);
+    difference * 0.5;
 
 
   let drawProb =
@@ -727,7 +832,7 @@ function calculatePrediction(
 
   let awayProb =
     28 -
-    (difference * 0.5);
+    difference * 0.5;
 
 
   homeProb =
@@ -758,17 +863,20 @@ function calculatePrediction(
 
 
   homeProb =
-    (homeProb / total) *
+    homeProb /
+    total *
     100;
 
 
   drawProb =
-    (drawProb / total) *
+    drawProb /
+    total *
     100;
 
 
   awayProb =
-    (awayProb / total) *
+    awayProb /
+    total *
     100;
 
 
@@ -815,9 +923,9 @@ function calculatePrediction(
 
 
   predictions.forEach(
-    (prediction,index) => {
+    (item,index) => {
 
-      prediction.rank =
+      item.rank =
         index + 1;
 
     }
@@ -839,7 +947,8 @@ function calculatePrediction(
 
     },
 
-    predictions
+    predictions:
+      predictions
 
   };
 
@@ -874,7 +983,7 @@ function json(
 
     {
 
-      status,
+      status:status,
 
       headers:{
 
