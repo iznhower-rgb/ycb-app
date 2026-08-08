@@ -1,4 +1,5 @@
 import {
+  providers,
   getProviders
 } from "./providers.js";
 
@@ -563,8 +564,33 @@ for (const provider of getProviders()) {
 
 }
 
-const prediction = calculatePrediction(home, away);
+const providerResults = [];
 
+for (const provider of providers) {
+
+  try {
+
+    const data = await provider.getMatchData(home, away);
+
+    providerResults.push({
+      provider: provider.name,
+      status: "success",
+      data
+    });
+
+  } catch (error) {
+
+    providerResults.push({
+      provider: provider.name,
+      status: "error",
+      error: error.message
+    });
+
+  }
+
+}
+
+const prediction = calculatePrediction(home,away);
 return json({
   success:true,
   app:"Y.C.B",
