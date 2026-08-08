@@ -80,11 +80,7 @@ export function getProviders() {
 // GET MATCH DATA FROM ALL PROVIDERS
 // ==========================================
 
-export async function getAllMatchData(
-  home,
-  away,
-  env
-) {
+export async function getAllMatchData(home, away, env) {
 
   const results = [];
 
