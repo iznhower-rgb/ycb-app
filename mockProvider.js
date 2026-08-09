@@ -1,3 +1,7 @@
+// ==========================================
+// Y.C.B MOCK PROVIDER
+// ==========================================
+
 import {
   DataProvider,
   registerProvider
@@ -5,41 +9,49 @@ import {
 
 
 // ==========================================
-// Y.C.B MOCK PROVIDER
+// MOCK PROVIDER
 // ==========================================
 
 class MockProvider extends DataProvider {
 
   constructor() {
+
     super("Mock Provider");
+
   }
 
-
-  // ========================================
-  // GET MATCH DATA
-  // ========================================
 
   async getMatchData(home, away) {
 
     return {
 
-      provider: this.name,
+      provider:
+        this.name,
 
-      home,
+      home:
+        home,
 
-      away,
+      away:
+        away,
 
-      status: "success",
+      status:
+        "success",
 
       data: {
 
-        message: "Mock data received successfully",
+        message:
+          "Mock provider is working",
 
-        source: "mock",
+        source:
+          "mock",
 
-        available: true
+        available:
+          true
 
-      }
+      },
+
+      message:
+        "Mock data received successfully"
 
     };
 
@@ -49,12 +61,20 @@ class MockProvider extends DataProvider {
 
 
 // ==========================================
+// CREATE PROVIDER
+// ==========================================
+
+const mockProvider =
+  new MockProvider();
+
+
+// ==========================================
 // REGISTER PROVIDER
 // ==========================================
 
-const mockProvider = new MockProvider();
-
-registerProvider(mockProvider);
+registerProvider(
+  mockProvider
+);
 
 
 // ==========================================
