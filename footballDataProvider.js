@@ -8,11 +8,7 @@ import {
 } from "./providers.js";
 
 
-// ==========================================
-// CONFIGURATION
-// ==========================================
-
-const API_BASE =
+const BASE =
   "https://api.football-data.org/v4";
 
 
@@ -44,7 +40,8 @@ class FootballDataProvider
 
     const token =
       String(
-        env?.FOOTBALL_DATA_TOKEN || ""
+        env?.FOOTBALL_DATA_TOKEN ||
+        ""
       ).trim();
 
 
@@ -53,10 +50,10 @@ class FootballDataProvider
       return {
 
         status:
-          "configuration_error",
+          "not_configured",
 
         message:
-          "FOOTBALL_DATA_TOKEN غير موجود في Environment Variables.",
+          "FOOTBALL_DATA_TOKEN غير مضبوط؛ سيتم الاعتماد على المصادر الأخرى.",
 
         data:
           null
@@ -66,140 +63,236 @@ class FootballDataProvider
     }
 
 
-    const normalize =
-      value =>
+    try {
 
-        String(value || "")
-          .toLowerCase()
-          .trim()
-          .normalize("NFD")
-          .replace(
-            /[\u0300-\u036f]/g,
-            ""
-          )
-          .replace(
-            /&/g,
-            " and "
-          )
-          .replace(
-            /\b(fc|cf|afc|sc|ac|fk|club)\b/gi,
-            ""
-          )
-          .replace(
-            /[^a-z0-9\s]/gi,
-            " "
-          )
-          .replace(
-            /\s+/g,
-            " "
-          )
-          .trim();
+      const now =
+        new Date();
 
 
-    const homeNormalized =
-      normalize(home);
+      const fromDate =
+        new Date(
+          now
+        );
 
 
-    const awayNormalized =
-      normalize(away);
-
-
-    // ======================================
-    // DATE RANGE
-    // ======================================
-
-    const now =
-      new Date();
-
-
-    const dateFrom =
-      new Date(now);
-
-
-    dateFrom.setUTCDate(
-      dateFrom.getUTCDate() - 14
-    );
-
-
-    const dateTo =
-      new Date(now);
-
-
-    dateTo.setUTCDate(
-      dateTo.getUTCDate() + 30
-    );
-
-
-    const formatDate =
-      date =>
-
-        date
-          .toISOString()
-          .slice(0, 10);
-
-
-    const from =
-      formatDate(dateFrom);
-
-
-    const to =
-      formatDate(dateTo);
-
-
-    // ======================================
-    // GET FIXTURES
-    // ======================================
-
-    const fixtureUrl =
-      new URL(
-        `${API_BASE}/matches`
+      fromDate.setUTCDate(
+        fromDate.getUTCDate() - 14
       );
 
 
-    fixtureUrl.searchParams.set(
-      "dateFrom",
-      from
-    );
+      const toDate =
+        new Date(
+          now
+        );
 
 
-    fixtureUrl.searchParams.set(
-      "dateTo",
-      to
-    );
+      toDate.setUTCDate(
+        toDate.getUTCDate() + 45
+      );
 
 
-    let fixtureResponse;
+      const formatDate =
+        date =>
+          date
+            .toISOString()
+            .slice(
+              0,
+              10
+            );
 
 
-    try {
+      const from =
+        formatDate(
+          fromDate
+        );
 
-      fixtureResponse =
-        await fetch(
-          fixtureUrl.toString(),
-          {
 
-            method:
-              "GET",
+      const to =
+        formatDate(
+          toDate
+        );
 
-            headers: {
 
-              "X-Auth-Token":
-                token,
+      const url =
+        new URL(
+          `${BASE}/matches`
+        );
 
-              "Accept":
-                "application/json"
+
+      url.searchParams.set(
+        "dateFrom",
+        from
+      );
+
+
+      url.searchParams.set(
+        "dateTo",
+        to
+      );
+
+
+      const upcoming =
+        await fetchJSON(
+          url,
+          token
+        );
+
+
+      const matches =
+        Array.isArray(
+          upcoming?.matches
+        )
+          ? upcoming.matches
+          : [];
+
+
+      const fixtureMatch =
+        matches.find(
+          match =>
+
+            namesMatch(
+              normalize(
+                match?.homeTeam?.name
+              ),
+              normalize(
+                home
+              )
+            )
+
+            &&
+
+            namesMatch(
+              normalize(
+                match?.awayTeam?.name
+              ),
+              normalize(
+                away
+              )
+            )
+        );
+
+
+      let fixture =
+        fixtureMatch
+          ? normalizeFixture(
+              fixtureMatch
+            )
+          : null;
+
+
+      let recentHome =
+        [];
+
+
+      let recentAway =
+        [];
+
+
+      if (
+        fixtureMatch?.homeTeam?.id
+      ) {
+
+        recentHome =
+          await getTeamFinished(
+            fixtureMatch.homeTeam.id,
+            token
+          );
+
+      }
+
+
+      if (
+        fixtureMatch?.awayTeam?.id
+      ) {
+
+        recentAway =
+          await getTeamFinished(
+            fixtureMatch.awayTeam.id,
+            token
+          );
+
+      }
+
+
+      if (!fixture) {
+
+        return {
+
+          status:
+            "api_ok_no_match",
+
+          message:
+            "Football-Data.org متصل لكن المباراة غير موجودة في نطاق البحث.",
+
+          data: {
+
+            source:
+              "football-data.org",
+
+            available:
+              true,
+
+            matchFound:
+              false,
+
+            searchRange: {
+
+              dateFrom:
+                from,
+
+              dateTo:
+                to
 
             }
 
           }
-        );
+
+        };
+
+      }
+
+
+      return {
+
+        status:
+          "success",
+
+        message:
+          "تم العثور على المباراة وبياناتها عبر Football-Data.org.",
+
+        data: {
+
+          source:
+            "football-data.org",
+
+          available:
+            true,
+
+          matchFound:
+            true,
+
+          fixture,
+
+          recentMatches: {
+
+            home:
+              recentHome,
+
+            away:
+              recentAway
+
+          }
+
+        }
+
+      };
 
     } catch (error) {
 
       return {
 
         status:
-          "network_error",
+          "api_error",
 
         message:
           error?.message ||
@@ -212,246 +305,82 @@ class FootballDataProvider
 
     }
 
+  }
 
-    const fixtureText =
-      await fixtureResponse.text();
+}
 
 
-    let fixturePayload =
-      null;
+// ==========================================
+// FETCH JSON
+// ==========================================
 
+async function fetchJSON(
+  url,
+  token
+) {
 
-    try {
+  const response =
+    await fetch(
+      url.toString(),
+      {
 
-      fixturePayload =
-        fixtureText
-          ? JSON.parse(
-              fixtureText
-            )
-          : null;
+        headers: {
 
-    } catch {
+          "X-Auth-Token":
+            token,
 
-      fixturePayload =
-        null;
-
-    }
-
-
-    if (
-      !fixtureResponse.ok
-    ) {
-
-      return {
-
-        status:
-          "api_error",
-
-        message:
-          `HTTP ${fixtureResponse.status}: ${
-            fixturePayload?.message ||
-            fixturePayload?.error ||
-            fixtureText ||
-            "Football-Data.org API error"
-          }`,
-
-        data: {
-
-          httpStatus:
-            fixtureResponse.status,
-
-          apiResponse:
-            fixturePayload
-
-        }
-
-      };
-
-    }
-
-
-    const matches =
-      Array.isArray(
-        fixturePayload?.matches
-      )
-        ? fixturePayload.matches
-        : [];
-
-
-    // ======================================
-    // FIND REQUESTED FIXTURE
-    // ======================================
-
-    const requestedMatch =
-      matches.find(
-        match => {
-
-          const apiHome =
-            normalize(
-              match?.homeTeam?.name ||
-              match?.homeTeam?.shortName ||
-              match?.homeTeam?.tla
-            );
-
-
-          const apiAway =
-            normalize(
-              match?.awayTeam?.name ||
-              match?.awayTeam?.shortName ||
-              match?.awayTeam?.tla
-            );
-
-
-          return (
-
-            namesMatch(
-              apiHome,
-              homeNormalized
-            )
-
-            &&
-
-            namesMatch(
-              apiAway,
-              awayNormalized
-            )
-
-          );
-
-        }
-      );
-
-
-    if (
-      !requestedMatch
-    ) {
-
-      return {
-
-        status:
-          "api_ok_no_match",
-
-        message:
-          "تم الاتصال بـ Football-Data.org لكن المباراة غير موجودة داخل نطاق البحث.",
-
-        data: {
-
-          source:
-            "football-data.org",
-
-          available:
-            true,
-
-          matchFound:
-            false,
-
-          requested: {
-
-            home,
-            away
-
-          },
-
-          searchRange: {
-
-            dateFrom:
-              from,
-
-            dateTo:
-              to
-
-          },
-
-          totalMatchesReturned:
-            matches.length
-
-        }
-
-      };
-
-    }
-
-
-    // ======================================
-    // NORMALIZED FIXTURE
-    // ======================================
-
-    const fixture =
-      normalizeMatch(
-        requestedMatch
-      );
-
-
-    // ======================================
-    // TEAM IDs
-    // ======================================
-
-    const homeId =
-      requestedMatch?.homeTeam?.id;
-
-
-    const awayId =
-      requestedMatch?.awayTeam?.id;
-
-
-    // ======================================
-    // RECENT MATCHES
-    // ======================================
-
-    const homeRecent =
-      homeId
-        ? await getRecentTeamMatches(
-            homeId,
-            token
-          )
-        : [];
-
-
-    const awayRecent =
-      awayId
-        ? await getRecentTeamMatches(
-            awayId,
-            token
-          )
-        : [];
-
-
-    return {
-
-      status:
-        "success",
-
-      message:
-        "تم العثور على المباراة وبياناتها التاريخية عبر Football-Data.org.",
-
-      data: {
-
-        source:
-          "football-data.org",
-
-        available:
-          true,
-
-        matchFound:
-          true,
-
-        fixture,
-
-        recentMatches: {
-
-          home:
-            homeRecent,
-
-          away:
-            awayRecent
+          "Accept":
+            "application/json"
 
         }
 
       }
+    );
 
-    };
+
+  const text =
+    await response.text();
+
+
+  let data =
+    null;
+
+
+  try {
+
+    data =
+      text
+        ? JSON.parse(
+            text
+          )
+        : null;
+
+  } catch {
+
+    data =
+      null;
 
   }
+
+
+  if (!response.ok) {
+
+    throw new Error(
+
+      `Football-Data.org HTTP ${response.status}: ` +
+
+      (
+        data?.message ||
+        text ||
+        "API error"
+      )
+
+    );
+
+  }
+
+
+  return data;
 
 }
 
@@ -460,100 +389,56 @@ class FootballDataProvider
 // RECENT TEAM MATCHES
 // ==========================================
 
-async function getRecentTeamMatches(
+async function getTeamFinished(
   teamId,
   token
 ) {
 
-  const url =
-    new URL(
-      `${API_BASE}/teams/${teamId}/matches`
-    );
-
-
-  url.searchParams.set(
-    "status",
-    "FINISHED"
-  );
-
-
-  url.searchParams.set(
-    "limit",
-    "10"
-  );
-
-
   try {
 
-    const response =
-      await fetch(
-        url.toString(),
-        {
-
-          method:
-            "GET",
-
-          headers: {
-
-            "X-Auth-Token":
-              token,
-
-            "Accept":
-              "application/json"
-
-          }
-
-        }
+    const url =
+      new URL(
+        `${BASE}/teams/${teamId}/matches`
       );
 
 
-    const text =
-      await response.text();
+    url.searchParams.set(
+      "status",
+      "FINISHED"
+    );
 
 
-    let payload =
-      null;
+    url.searchParams.set(
+      "limit",
+      "10"
+    );
 
 
-    try {
-
-      payload =
-        text
-          ? JSON.parse(text)
-          : null;
-
-    } catch {
-
-      payload =
-        null;
-
-    }
+    const data =
+      await fetchJSON(
+        url,
+        token
+      );
 
 
-    if (
-      !response.ok
-    ) {
+    return (
 
-      return [];
-
-    }
-
-
-    const matches =
       Array.isArray(
-        payload?.matches
+        data?.matches
       )
-        ? payload.matches
-        : [];
+        ? data.matches
+        : []
 
+    )
 
-    return matches
       .map(
-        normalizeMatch
+        normalizeRecent
       )
+
       .filter(
         Boolean
       )
+
       .slice(
         0,
         10
@@ -569,14 +454,88 @@ async function getRecentTeamMatches(
 
 
 // ==========================================
-// NORMALIZE MATCH
+// NORMALIZE FIXTURE
 // ==========================================
 
-function normalizeMatch(
+function normalizeFixture(
   match
 ) {
 
-  if (!match) {
+  return {
+
+    id:
+      match.id ||
+      null,
+
+    utcDate:
+      match.utcDate ||
+      null,
+
+    status:
+      match.status ||
+      null,
+
+    competition:
+      match.competition?.name ||
+      null,
+
+    homeTeam: {
+
+      id:
+        match.homeTeam?.id ||
+        null,
+
+      name:
+        match.homeTeam?.name ||
+        null
+
+    },
+
+    awayTeam: {
+
+      id:
+        match.awayTeam?.id ||
+        null,
+
+      name:
+        match.awayTeam?.name ||
+        null
+
+    }
+
+  };
+
+}
+
+
+// ==========================================
+// NORMALIZE RECENT MATCH
+// ==========================================
+
+function normalizeRecent(
+  match
+) {
+
+  const homeGoals =
+    Number(
+      match.score?.fullTime?.home
+    );
+
+
+  const awayGoals =
+    Number(
+      match.score?.fullTime?.away
+    );
+
+
+  if (
+    !Number.isFinite(
+      homeGoals
+    ) ||
+    !Number.isFinite(
+      awayGoals
+    )
+  ) {
 
     return null;
 
@@ -593,38 +552,18 @@ function normalizeMatch(
       match.utcDate ||
       null,
 
-    status:
-      match.status ||
-      null,
-
     homeTeam: {
-
-      id:
-        match.homeTeam?.id ||
-        null,
 
       name:
         match.homeTeam?.name ||
-        null,
-
-      shortName:
-        match.homeTeam?.shortName ||
         null
 
     },
 
     awayTeam: {
 
-      id:
-        match.awayTeam?.id ||
-        null,
-
       name:
         match.awayTeam?.name ||
-        null,
-
-      shortName:
-        match.awayTeam?.shortName ||
         null
 
     },
@@ -634,26 +573,10 @@ function normalizeMatch(
       fullTime: {
 
         home:
-          Number.isFinite(
-            Number(
-              match.score?.fullTime?.home
-            )
-          )
-            ? Number(
-                match.score.fullTime.home
-              )
-            : null,
+          homeGoals,
 
         away:
-          Number.isFinite(
-            Number(
-              match.score?.fullTime?.away
-            )
-          )
-            ? Number(
-                match.score.fullTime.away
-              )
-            : null
+          awayGoals
 
       }
 
@@ -665,7 +588,55 @@ function normalizeMatch(
 
 
 // ==========================================
-// NAME MATCH
+// NORMALIZE TEAM NAME
+// ==========================================
+
+function normalize(
+  value
+) {
+
+  return String(
+    value || ""
+  )
+
+    .toLowerCase()
+
+    .normalize(
+      "NFD"
+    )
+
+    .replace(
+      /[\u0300-\u036f]/g,
+      ""
+    )
+
+    .replace(
+      /&/g,
+      " and "
+    )
+
+    .replace(
+      /\b(fc|cf|afc|sc|ac|fk|club)\b/g,
+      " "
+    )
+
+    .replace(
+      /[^a-z0-9\u0600-\u06ff\s]/gi,
+      " "
+    )
+
+    .replace(
+      /\s+/g,
+      " "
+    )
+
+    .trim();
+
+}
+
+
+// ==========================================
+// TEAM NAME MATCH
 // ==========================================
 
 function namesMatch(
@@ -684,15 +655,7 @@ function namesMatch(
 
 
   if (
-    first === second
-  ) {
-
-    return true;
-
-  }
-
-
-  if (
+    first === second ||
     first.includes(second) ||
     second.includes(first)
   ) {
@@ -702,27 +665,26 @@ function namesMatch(
   }
 
 
-  const firstTokens =
-    first.split(" ");
-
-
-  const secondTokens =
-    second.split(" ");
-
-
-  const common =
-    secondTokens.filter(
-      token =>
-        token.length >= 3 &&
-        firstTokens.includes(
-          token
+  const tokens =
+    new Set(
+      first
+        .split(" ")
+        .filter(
+          token =>
+            token.length >= 3
         )
     );
 
 
-  return (
-    common.length >= 1
-  );
+  return second
+    .split(" ")
+    .some(
+      token =>
+        token.length >= 3 &&
+        tokens.has(
+          token
+        )
+    );
 
 }
 
