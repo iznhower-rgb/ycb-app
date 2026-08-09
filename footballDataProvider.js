@@ -1,4 +1,5 @@
 // Y.C.B FOOTBALL-DATA.ORG PROVIDER
+// Optional provider — must never break the main Y.C.B engine
 
 import {
   DataProvider,
@@ -35,6 +36,14 @@ class FootballDataProvider
       ).trim();
 
 
+    /*
+    ----------------------------------------------------------
+    FOOTBALL-DATA.ORG IS OPTIONAL
+    ----------------------------------------------------------
+    No token = provider skipped safely.
+    ----------------------------------------------------------
+    */
+
     if (!token) {
 
       return {
@@ -43,7 +52,7 @@ class FootballDataProvider
           "not_configured",
 
         message:
-          "Football-Data.org غير مفعل: FOOTBALL_DATA_TOKEN غير موجود. المصدر اختياري.",
+          "Football-Data.org اختياري: FOOTBALL_DATA_TOKEN غير موجود.",
 
         data:
           null
@@ -140,22 +149,52 @@ class FootballDataProvider
       } catch {}
 
 
+      /*
+      --------------------------------------------------------
+      INVALID TOKEN
+      --------------------------------------------------------
+      Do not throw an error that can affect Y.C.B.
+      --------------------------------------------------------
+      */
+
+      if (
+        response.status === 400 ||
+        response.status === 401 ||
+        response.status === 403
+      ) {
+
+        return {
+
+          status:
+            "disabled_invalid_token",
+
+          message:
+            `Football-Data.org غير متاح حاليًا: HTTP ${response.status}. سيتم تجاهل هذا المصدر.`,
+
+          data:
+            null
+
+        };
+
+      }
+
+
       if (
         !response.ok
       ) {
 
-        throw new Error(
+        return {
 
-          `HTTP ${response.status}: ` +
+          status:
+            "api_error",
 
-          (
-            payload?.message ||
-            payload?.error ||
-            text ||
-            "API error"
-          )
+          message:
+            `Football-Data.org HTTP ${response.status}. سيتم تجاهل هذا المصدر.`,
 
-        );
+          data:
+            null
+
+        };
 
       }
 
@@ -248,6 +287,12 @@ class FootballDataProvider
         );
 
 
+      /*
+      --------------------------------------------------------
+      RECENT HOME TEAM MATCHES
+      --------------------------------------------------------
+      */
+
       const homeRecent =
         matches
 
@@ -266,6 +311,7 @@ class FootballDataProvider
                       ?.homeTeam
                       ?.name
                   ),
+
                   normalizeName(
                     home
                   )
@@ -279,10 +325,12 @@ class FootballDataProvider
                       ?.awayTeam
                       ?.name
                   ),
+
                   normalizeName(
                     home
                   )
                 )
+
               )
 
               &&
@@ -302,6 +350,12 @@ class FootballDataProvider
           );
 
 
+      /*
+      --------------------------------------------------------
+      RECENT AWAY TEAM MATCHES
+      --------------------------------------------------------
+      */
+
       const awayRecent =
         matches
 
@@ -320,6 +374,7 @@ class FootballDataProvider
                       ?.homeTeam
                       ?.name
                   ),
+
                   normalizeName(
                     away
                   )
@@ -333,10 +388,12 @@ class FootballDataProvider
                       ?.awayTeam
                       ?.name
                   ),
+
                   normalizeName(
                     away
                   )
                 )
+
               )
 
               &&
@@ -393,14 +450,21 @@ class FootballDataProvider
 
     } catch (error) {
 
+      /*
+      --------------------------------------------------------
+      NETWORK ERROR
+      --------------------------------------------------------
+      This provider is optional, therefore failure is isolated.
+      --------------------------------------------------------
+      */
+
       return {
 
         status:
-          "api_error",
+          "network_error",
 
         message:
-          error?.message ||
-          String(error),
+          "تعذر الاتصال بـ Football-Data.org وسيتم تجاهل المصدر.",
 
         data:
           null
@@ -413,6 +477,12 @@ class FootballDataProvider
 
 }
 
+
+/*
+============================================================
+NORMALIZE MATCH
+============================================================
+*/
 
 function normalizeMatch(
   match
@@ -519,6 +589,12 @@ function normalizeMatch(
 }
 
 
+/*
+============================================================
+FINITE NUMBER
+============================================================
+*/
+
 function finiteOrNull(
   value
 ) {
@@ -537,6 +613,12 @@ function finiteOrNull(
 
 }
 
+
+/*
+============================================================
+DATE HELPERS
+============================================================
+*/
 
 function shiftDate(
   date,
@@ -573,6 +655,12 @@ function formatDate(
 
 }
 
+
+/*
+============================================================
+TEAM NAME NORMALIZATION
+============================================================
+*/
 
 function normalizeName(
   value
@@ -620,6 +708,12 @@ function normalizeName(
 
 }
 
+
+/*
+============================================================
+TEAM NAME MATCHING
+============================================================
+*/
 
 function namesMatch(
   first,
@@ -672,6 +766,12 @@ function namesMatch(
 
 }
 
+
+/*
+============================================================
+REGISTER PROVIDER
+============================================================
+*/
 
 const provider =
   new FootballDataProvider();
