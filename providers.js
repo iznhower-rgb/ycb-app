@@ -13,8 +13,7 @@ export class DataProvider {
 
   constructor(name) {
 
-    this.name =
-      name;
+    this.name = name;
 
   }
 
@@ -175,7 +174,7 @@ export async function getAllMatchData(
 
 
 // ==========================================
-// EXPORT PROVIDER LIST
+// PROVIDER INSTANCES
 // ==========================================
 
 export function getProviderInstances() {
