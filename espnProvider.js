@@ -1,7 +1,8 @@
 // Y.C.B ESPN PROVIDER 2.4.0
 // Browser-safe ESPN provider
-// Explicit access_blocked detection
-// Never throws into the main Y.C.B engine
+// Explicit access_blocked / CORS handling
+// Provider failure never breaks Y.C.B
+
 
 import {
   DataProvider,
@@ -11,6 +12,7 @@ import {
 
 const SCOREBOARD =
   "https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard";
+
 
 const ESPN =
   "https://site.api.espn.com/apis/site/v2/sports/soccer";
@@ -41,9 +43,21 @@ class ESPNProvider
     away
   ) {
 
+    const homeName =
+      normalizeName(
+        home
+      );
+
+
+    const awayName =
+      normalizeName(
+        away
+      );
+
+
     if (
-      !home ||
-      !away
+      !homeName ||
+      !awayName
     ) {
 
       return {
@@ -52,7 +66,7 @@ class ESPNProvider
           "invalid_request",
 
         message:
-          "ESPN: أسماء الفريقين غير صالحة.",
+          "ESPN: اسم الفريقين غير صالح.",
 
         data: {
 
@@ -111,8 +125,8 @@ class ESPNProvider
 
 
       /*
-       * ESPN reached successfully,
-       * but fixture was not found.
+       * ESPN reachable but requested
+       * fixture not found.
        */
 
       if (
@@ -153,14 +167,7 @@ class ESPNProvider
             },
 
             totalEvents:
-              events.length,
-
-            recentMatches: {
-
-              home: [],
-              away: []
-
-            }
+              events.length
 
           }
 
@@ -213,10 +220,10 @@ class ESPNProvider
 
 
       /*
-       * Fetch schedules independently.
+       * Team schedules are optional.
        *
-       * Failure of one schedule must not
-       * destroy the ESPN fixture result.
+       * If ESPN blocks one schedule request,
+       * the main fixture remains usable.
        */
 
       const [
@@ -225,16 +232,16 @@ class ESPNProvider
       ] = await Promise.all([
 
         homeId
-          ? fetchTeamSchedule(
+          ? safeTeamSchedule(
               homeId
             )
-          : Promise.resolve([]),
+          : [],
 
         awayId
-          ? fetchTeamSchedule(
+          ? safeTeamSchedule(
               awayId
             )
-          : Promise.resolve([])
+          : []
 
       ]);
 
@@ -254,7 +261,7 @@ class ESPNProvider
 
 
       /*
-       * Scoreboard fallback.
+       * Fallback to scoreboard events.
        */
 
       if (
@@ -334,7 +341,7 @@ class ESPNProvider
       error
     ) {
 
-      const status =
+      const classification =
         classifyESPNError(
           error
         );
@@ -342,13 +349,11 @@ class ESPNProvider
 
       return {
 
-        status,
+        status:
+          classification.status,
 
         message:
-          getESPNErrorMessage(
-            status,
-            error
-          ),
+          classification.message,
 
         data: {
 
@@ -362,8 +367,11 @@ class ESPNProvider
             false,
 
           error:
+
             error?.message ||
-            String(error)
+            String(
+              error
+            )
 
         }
 
@@ -386,24 +394,57 @@ async function getScoreboardEvents(
 ) {
 
   const url =
-    `${SCOREBOARD}?dates=` +
-    `${formatDate(from)}-${formatDate(to)}` +
-    `&limit=1000`;
+    new URL(
+      SCOREBOARD
+    );
+
+
+  url.searchParams.set(
+    "dates",
+    `${formatDate(from)}-${formatDate(to)}`
+  );
+
+
+  url.searchParams.set(
+    "limit",
+    "1000"
+  );
 
 
   const payload =
     await fetchJSON(
-      url
+      url.toString()
     );
 
 
   return Array.isArray(
     payload?.events
   )
-
     ? payload.events
-
     : [];
+
+}
+
+
+/* ==========================================
+   TEAM SCHEDULE SAFE
+========================================== */
+
+async function safeTeamSchedule(
+  teamId
+) {
+
+  try {
+
+    return await fetchTeamSchedule(
+      teamId
+    );
+
+  } catch {
+
+    return [];
+
+  }
 
 }
 
@@ -539,25 +580,13 @@ function normalizeRecentMatches(
       (
         a,
         b
-      ) => {
-
-        const dateA =
-          Date.parse(
-            a?.date ||
-            ""
-          );
-
-
-        const dateB =
-          Date.parse(
-            b?.date ||
-            ""
-          );
-
-
-        return dateB - dateA;
-
-      }
+      ) =>
+        getEventTimestamp(
+          b
+        ) -
+        getEventTimestamp(
+          a
+        )
     )
 
     .slice(
@@ -581,15 +610,33 @@ async function fetchJSON(
 ) {
 
   const controller =
-    new AbortController();
+    typeof AbortController !==
+    "undefined"
+
+      ? new AbortController()
+
+      : null;
 
 
-  const timeout =
-    setTimeout(
-      () =>
-        controller.abort(),
-      REQUEST_TIMEOUT
-    );
+  let timeoutId =
+    null;
+
+
+  if (
+    controller
+  ) {
+
+    timeoutId =
+      setTimeout(
+        () => {
+
+          controller.abort();
+
+        },
+        REQUEST_TIMEOUT
+      );
+
+  }
 
 
   try {
@@ -610,7 +657,7 @@ async function fetchJSON(
           },
 
           signal:
-            controller.signal
+            controller?.signal
 
         }
       );
@@ -620,39 +667,36 @@ async function fetchJSON(
       await response.text();
 
 
-    let data =
-      null;
-
-
-    try {
-
-      data =
+    const data =
+      safeJsonParse(
         text
-          ? JSON.parse(
-              text
-            )
-          : null;
-
-    } catch {
-
-      data =
-        null;
-
-    }
+      );
 
 
     if (
       !response.ok
     ) {
 
-      throw new Error(
-        `ESPN HTTP ${response.status}` +
-        (
-          data?.message
-            ? `: ${data.message}`
-            : ""
-        )
-      );
+      const error =
+        new Error(
+          `ESPN HTTP ${response.status}` +
+          (
+            data?.message
+              ? `: ${data.message}`
+              : ""
+          )
+        );
+
+
+      error.httpStatus =
+        response.status;
+
+
+      error.responseData =
+        data;
+
+
+      throw error;
 
     }
 
@@ -663,47 +707,104 @@ async function fetchJSON(
     error
   ) {
 
+    /*
+     * Preserve HTTP errors.
+     */
+
     if (
-      error?.name ===
-      "AbortError"
+      Number.isFinite(
+        Number(
+          error?.httpStatus
+        )
+      )
     ) {
 
-      throw new Error(
-        "ESPN request timeout"
-      );
+      throw error;
 
     }
 
 
     /*
-     * Browser fetch commonly reports
-     * CORS / blocked requests as TypeError.
+     * Browser CORS / access failure.
      *
-     * Preserve an explicit marker so the
-     * application can show access_blocked.
+     * Browsers often expose this as:
+     * TypeError: Failed to fetch
+     *
+     * There may be no HTTP response at all.
      */
 
+    const message =
+      String(
+        error?.message ||
+        error ||
+        ""
+      );
+
+
+    const accessError =
+      new Error(
+        message ||
+        "ESPN access blocked by browser or network."
+      );
+
+
+    accessError.code =
+      isBrowserAccessFailure(
+        error
+      )
+        ? "ESPN_ACCESS_BLOCKED"
+        : "ESPN_NETWORK_ERROR";
+
+
+    accessError.originalError =
+      error;
+
+
+    throw accessError;
+
+  } finally {
+
     if (
-      error instanceof TypeError
+      timeoutId !== null
     ) {
 
-      throw new Error(
-        `ESPN access blocked or CORS failure: ${
-          error?.message ||
-          "Failed to fetch"
-        }`
+      clearTimeout(
+        timeoutId
       );
 
     }
 
+  }
 
-    throw error;
+}
 
-  } finally {
 
-    clearTimeout(
-      timeout
+/* ==========================================
+   SAFE JSON
+========================================== */
+
+function safeJsonParse(
+  text
+) {
+
+  if (
+    !text
+  ) {
+
+    return null;
+
+  }
+
+
+  try {
+
+    return JSON.parse(
+      text
     );
+
+  } catch {
+
+    return null;
 
   }
 
@@ -723,144 +824,236 @@ function classifyESPNError(
       error?.message ||
       error ||
       ""
-    ).toLowerCase();
+    );
 
+
+  const httpStatus =
+    Number(
+      error?.httpStatus
+    );
+
+
+  /*
+   * Explicit HTTP access denial.
+   */
 
   if (
-    message.includes(
-      "access blocked"
-    ) ||
-    message.includes(
-      "cors"
-    ) ||
-    message.includes(
-      "access-control"
-    ) ||
-    message.includes(
-      "forbidden"
-    ) ||
-    message.includes(
-      "http 403"
-    ) ||
-    message.includes(
-      " 403"
+    httpStatus === 401 ||
+    httpStatus === 403 ||
+    httpStatus === 451
+  ) {
+
+    return {
+
+      status:
+        "access_blocked",
+
+      message:
+        `ESPN رفض الوصول إلى المصدر (HTTP ${httpStatus}).`
+
+    };
+
+  }
+
+
+  /*
+   * Browser access / CORS failure.
+   */
+
+  if (
+    error?.code ===
+      "ESPN_ACCESS_BLOCKED" ||
+
+    isLikelyBrowserAccessError(
+      message
     )
   ) {
 
-    return "access_blocked";
+    return {
+
+      status:
+        "access_blocked",
+
+      message:
+        "ESPN لم يسمح للمتصفح بالوصول إلى المصدر. قد يكون السبب CORS أو حجب الوصول من بيئة التطبيق."
+
+    };
 
   }
 
 
   if (
-    message.includes(
-      "http 401"
-    ) ||
-    message.includes(
-      " 401"
-    ) ||
-    message.includes(
-      "unauthorized"
-    )
+    httpStatus === 404
   ) {
 
-    return "auth_error";
+    return {
+
+      status:
+        "endpoint_not_found",
+
+      message:
+        "ESPN endpoint غير موجود."
+
+    };
 
   }
 
 
   if (
-    message.includes(
-      "http 404"
-    ) ||
-    message.includes(
-      " 404"
-    )
+    httpStatus === 429
   ) {
 
-    return "endpoint_not_found";
+    return {
+
+      status:
+        "rate_limited",
+
+      message:
+        "ESPN رفض الطلب مؤقتًا بسبب كثرة الطلبات."
+
+    };
 
   }
 
 
   if (
-    message.includes(
-      "http 429"
-    ) ||
-    message.includes(
-      " 429"
-    )
+    error?.name ===
+      "AbortError"
   ) {
 
-    return "rate_limited";
+    return {
+
+      status:
+        "timeout",
+
+      message:
+        "ESPN لم يستجب خلال المهلة المحددة."
+
+    };
 
   }
 
 
-  if (
-    message.includes(
-      "timeout"
-    )
-  ) {
+  return {
 
-    return "timeout";
+    status:
+      "network_error",
 
-  }
+    message:
+      message ||
+      "ESPN request failed."
 
-
-  return "network_error";
+  };
 
 }
 
 
 /* ==========================================
-   ERROR MESSAGE
+   ACCESS FAILURE DETECTION
 ========================================== */
 
-function getESPNErrorMessage(
-  status,
+function isBrowserAccessFailure(
   error
 ) {
 
   if (
-    status ===
-    "access_blocked"
+    !error
   ) {
 
-    return (
-      "ESPN محجوب أو مرفوض من بيئة المتصفح (CORS/403). تم عزل المصدر ولن تتأثر بقية المصادر."
-    );
+    return false;
 
   }
 
 
   if (
-    status ===
-    "timeout"
+    error?.name ===
+      "TypeError"
   ) {
 
-    return (
-      "ESPN لم يستجب خلال المهلة المحددة. تم تجاهل المصدر."
-    );
+    const message =
+      String(
+        error?.message ||
+        ""
+      ).toLowerCase();
+
+
+    if (
+      message.includes(
+        "failed to fetch"
+      ) ||
+
+      message.includes(
+        "networkerror"
+      ) ||
+
+      message.includes(
+        "load failed"
+      )
+    ) {
+
+      return true;
+
+    }
 
   }
 
 
-  if (
-    status ===
-    "rate_limited"
-  ) {
+  return false;
 
-    return (
-      "ESPN حدّ من عدد الطلبات. تم تجاهل المصدر مؤقتًا."
-    );
+}
 
-  }
+
+/* ==========================================
+   LIKELY BROWSER ACCESS ERROR
+========================================== */
+
+function isLikelyBrowserAccessError(
+  message
+) {
+
+  const value =
+    String(
+      message ||
+      ""
+    ).toLowerCase();
 
 
   return (
-    error?.message ||
-    "ESPN request failed."
+
+    value.includes(
+      "failed to fetch"
+    )
+
+    ||
+
+    value.includes(
+      "networkerror"
+    )
+
+    ||
+
+    value.includes(
+      "cors"
+    )
+
+    ||
+
+    value.includes(
+      "cross-origin"
+    )
+
+    ||
+
+    value.includes(
+      "access-control"
+    )
+
+    ||
+
+    value.includes(
+      "load failed"
+    )
+
   );
 
 }
@@ -927,9 +1120,11 @@ function normalizeEvent(
         ""
       ),
 
+
     utcDate:
       event?.date ||
       null,
+
 
     status:
       completed
@@ -942,6 +1137,7 @@ function normalizeEvent(
             "SCHEDULED"
           ),
 
+
     homeTeam: {
 
       id:
@@ -950,25 +1146,32 @@ function normalizeEvent(
           ?.id ||
         null,
 
+
       name:
         home
           ?.team
           ?.displayName ||
+
         home
           ?.team
           ?.name ||
+
         null,
+
 
       shortName:
         home
           ?.team
           ?.shortDisplayName ||
+
         home
           ?.team
           ?.abbreviation ||
+
         null
 
     },
+
 
     awayTeam: {
 
@@ -978,25 +1181,32 @@ function normalizeEvent(
           ?.id ||
         null,
 
+
       name:
         away
           ?.team
           ?.displayName ||
+
         away
           ?.team
           ?.name ||
+
         null,
+
 
       shortName:
         away
           ?.team
           ?.shortDisplayName ||
+
         away
           ?.team
           ?.abbreviation ||
+
         null
 
     },
+
 
     score: {
 
@@ -1007,6 +1217,7 @@ function normalizeEvent(
             ? homeScore
             : null,
 
+
         away:
           completed
             ? awayScore
@@ -1016,13 +1227,16 @@ function normalizeEvent(
 
     },
 
+
     tournament:
       event
         ?.league
         ?.name ||
+
       event
         ?.season
         ?.displayName ||
+
       null
 
   };
@@ -1132,6 +1346,7 @@ function isTeamEvent(
           item
             ?.team
             ?.displayName ||
+
           item
             ?.team
             ?.name
@@ -1164,7 +1379,7 @@ function isFinished(
   return (
 
     type?.completed ===
-    true
+      true
 
     ||
 
@@ -1203,21 +1418,54 @@ function sameEvent(
   }
 
 
-  return (
+  return String(
+    first?.id ||
+    ""
+  )
 
-    String(
-      first?.id ||
-      ""
-    )
+  ===
 
-    ===
-
-    String(
-      second?.id ||
-      ""
-    )
-
+  String(
+    second?.id ||
+    ""
   );
+
+}
+
+
+/* ==========================================
+   EVENT TIMESTAMP
+========================================== */
+
+function getEventTimestamp(
+  event
+) {
+
+  const date =
+    event?.date ||
+    null;
+
+
+  if (
+    !date
+  ) {
+
+    return 0;
+
+  }
+
+
+  const timestamp =
+    Date.parse(
+      date
+    );
+
+
+  return Number.isFinite(
+    timestamp
+  )
+    ? timestamp
+    : 0;
 
 }
 
@@ -1231,12 +1479,9 @@ function numberOrNull(
 ) {
 
   if (
-    value ===
-    null ||
-    value ===
-    undefined ||
-    value ===
-    ""
+    value === null ||
+    value === undefined ||
+    value === ""
   ) {
 
     return null;
@@ -1291,7 +1536,12 @@ function normalizeName(
     )
 
     .replace(
-      /\b(fc|cf|afc|sc|ac|fk|club)\b/g,
+      /[-_./]/g,
+      " "
+    )
+
+    .replace(
+      /\b(fc|cf|afc|sc|ac|fk|club|women|woman|f)\b/g,
       " "
     )
 
@@ -1319,9 +1569,21 @@ function namesMatch(
   second
 ) {
 
+  const a =
+    normalizeName(
+      first
+    );
+
+
+  const b =
+    normalizeName(
+      second
+    );
+
+
   if (
-    !first ||
-    !second
+    !a ||
+    !b
   ) {
 
     return false;
@@ -1330,7 +1592,7 @@ function namesMatch(
 
 
   if (
-    first === second
+    a === b
   ) {
 
     return true;
@@ -1339,12 +1601,8 @@ function namesMatch(
 
 
   if (
-    first.includes(
-      second
-    ) ||
-    second.includes(
-      first
-    )
+    a.includes(b) ||
+    b.includes(a)
   ) {
 
     return true;
@@ -1354,7 +1612,7 @@ function namesMatch(
 
   const firstTokens =
     new Set(
-      first
+      a
         .split(" ")
         .filter(
           token =>
@@ -1364,7 +1622,7 @@ function namesMatch(
 
 
   const secondTokens =
-    second
+    b
       .split(" ")
       .filter(
         token =>
@@ -1372,11 +1630,45 @@ function namesMatch(
       );
 
 
-  return secondTokens.some(
-    token =>
+  if (
+    firstTokens.size === 0 ||
+    secondTokens.length === 0
+  ) {
+
+    return false;
+
+  }
+
+
+  let common =
+    0;
+
+
+  for (
+    const token
+    of secondTokens
+  ) {
+
+    if (
       firstTokens.has(
         token
       )
+    ) {
+
+      common++;
+
+    }
+
+  }
+
+
+  /*
+   * At least one meaningful token
+   * must match.
+   */
+
+  return (
+    common >= 1
   );
 
 }
