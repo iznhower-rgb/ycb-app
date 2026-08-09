@@ -1,3237 +1,1852 @@
-// ==========================================================
-// Y.C.B FINAL WORKER 2.2.2
-// ==========================================================
+/* Y.C.B - Complete Cloudflare Worker
+ * Self-contained production file.
+ * No MockProvider. No hard-coded prediction output.
+ * Active data sources:
+ *   1) BSD (optional token, but recommended)
+ *   2) TheSportsDB free API
+ *   3) OpenLigaDB public API
+ *
+ * Optional legacy Football-Data.org is intentionally NOT used here:
+ * an invalid token must never contaminate the analysis.
+ */
 
-import {
-  getProviders,
-  getAllMatchData
-} from "./providers.js";
+const APP_NAME = "Y.C.B";
+const VERSION = "3.0.0";
 
-import "./espnProvider.js";
-import "./footballDataProvider.js";
-import "./sofaScoreProvider.js";
-import "./openLigaProvider.js";
-import "./theSportsDBProvider.js";
-import "./bsdProvider.js";
-
-const VERSION = "2.2.2";
-
-
-// ==========================================================
-// HTML
-// ==========================================================
-
-const HTML = `<!doctype html>
-
+const HTML = String.raw`<!doctype html>
 <html lang="ar" dir="rtl">
-
 <head>
-
-<meta charset="UTF-8">
-
-<meta
-  name="viewport"
-  content="width=device-width,initial-scale=1,maximum-scale=1"
->
-
-<title>
-Y.C.B Football Prediction Engine
-</title>
-
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Y.C.B Football Prediction Engine</title>
 <style>
-
-*{
-  box-sizing:border-box
+:root{
+  --bg:#0d1425;--card:#1d2a3f;--card2:#34465c;--ink:#f7f9fc;
+  --muted:#aeb8c8;--green:#20c45a;--green2:#075d48;--danger:#e05252;
+  --line:#27364d;
 }
-
-html,
-body{
-  margin:0;
-  padding:0;
-  overflow-x:hidden
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Arial,sans-serif}
+main{max-width:720px;margin:auto;padding:28px 18px 70px}
+.brand{text-align:center;margin:12px 0 36px}
+.brand h1{font-size:58px;letter-spacing:8px;margin:0 0 8px}
+.brand p{font-size:22px;color:#aab5c7;margin:0}
+.card{background:var(--card);border-radius:34px;padding:26px;margin:18px 0;box-shadow:0 10px 30px #0002}
+h2{font-size:32px;margin:0 0 22px;text-align:center}
+input{width:100%;border:0;border-radius:22px;padding:22px 20px;font-size:23px;text-align:center;outline:none;background:#fff;color:#111}
+button{width:100%;border:0;border-radius:22px;padding:21px;margin-top:22px;background:var(--green);color:white;font-size:27px;font-weight:700;cursor:pointer}
+button:disabled{opacity:.65}
+.status{text-align:center;color:#48e884;font-size:20px;margin-top:22px;min-height:28px}
+.pred{background:var(--card2);border-radius:28px;padding:24px;margin:14px 0}
+.pred .title{font-size:27px;font-weight:700}
+.pred .pct{color:#45e87e;font-size:36px;font-weight:800;margin:12px 0}
+.pred .reason{color:#d4dbe5;font-size:18px;line-height:1.55}
+.badge{display:inline-block;font-size:18px;margin-left:8px}
+.now{background:var(--green2);border-radius:26px;padding:22px;text-align:center;color:#57ef91;font-size:21px;line-height:1.6;margin-top:18px}
+.score{text-align:center;color:#dbe2ec;font-size:22px;margin-top:18px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.metric{background:#0c1529;border-radius:22px;padding:20px;text-align:center;min-height:120px}
+.metric .label{color:#d0d7e2;font-size:20px}
+.metric .value{font-size:28px;font-weight:800;margin-top:12px}
+.source{padding:12px 0;border-bottom:1px solid var(--line);font-size:18px;line-height:1.5}
+.source:last-child{border-bottom:0}
+.ok{color:#63e992}.warn{color:#ffd166}.bad{color:#ff7777}
+.small{font-size:16px;color:#aeb8c8;line-height:1.6}
+.hidden{display:none}
+.loader{display:inline-block;width:17px;height:17px;border:3px solid #ffffff55;border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:480px){
+ .brand h1{font-size:48px}.brand p{font-size:19px}
+ h2{font-size:28px}.card{padding:20px;border-radius:28px}
+ input{font-size:20px}.pred .title{font-size:23px}.pred .pct{font-size:32px}
 }
-
-body{
-  font-family:Arial,sans-serif;
-  background:#0f172a;
-  color:#fff
-}
-
-.app{
-  width:100%;
-  max-width:620px;
-  margin:auto;
-  padding:18px 10px 50px
-}
-
-h1{
-  font-size:42px;
-  text-align:center;
-  margin:8px 0 2px
-}
-
-.subtitle{
-  text-align:center;
-  color:#94a3b8;
-  margin-bottom:22px
-}
-
-.card,
-.panel{
-  background:#1e293b;
-  border-radius:18px;
-  padding:16px;
-  margin-bottom:16px;
-  overflow:hidden
-}
-
-input{
-  width:100%;
-  padding:14px;
-  border:0;
-  border-radius:12px;
-  font-size:17px;
-  text-align:center;
-  margin-bottom:12px
-}
-
-button{
-  width:100%;
-  padding:15px;
-  border:0;
-  border-radius:12px;
-  background:#22c55e;
-  color:#fff;
-  font-size:18px;
-  font-weight:bold
-}
-
-button:disabled{
-  opacity:.55
-}
-
-#status{
-  text-align:center;
-  margin-top:12px;
-  line-height:1.7;
-  color:#94a3b8
-}
-
-.success{
-  color:#4ade80!important
-}
-
-.error{
-  color:#f87171!important
-}
-
-.warning{
-  color:#fbbf24!important
-}
-
-.hidden{
-  display:none!important
-}
-
-.section-title{
-  text-align:center;
-  margin:3px 0 14px
-}
-
-.prediction{
-  background:#334155;
-  border-radius:14px;
-  padding:14px;
-  margin:10px 0;
-  overflow:hidden
-}
-
-.rank{
-  font-size:18px;
-  font-weight:bold;
-  overflow-wrap:anywhere
-}
-
-.probability{
-  color:#4ade80;
-  font-size:20px;
-  font-weight:bold;
-  margin-top:6px
-}
-
-.meta{
-  color:#cbd5e1;
-  font-size:13px;
-  line-height:1.6;
-  margin-top:5px
-}
-
-.warning-box{
-  background:#422006;
-  color:#fbbf24;
-  border-radius:12px;
-  padding:12px;
-  line-height:1.7;
-  margin-top:12px;
-  overflow-wrap:anywhere
-}
-
-.recommended-box{
-  background:#064e3b;
-  color:#4ade80
-}
-
-.stats,
-.analysis-grid{
-  display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:8px
-}
-
-.stat,
-.analysis-item{
-  background:#0f172a;
-  border-radius:11px;
-  padding:10px 6px;
-  text-align:center;
-  color:#cbd5e1;
-  min-width:0;
-  overflow:hidden
-}
-
-.stat strong,
-.analysis-item b{
-  display:block;
-  color:#fff;
-  font-size:17px;
-  margin-top:4px;
-  overflow-wrap:anywhere
-}
-
-.providers{
-  color:#cbd5e1;
-  font-size:13px;
-  line-height:2;
-  overflow-wrap:anywhere
-}
-
-.scoreline{
-  text-align:center;
-  color:#cbd5e1;
-  line-height:1.8;
-  margin-top:12px;
-  overflow-wrap:anywhere
-}
-
-.note{
-  font-size:12px;
-  color:#94a3b8;
-  line-height:1.6;
-  margin-top:12px
-}
-
-.quality-warning{
-  color:#fbbf24
-}
-
-@media(max-width:420px){
-
-  h1{
-    font-size:36px
-  }
-
-  .card,
-  .panel{
-    padding:13px
-  }
-
-  .stat strong,
-  .analysis-item b{
-    font-size:16px
-  }
-
-}
-
 </style>
-
 </head>
-
 <body>
-
-<div class="app">
-
-<h1>
-Y.C.B
-</h1>
-
-<div class="subtitle">
-Football Prediction Engine
-</div>
-
-
-<div class="card">
-
-<h2>
-اختر مباراة
-</h2>
-
-<input
-  id="match"
-  value="Arsenal vs Coventry City"
-  placeholder="Arsenal vs Coventry City"
->
-
-<button
-  id="analyzeButton"
-  onclick="analyzeMatch()"
->
-تحليل المباراة
-</button>
-
-<div id="status"></div>
-
-</div>
-
-
-<div
-  id="result"
-  class="hidden"
->
-
-<div class="panel">
-
-<h2 class="section-title">
-أفضل 3 توقعات
-</h2>
-
-
-<div class="prediction">
-
-<div
-  id="prediction1"
-  class="rank"
->
-🥇 -
-</div>
-
-<div
-  id="probability1"
-  class="probability"
->
--
-</div>
-
-<div
-  id="meta1"
-  class="meta"
->
-</div>
-
-</div>
-
-
-<div class="prediction">
-
-<div
-  id="prediction2"
-  class="rank"
->
-🥈 -
-</div>
-
-<div
-  id="probability2"
-  class="probability"
->
--
-</div>
-
-<div
-  id="meta2"
-  class="meta"
->
-</div>
-
-</div>
-
-
-<div class="prediction">
-
-<div
-  id="prediction3"
-  class="rank"
->
-🥉 -
-</div>
-
-<div
-  id="probability3"
-  class="probability"
->
--
-</div>
-
-<div
-  id="meta3"
-  class="meta"
->
-</div>
-
-</div>
-
-
-<div
-  id="recommendation"
-  class="warning-box"
->
-</div>
-
-
-<div
-  id="scoreline"
-  class="scoreline"
->
-</div>
-
-</div>
-
-
-<div class="panel">
-
-<h3 class="section-title">
-ملخص التحليل
-</h3>
-
-<div class="analysis-grid">
-
-<div class="analysis-item">
-xG المضيف
-<b id="homeXg">-</b>
-</div>
-
-<div class="analysis-item">
-xG الضيف
-<b id="awayXg">-</b>
-</div>
-
-<div class="analysis-item">
-فوز المضيف
-<b id="homeWin">-</b>
-</div>
-
-<div class="analysis-item">
-التعادل
-<b id="draw">-</b>
-</div>
-
-<div class="analysis-item">
-فوز الضيف
-<b id="awayWin">-</b>
-</div>
-
-<div class="analysis-item">
-BTTS
-<b id="btts">-</b>
-</div>
-
-</div>
-
-</div>
-
-
-<div class="panel">
-
-<h3 class="section-title">
-ملخص البيانات
-</h3>
-
-<div class="stats">
-
-<div class="stat">
-مباريات المضيف
-<strong id="homeGames">-</strong>
-</div>
-
-<div class="stat">
-مباريات الضيف
-<strong id="awayGames">-</strong>
-</div>
-
-<div class="stat">
-أهداف المضيف/مباراة
-<strong id="homeGF">-</strong>
-</div>
-
-<div class="stat">
-أهداف الضيف/مباراة
-<strong id="awayGF">-</strong>
-</div>
-
-<div class="stat">
-استقبال المضيف
-<strong id="homeGA">-</strong>
-</div>
-
-<div class="stat">
-استقبال الضيف
-<strong id="awayGA">-</strong>
-</div>
-
-</div>
-
-<div class="note">
-جودة البيانات لا تعني دقة مضمونة؛
-التوقعات تعتمد فقط على البيانات التي تم التحقق منها من المصادر المتاحة.
-</div>
-
-</div>
-
-
-<div class="panel">
-
-<h3 class="section-title">
-مصادر البيانات
-</h3>
-
-<div
-  id="providers"
-  class="providers"
->
-</div>
-
-</div>
-
-</div>
-
-</div>
-
+<main>
+  <section class="brand">
+    <h1>Y.C.B</h1>
+    <p>Football Prediction Engine</p>
+  </section>
+
+  <section class="card">
+    <h2>اختر مباراة</h2>
+    <input id="match" value="Arsenal vs Coventry City" placeholder="Arsenal vs Coventry City">
+    <button id="analyze">تحليل المباراة</button>
+    <div id="status" class="status"></div>
+  </section>
+
+  <section id="results" class="hidden">
+    <section class="card">
+      <h2>أفضل 3 توقعات</h2>
+      <div id="predictions"></div>
+      <div id="now" class="now"></div>
+      <div id="score" class="score"></div>
+    </section>
+
+    <section class="card">
+      <h2>ملخص التحليل</h2>
+      <div id="metrics" class="grid"></div>
+    </section>
+
+    <section class="card">
+      <h2>ملخص البيانات</h2>
+      <div id="dataMetrics" class="grid"></div>
+      <p class="small">جودة البيانات لا تعني ضمان النتيجة. يتم احتسابها من المصادر التي أعادت بيانات فعلية للمباراة أو للفريقين.</p>
+    </section>
+
+    <section class="card">
+      <h2>مصادر البيانات</h2>
+      <div id="sources"></div>
+    </section>
+  </section>
+</main>
 
 <script>
+(function(){
+  var btn=document.getElementById("analyze");
+  var input=document.getElementById("match");
+  var status=document.getElementById("status");
 
-async function analyzeMatch(){
-
-  const input =
-    document.getElementById("match");
-
-  const button =
-    document.getElementById("analyzeButton");
-
-  const status =
-    document.getElementById("status");
-
-  const result =
-    document.getElementById("result");
-
-  const match =
-    input.value.trim();
-
-
-  if(!match){
-
-    status.className =
-      "error";
-
-    status.textContent =
-      "اكتب المباراة أولاً.";
-
-    return;
-
+  function esc(v){
+    return String(v==null?"":v)
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
   }
 
+  function pct(v){
+    return Number(v||0).toFixed(2)+"%";
+  }
 
-  button.disabled =
-    true;
+  function setMetric(id,label,value){
+    return '<div class="metric"><div class="label">'+esc(label)+'</div><div class="value">'+esc(value)+'</div></div>';
+  }
 
-  result.classList.add(
-    "hidden"
-  );
+  function render(data){
+    document.getElementById("results").classList.remove("hidden");
 
-  status.className =
-    "";
+    var p=data.predictions||[];
+    document.getElementById("predictions").innerHTML=p.length ? p.map(function(x,i){
+      var medal=["🥇","🥈","🥉"][i]||"•";
+      return '<div class="pred">'+
+        '<div class="title">'+esc(x.label)+' <span class="badge">'+medal+'</span></div>'+
+        '<div class="pct">'+pct(x.probability)+'</div>'+
+        '<div class="reason">'+esc(x.reason||"")+'</div>'+
+        '</div>';
+    }).join("") : '<div class="pred"><div class="title">لا توجد توصية آمنة حالياً</div><div class="reason">المصادر لم توفر عينة تاريخية كافية. لن يخترع Y.C.B توقعاً من بيانات ناقصة.</div></div>';
 
-  status.textContent =
-    "جاري جمع البيانات وتحليل المباراة...";
+    document.getElementById("now").textContent =
+      "التوقع الأقوى حالياً: "+(data.summary?.strongestLabel||"لا يوجد")+
+      " بنسبة "+pct(data.summary?.strongestProbability||0);
 
+    document.getElementById("score").textContent =
+      "النتيجة الأكثر ترجيحاً: "+(data.summary?.mostLikelyScore||"—")+
+      " | جودة البيانات: "+Number(data.summary?.dataQuality||0)+"/100";
 
-  try{
+    var m=data.metrics||{};
+    document.getElementById("metrics").innerHTML=
+      setMetric("xgh","xG المضيف",Number(m.homeXG||0).toFixed(2))+
+      setMetric("xga","xG الضيف",Number(m.awayXG||0).toFixed(2))+
+      setMetric("home","فوز المضيف",pct(m.homeWin))+
+      setMetric("draw","التعادل",pct(m.draw))+
+      setMetric("btts","BTTS",pct(m.btts))+
+      setMetric("away","فوز الضيف",pct(m.awayWin));
 
-    const response =
-      await fetch(
-        "/api/analyze",
-        {
+    var dm=data.dataSummary||{};
+    document.getElementById("dataMetrics").innerHTML=
+      setMetric("hm","مباريات المضيف",dm.homeMatches||0)+
+      setMetric("am","مباريات الضيف",dm.awayMatches||0)+
+      setMetric("hg","أهداف المضيف/مباراة",Number(dm.homeGoalsPerMatch||0).toFixed(2))+
+      setMetric("ag","أهداف الضيف/مباراة",Number(dm.awayGoalsPerMatch||0).toFixed(2))+
+      setMetric("hc","استقبال المضيف",Number(dm.homeConcededPerMatch||0).toFixed(2))+
+      setMetric("ac","استقبال الضيف",Number(dm.awayConcededPerMatch||0).toFixed(2));
 
-          method:
-            "POST",
+    document.getElementById("sources").innerHTML=(data.sources||[]).map(function(s){
+      var cls=s.status==="success"?"ok":(s.status==="no_match"||s.status==="not_configured"?"warn":"bad");
+      return '<div class="source '+cls+'">'+
+        esc(s.name)+" — "+esc(s.statusLabel||s.status)+
+        (s.message?" — "+esc(s.message):"")+
+        "</div>";
+    }).join("");
+  }
 
-          headers:{
-            "Content-Type":
-              "application/json"
-          },
-
-          body:
-            JSON.stringify({
-              match
-            })
-
-        }
-      );
-
-
-    const text =
-      await response.text();
-
-
-    let data;
-
-
+  btn.addEventListener("click",async function(){
+    var match=input.value.trim();
+    if(!match || match.toLowerCase().indexOf(" vs ")<0){
+      status.textContent="اكتب المباراة بهذا الشكل: Arsenal vs Coventry City";
+      return;
+    }
+    btn.disabled=true;
+    btn.innerHTML='<span class="loader"></span> جارٍ التحليل...';
+    status.textContent="يتم جمع البيانات من المصادر الحقيقية...";
     try{
-
-      data =
-        JSON.parse(text);
-
-    }catch{
-
-      throw new Error(
-        "الخادم أعاد استجابة غير صالحة."
-      );
-
+      var r=await fetch("/api/analyze",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({match:match})
+      });
+      var data=await r.json();
+      if(!r.ok || !data.success) throw new Error(data.message||"تعذر التحليل");
+      render(data);
+      status.textContent="اكتمل تحليل المباراة بنجاح.";
+      window.scrollTo({top:0,behavior:"smooth"});
+    }catch(e){
+      status.textContent="خطأ: "+e.message;
+    }finally{
+      btn.disabled=false;
+      btn.textContent="تحليل المباراة";
     }
-
-
-    if(
-      !response.ok ||
-      !data.success
-    ){
-
-      throw new Error(
-        data.error ||
-        "فشل التحليل."
-      );
-
-    }
-
-
-    const predictions =
-      Array.isArray(
-        data.predictions
-      )
-        ? data.predictions
-        : [];
-
-
-    for(
-      let i=0;
-      i<3;
-      i++
-    ){
-
-      const prediction =
-        predictions[i] ||
-        {
-          label:
-            "غير متاح",
-
-          probability:
-            "غير متاح",
-
-          explanation:
-            ""
-        };
-
-
-      const n =
-        i + 1;
-
-
-      document.getElementById(
-        "prediction" + n
-      ).textContent =
-
-        [
-          "🥇 ",
-          "🥈 ",
-          "🥉 "
-        ][i]
-
-        +
-
-        (
-          prediction.label ||
-          "غير متاح"
-        );
-
-
-      document.getElementById(
-        "probability" + n
-      ).textContent =
-        prediction.probability ||
-        "-";
-
-
-      document.getElementById(
-        "meta" + n
-      ).textContent =
-        prediction.explanation ||
-        "";
-
-    }
-
-
-    const recommendation =
-      document.getElementById(
-        "recommendation"
-      );
-
-
-    const recommended =
-      Boolean(
-        data.recommendation?.recommended
-      );
-
-
-    recommendation.textContent =
-      data.recommendation?.message ||
-      "لا توجد توصية.";
-
-
-    recommendation.className =
-      recommended
-        ? "warning-box recommended-box"
-        : "warning-box";
-
-
-    const analysis =
-      data.analysis ||
-      {};
-
-
-    setValue(
-      "homeGames",
-      analysis.home?.games
-    );
-
-    setValue(
-      "awayGames",
-      analysis.away?.games
-    );
-
-    setValue(
-      "homeGF",
-      fixed(
-        analysis.home?.goalsForAvg
-      )
-    );
-
-    setValue(
-      "awayGF",
-      fixed(
-        analysis.away?.goalsForAvg
-      )
-    );
-
-    setValue(
-      "homeGA",
-      fixed(
-        analysis.home?.goalsAgainstAvg
-      )
-    );
-
-    setValue(
-      "awayGA",
-      fixed(
-        analysis.away?.goalsAgainstAvg
-      )
-    );
-
-    setValue(
-      "homeXg",
-      fixed(
-        analysis.model?.homeXg
-      )
-    );
-
-    setValue(
-      "awayXg",
-      fixed(
-        analysis.model?.awayXg
-      )
-    );
-
-    setValue(
-      "homeWin",
-      percent(
-        analysis.model?.homeWin
-      )
-    );
-
-    setValue(
-      "draw",
-      percent(
-        analysis.model?.draw
-      )
-    );
-
-    setValue(
-      "awayWin",
-      percent(
-        analysis.model?.awayWin
-      )
-    );
-
-    setValue(
-      "btts",
-      percent(
-        analysis.model?.bttsYes
-      )
-    );
-
-
-    document.getElementById(
-      "scoreline"
-    ).textContent =
-
-      data.predictedScore
-
-        ? "النتيجة الأكثر ترجيحًا: " +
-          data.predictedScore +
-          " | جودة البيانات: " +
-          (
-            data.dataQuality ??
-            "-"
-          ) +
-          "/100"
-
-        : "جودة البيانات: " +
-          (
-            data.dataQuality ??
-            "-"
-          ) +
-          "/100";
-
-
-    const providers =
-      Array.isArray(
-        data.providers
-      )
-        ? data.providers
-        : [];
-
-
-    document.getElementById(
-      "providers"
-    ).innerHTML =
-
-      providers.map(
-        item =>
-
-          (
-            item.success
-              ? "✓"
-              : "✗"
-          )
-
-          +
-
-          " " +
-
-          escapeHtml(
-            item.provider
-          )
-
-          +
-
-          " — " +
-
-          escapeHtml(
-            item.status
-          )
-
-          +
-
-          (
-            item.message
-              ? " — " +
-                escapeHtml(
-                  item.message
-                )
-              : ""
-          )
-
-      ).join(
-        "<br>"
-      );
-
-
-    result.classList.remove(
-      "hidden"
-    );
-
-
-    status.className =
-      data.analysisStatus ===
-      "ready"
-
-        ? "success"
-
-        : "warning";
-
-
-    status.textContent =
-      data.message ||
-      "اكتمل التحليل.";
-
-  }catch(error){
-
-    status.className =
-      "error";
-
-    status.textContent =
-      error?.message ||
-      "حدث خطأ غير معروف.";
-
-  }finally{
-
-    button.disabled =
-      false;
-
-  }
-
-}
-
-
-function setValue(
-  id,
-  value
-){
-
-  document.getElementById(
-    id
-  ).textContent =
-    value == null
-      ? "-"
-      : value;
-
-}
-
-
-function fixed(
-  value
-){
-
-  return typeof value ===
-    "number" &&
-    Number.isFinite(value)
-
-    ? value.toFixed(2)
-
-    : "-";
-
-}
-
-
-function percent(
-  value
-){
-
-  return typeof value ===
-    "number" &&
-    Number.isFinite(value)
-
-    ? (
-        value * 100
-      ).toFixed(2) + "%"
-
-    : "-";
-
-}
-
-
-function escapeHtml(
-  value
-){
-
-  return String(
-    value ||
-    ""
-  ).replace(
-    /[&<>"']/g,
-    character =>
-      ({
-        "&":
-          "&amp;",
-
-        "<":
-          "&lt;",
-
-        ">":
-          "&gt;",
-
-        '"':
-          "&quot;",
-
-        "'":
-          "&#39;"
-
-      }[character])
-  );
-
-}
-
+  });
+})();
 </script>
-
 </body>
-
 </html>`;
 
-
-// ==========================================================
-// WORKER
-// ==========================================================
-
 export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
 
-  async fetch(
-    request,
-    env
-  ){
-
-    const url =
-      new URL(
-        request.url
-      );
-
-
-    if(
-      request.method ===
-      "OPTIONS"
-    ){
-
-      return json({
-        success:
-          true
-      });
-
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers: corsHeaders() });
     }
 
-
-    // ======================================================
-    // HEALTH
-    // ======================================================
-
-    if(
-      url.pathname ===
-      "/api/health"
-    ){
-
+    if (url.pathname === "/api/health") {
       return json({
-
-        success:
-          true,
-
-        status:
-          "ok",
-
-        app:
-          "Y.C.B",
-
-        engine:
-          "Y.C.B Prediction Engine",
-
-        version:
-          VERSION,
-
-        architecture:
-          "Multi Provider Architecture",
-
-        providers:
-          getProviders()
-
+        success: true,
+        app: APP_NAME,
+        version: VERSION,
+        status: "ok",
+        time: new Date().toISOString(),
+        providers: {
+          bsd: !!getBsdToken(env),
+          thesportsdb: true,
+          openligadb: true
+        }
       });
-
     }
 
+    if (url.pathname === "/api/analyze" && request.method === "POST") {
+      try {
+        const body = await request.json();
+        const match = String(body?.match || "").trim();
+        const parsed = parseMatch(match);
 
-    // ======================================================
-    // PROVIDERS
-    // ======================================================
-
-    if(
-      url.pathname ===
-      "/api/providers"
-    ){
-
-      return json({
-
-        success:
-          true,
-
-        providers:
-          getProviders()
-
-      });
-
-    }
-
-
-    // ======================================================
-    // ANALYZE
-    // ======================================================
-
-    if(
-      url.pathname ===
-      "/api/analyze"
-    ){
-
-      if(
-        request.method !==
-        "POST"
-      ){
-
-        return json(
-          {
-            success:
-              false,
-
-            error:
-              "POST method required"
-          },
-          405
-        );
-
-      }
-
-
-      try{
-
-        const body =
-          await request.json();
-
-
-        const parsed =
-          parseMatch(
-            String(
-              body?.match ||
-              ""
-            )
-          );
-
-
-        if(!parsed){
-
+        if (!parsed) {
           return json(
-            {
-
-              success:
-                false,
-
-              error:
-                "اكتب المباراة بهذا الشكل: Arsenal vs Coventry City"
-
-            },
+            { success: false, message: "صيغة المباراة يجب أن تكون: Home vs Away" },
             400
           );
-
         }
 
-
-        const {
-          home,
-          away
-        } =
-          parsed;
-
-
-        // ==================================================
-        // COLLECT FROM ALL PROVIDERS
-        // ==================================================
-
-        const providerResults =
-          await getAllMatchData(
-            home,
-            away,
-            env
-          );
-
-
-        // ==================================================
-        // ONLY SUCCESSFUL PROVIDERS WITH DATA
-        // ==================================================
-
-        const usable =
-          providerResults.filter(
-            item =>
-              item &&
-              item.success &&
-              item.data
-          );
-
-
-        // ==================================================
-        // MERGE
-        // ==================================================
-
-        const merged =
-          mergeProviderData(
-            usable
-          );
-
-
-        // ==================================================
-        // MATCH NOT VERIFIED
-        // ==================================================
-
-        if(
-          !merged.fixture
-        ){
-
-          return json(
-
-            baseResponse(
-
-              home,
-              away,
-              providerResults,
-              usable,
-              "insufficient_data",
-              "لم يتم التحقق من المباراة المطلوبة في أي مصدر متاح."
-
-            )
-
-          );
-
-        }
-
-
-        // ==================================================
-        // TEAM ANALYSIS
-        // ==================================================
-
-        const analysis =
-          buildTeamAnalysis(
-            home,
-            away,
-            merged
-          );
-
-
-        // ==================================================
-        // DATA QUALITY
-        // ==================================================
-
-        const dataQuality =
-          calculateDataQuality(
-            analysis,
-            usable.length,
-            true
-          );
-
-
-        // ==================================================
-        // HISTORY CHECK
-        // ==================================================
-
-        if(
-          analysis.home.games < 3 ||
-          analysis.away.games < 3
-        ){
-
-          return json({
-
-            ...baseResponse(
-
-              home,
-              away,
-              providerResults,
-              usable,
-              "insufficient_data",
-              "تم العثور على المباراة، لكن البيانات التاريخية المتاحة غير كافية لإصدار توقع موثوق."
-
-            ),
-
-            analysis,
-
-            dataQuality
-
-          });
-
-        }
-
-
-        // ==================================================
-        // BUILD PREDICTIONS
-        // ==================================================
-
-        const result =
-          buildPredictions(
-            analysis
-          );
-
-
-        const top =
-          result.predictions[0];
-
-
-        // ==================================================
-        // IMPORTANT:
-        // Minimum two independent successful providers
-        // ==================================================
-
-        const multiProviderReady =
-          usable.length >= 2;
-
-
-        const recommended =
-          Boolean(
-
-            multiProviderReady &&
-
-            top &&
-
-            top.probabilityValue >=
-              0.60 &&
-
-            dataQuality >=
-              60
-
-          );
-
-
-        // ==================================================
-        // ANALYSIS STATUS
-        // ==================================================
-
-        const analysisStatus =
-          multiProviderReady
-            ? "ready"
-            : "limited_data";
-
-
-        const message =
-          multiProviderReady
-
-            ? "اكتمل تحليل المباراة بنجاح بعد التحقق من أكثر من مصدر."
-
-            : "تم تحليل المباراة، لكن مصدر بيانات واحد فقط نجح حاليًا؛ لذلك تم خفض جودة البيانات ولن يصدر Y.C.B رهانًا موصى به.";
-
-
-        // ==================================================
-        // RECOMMENDATION MESSAGE
-        // ==================================================
-
-        let recommendationMessage;
-
-
-        if(
-          recommended
-        ){
-
-          recommendationMessage =
-            `التوقع الأقوى حاليًا: ${top.label} بنسبة ${top.probability}.`;
-
-        }
-
-        else if(
-          !multiProviderReady
-        ){
-
-          recommendationMessage =
-            "لا يوجد رهان موصى به: يجب التحقق من البيانات عبر مصدرين ناجحين على الأقل.";
-
-        }
-
-        else{
-
-          recommendationMessage =
-            "لا يوجد رهان موصى به: الثقة أو جودة البيانات أقل من الحد المطلوب.";
-
-        }
-
-
-        // ==================================================
-        // FINAL RESPONSE
-        // ==================================================
+        const result = await analyzeMatch(parsed.home, parsed.away, env, ctx);
 
         return json({
-
-          success:
-            true,
-
-          app:
-            "Y.C.B",
-
-          engine:
-            "Y.C.B Prediction Engine",
-
-          version:
-            VERSION,
-
-          architecture:
-            "Multi Provider Architecture",
-
-          match: {
-
-            home,
-
-            away
-
-          },
-
-          analysisStatus,
-
-          message,
-
-          analysis,
-
-          predictions:
-            result.predictions,
-
-          recommendation: {
-
-            recommended,
-
-            market:
-              recommended
-                ? top.label
-                : null,
-
-            probability:
-              recommended
-                ? top.probability
-                : null,
-
-            message:
-              recommendationMessage
-
-          },
-
-          predictedScore:
-            result.predictedScore,
-
-          dataQuality,
-
-          providers:
-            providerResults,
-
-          providerCount:
-            providerResults.length,
-
-          successfulProviderCount:
-            usable.length,
-
-          validation: {
-
-            fixtureVerified:
-              Boolean(
-                merged.fixture
-              ),
-
-            minimumProvidersRequired:
-              2,
-
-            successfulProviders:
-              usable.length,
-
-            multiProviderVerified:
-              multiProviderReady
-
-          }
-
+          success: true,
+          app: APP_NAME,
+          version: VERSION,
+          ...result
         });
-
-      }catch(error){
-
-        console.error(
-          "Analyze error",
-          error
-        );
-
-
+      } catch (error) {
         return json(
-
           {
-
-            success:
-              false,
-
-            error:
-              error?.message ||
-              String(error)
-
+            success: false,
+            message: error?.message || String(error)
           },
-
           500
-
         );
-
       }
-
     }
 
-
-    // ======================================================
-    // MAIN HTML
-    // ======================================================
-
-    return new Response(
-
-      HTML,
-
-      {
-
-        status:
-          200,
-
+    if (url.pathname === "/" || url.pathname === "/index.html") {
+      return new Response(HTML, {
         headers: {
-
-          "Content-Type":
-            "text/html;charset=UTF-8",
-
-          "Cache-Control":
-            "no-store"
-
+          "content-type": "text/html; charset=UTF-8",
+          "cache-control": "no-store"
         }
+      });
+    }
 
-      }
-
-    );
-
+    return new Response("Y.C.B is running.", {
+      status: 200,
+      headers: { "content-type": "text/plain; charset=UTF-8" }
+    });
   }
-
 };
 
-
-// ==========================================================
-// MATCH PARSER
-// ==========================================================
-
-function parseMatch(
-  value
-){
-
-  const parts =
-    value
-      .trim()
-      .split(
-        /\s+vs\s+/i
-      );
-
-
-  if(
-    parts.length !==
-    2
-  ){
-
-    return null;
-
-  }
-
-
-  const home =
-    parts[0].trim();
-
-
-  const away =
-    parts[1].trim();
-
-
-  return (
-
-    home &&
-    away
-
-  )
-
-    ? {
-
-        home,
-
-        away
-
-      }
-
-    : null;
-
+function corsHeaders() {
+  return {
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET,POST,OPTIONS",
+    "access-control-allow-headers": "Content-Type"
+  };
 }
 
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), {
+    status,
+    headers: {
+      ...corsHeaders(),
+      "content-type": "application/json; charset=UTF-8",
+      "cache-control": "no-store"
+    }
+  });
+}
 
-// ==========================================================
-// MERGE PROVIDER DATA
-// ==========================================================
+function parseMatch(value) {
+  const m = String(value || "").match(/^\s*(.+?)\s+vs\.?\s+(.+?)\s*$/i);
+  if (!m) return null;
+  const home = m[1].trim();
+  const away = m[2].trim();
+  if (!home || !away) return null;
+  return { home, away };
+}
 
-function mergeProviderData(
-  results
-){
+async function analyzeMatch(home, away, env, ctx) {
+  const providers = [
+    new BsdProvider(),
+    new TheSportsDbProvider(),
+    new OpenLigaDbProvider()
+  ];
 
-  let fixture =
+  const results = await Promise.all(
+    providers.map(async provider => {
+      try {
+        return await provider.getMatchData(home, away, env, ctx);
+      } catch (error) {
+        return {
+          provider: provider.name,
+          status: "error",
+          message: error?.message || String(error),
+          data: null
+        };
+      }
+    })
+  );
+
+  const usable = results.filter(x => x?.data);
+  const merged = mergeProviderData(usable, home, away);
+
+  const analysis = buildAnalysis(
+    merged.home,
+    merged.away,
+    merged.fixture,
+    home,
+    away
+  );
+
+  const sources = results.map(x => ({
+    name: x.provider,
+    status: x.status,
+    statusLabel: sourceStatusLabel(x.status),
+    message: x.message || ""
+  }));
+
+  return {
+    match: {
+      home,
+      away,
+      fixture: merged.fixture
+    },
+    predictions: analysis.predictions,
+    summary: analysis.summary,
+    metrics: analysis.metrics,
+    dataSummary: analysis.dataSummary,
+    sources
+  };
+}
+
+function sourceStatusLabel(status) {
+  const map = {
+    success: "success ✓",
+    no_match: "متصل — لا توجد المباراة في هذا المصدر",
+    not_configured: "غير مفعّل — سيتم الاعتماد على بقية المصادر",
+    error: "خطأ في المصدر",
+    rate_limited: "مؤقتاً محدود — سيتم استخدام بقية المصادر",
+    invalid_token: "رمز API غير صالح — تم تجاهل المصدر",
+    disabled: "تم تجاهل المصدر"
+  };
+  return map[status] || status;
+}
+
+class BsdProvider {
+  constructor() {
+    this.name = "BSD";
+    this.base = "https://sports.bzzoiro.com";
+  }
+
+  async getMatchData(home, away, env, ctx) {
+    const token = getBsdToken(env);
+
+    if (!token) {
+      return {
+        provider: this.name,
+        status: "not_configured",
+        message: "BSD_TOKEN غير موجود في Secrets.",
+        data: null
+      };
+    }
+
+    const headers = {
+      Authorization: `Token ${token}`,
+      Accept: "application/json"
+    };
+
+    const homeTeam = await bsdFindTeam(home, headers);
+    const awayTeam = await bsdFindTeam(away, headers);
+
+    if (!homeTeam || !awayTeam) {
+      return {
+        provider: this.name,
+        status: "no_match",
+        message: "تم الاتصال بـ BSD لكن تعذر العثور على أحد الفريقين.",
+        data: null
+      };
+    }
+
+    const [homeFixtures, awayFixtures, events] = await Promise.all([
+      bsdGetTeamFixtures(homeTeam.id, headers),
+      bsdGetTeamFixtures(awayTeam.id, headers),
+      bsdGetEvents(home, away, headers)
+    ]);
+
+    const all = [...homeFixtures, ...awayFixtures];
+
+    const fixture =
+      findFixture(all, home, away) ||
+      findFixture(events, home, away);
+
+    const homeRecent = recentForTeam(homeFixtures, home, 15);
+    const awayRecent = recentForTeam(awayFixtures, away, 15);
+
+    if (!fixture && !homeRecent.length && !awayRecent.length) {
+      return {
+        provider: this.name,
+        status: "no_match",
+        message: "BSD متصل لكن لم يعثر على مباراة أو بيانات تاريخية كافية.",
+        data: null
+      };
+    }
+
+    return {
+      provider: this.name,
+      status: "success",
+      message: "تم العثور على بيانات حقيقية عبر BSD.",
+      data: {
+        fixture,
+        homeRecent,
+        awayRecent,
+        prediction: await bsdFindPrediction(fixture, headers),
+        teams: {
+          home: homeTeam,
+          away: awayTeam
+        }
+      }
+    };
+  }
+}
+
+async function bsdFindTeam(name, headers) {
+  const url = new URL("https://sports.bzzoiro.com/api/v2/teams/");
+  url.searchParams.set("search", name);
+  url.searchParams.set("limit", "10");
+
+  const r = await fetchJson(url.toString(), { headers }, 120);
+  if (!r.ok) {
+    if (r.status === 429) throw new Error("BSD HTTP 429");
+    if (r.status === 401) throw new Error("BSD token غير صالح");
+    throw new Error(`BSD HTTP ${r.status}`);
+  }
+
+  const rows = Array.isArray(r.data?.results) ? r.data.results : [];
+  return bestTeam(rows, name);
+}
+
+async function bsdGetTeamFixtures(teamId, headers) {
+  const url = new URL(
+    `https://sports.bzzoiro.com/api/v2/teams/${encodeURIComponent(teamId)}/fixtures/`
+  );
+  url.searchParams.set("limit", "50");
+
+  const r = await fetchJson(url.toString(), { headers }, 120);
+  if (!r.ok) {
+    if (r.status === 429) throw new Error("BSD HTTP 429");
+    throw new Error(`BSD fixtures HTTP ${r.status}`);
+  }
+
+  return Array.isArray(r.data?.results)
+    ? r.data.results.map(normalizeBsdMatch).filter(Boolean)
+    : [];
+}
+
+async function bsdGetEvents(home, away, headers) {
+  const url = new URL("https://sports.bzzoiro.com/api/v2/events/");
+  url.searchParams.set("date_from", dateShift(-30));
+  url.searchParams.set("date_to", dateShift(30));
+  url.searchParams.set("limit", "200");
+
+  const r = await fetchJson(url.toString(), { headers }, 120);
+  if (!r.ok) return [];
+
+  const rows = Array.isArray(r.data?.results) ? r.data.results : [];
+  return rows.map(normalizeBsdMatch).filter(Boolean).filter(x =>
+    teamsPairMatch(x, home, away)
+  );
+}
+
+async function bsdFindPrediction(fixture, headers) {
+  if (!fixture?.id) return null;
+
+  const url = new URL("https://sports.bzzoiro.com/api/v2/predictions/");
+  url.searchParams.set("limit", "200");
+
+  const r = await fetchJson(url.toString(), { headers }, 120);
+  if (!r.ok) return null;
+
+  const rows = Array.isArray(r.data?.results) ? r.data.results : [];
+
+  const found = rows.find(x => {
+    const event = x?.event || x?.match || x?.fixture;
+    const id = event?.id ?? x?.event_id ?? x?.match_id;
+    return String(id || "") === String(fixture.id);
+  });
+
+  if (!found) return null;
+
+  return {
+    homeWin: percentValue(
+      found.prob_home_win ??
+      found.home_win_prob ??
+      found.probability_home
+    ),
+    draw: percentValue(found.prob_draw ?? found.draw_prob),
+    awayWin: percentValue(
+      found.prob_away_win ??
+      found.away_win_prob ??
+      found.probability_away
+    ),
+    confidence: percentValue(found.confidence)
+  };
+}
+
+class TheSportsDbProvider {
+  constructor() {
+    this.name = "TheSportsDB";
+    this.base = "https://www.thesportsdb.com/api/v1/json/123";
+  }
+
+  async getMatchData(home, away, env, ctx) {
+    const homeTeam = await tsdbSearchTeam(home);
+    const awayTeam = await tsdbSearchTeam(away);
+
+    if (!homeTeam || !awayTeam) {
+      return {
+        provider: this.name,
+        status: "no_match",
+        message: "لم يتم العثور على الفريقين في TheSportsDB.",
+        data: null
+      };
+    }
+
+    const exact = await tsdbSearchEvent(home, away);
+
+    const [homeLast, awayLast, homeNext, awayNext] = await Promise.all([
+      tsdbTeamSchedule("previous", homeTeam.id),
+      tsdbTeamSchedule("previous", awayTeam.id),
+      tsdbTeamSchedule("next", homeTeam.id),
+      tsdbTeamSchedule("next", awayTeam.id)
+    ]);
+
+    const fixture =
+      exact ||
+      findFixture([...homeNext, ...awayNext], home, away);
+
+    const homeRecent = recentForTeam(homeLast, home, 5);
+    const awayRecent = recentForTeam(awayLast, away, 5);
+
+    if (!fixture && !homeRecent.length && !awayRecent.length) {
+      return {
+        provider: this.name,
+        status: "no_match",
+        message: "TheSportsDB متصل لكن لا توجد بيانات مناسبة للمباراة.",
+        data: null
+      };
+    }
+
+    return {
+      provider: this.name,
+      status: "success",
+      message: "تم العثور على بيانات عبر TheSportsDB.",
+      data: { fixture, homeRecent, awayRecent }
+    };
+  }
+}
+
+async function tsdbSearchTeam(name) {
+  const url = new URL(
+    "https://www.thesportsdb.com/api/v1/json/123/searchteams.php"
+  );
+  url.searchParams.set("t", name);
+
+  const r = await fetchJson(url.toString(), {}, 300);
+  if (!r.ok) {
+    if (r.status === 429) throw new Error("TheSportsDB HTTP 429");
+    throw new Error(`TheSportsDB HTTP ${r.status}`);
+  }
+
+  const rows = Array.isArray(r.data?.teams) ? r.data.teams : [];
+  return bestTeam(rows.map(x => ({
+    id: x.idTeam,
+    name: x.strTeam
+  })), name);
+}
+
+async function tsdbSearchEvent(home, away) {
+  const eventName = `${slug(home)}_vs_${slug(away)}`;
+  const url = new URL(
+    "https://www.thesportsdb.com/api/v1/json/123/searchevents.php"
+  );
+  url.searchParams.set("e", eventName);
+
+  const r = await fetchJson(url.toString(), {}, 300);
+  if (!r.ok) return null;
+
+  const rows = Array.isArray(r.data?.event) ? r.data.event : [];
+  const row = rows.find(x =>
+    teamsPairMatch({
+      home: { name: x.strHomeTeam },
+      away: { name: x.strAwayTeam }
+    }, home, away)
+  );
+
+  return row ? normalizeTsdbMatch(row) : null;
+}
+
+async function tsdbTeamSchedule(direction, teamId) {
+  const path =
+    direction === "previous"
+      ? "eventslast.php"
+      : "eventsnext.php";
+
+  const url = new URL(
+    `https://www.thesportsdb.com/api/v1/json/123/${path}`
+  );
+  url.searchParams.set("id", teamId);
+
+  const r = await fetchJson(url.toString(), {}, 300);
+  if (!r.ok) {
+    if (r.status === 429) throw new Error("TheSportsDB HTTP 429");
+    return [];
+  }
+
+  const rows = Array.isArray(r.data?.events) ? r.data.events : [];
+  return rows.map(normalizeTsdbMatch).filter(Boolean);
+}
+
+class OpenLigaDbProvider {
+  constructor() {
+    this.name = "OpenLigaDB";
+  }
+
+  async getMatchData(home, away, env, ctx) {
+    const leagues = await openLigaLeagues();
+
+    let foundFixture = null;
+    let homeRecent = [];
+    let awayRecent = [];
+
+    for (const league of leagues.slice(0, 8)) {
+      if (!league?.shortcut) continue;
+
+      const season = Number(league.season);
+      if (!Number.isFinite(season)) continue;
+
+      const url = `https://api.openligadb.de/getmatchdata/${encodeURIComponent(league.shortcut)}/${season}`;
+      const r = await fetchJson(url, {}, 900);
+      if (!r.ok) continue;
+
+      const rows = Array.isArray(r.data) ? r.data : [];
+
+      const normalized = rows.map(normalizeOpenLigaMatch).filter(Boolean);
+
+      const candidate = normalized.find(x =>
+        teamsPairMatch(x, home, away)
+      );
+
+      if (candidate) {
+        foundFixture = candidate;
+        break;
+      }
+
+      const h = normalized
+        .filter(x => teamNameMatch(x.home?.name, home) && x.status === "finished")
+        .slice(-5)
+        .reverse();
+
+      const a = normalized
+        .filter(x => teamNameMatch(x.away?.name, away) && x.status === "finished")
+        .slice(-5)
+        .reverse();
+
+      homeRecent.push(...h);
+      awayRecent.push(...a);
+    }
+
+    homeRecent = dedupeMatches(homeRecent).slice(-5);
+    awayRecent = dedupeMatches(awayRecent).slice(-5);
+
+    if (!foundFixture && !homeRecent.length && !awayRecent.length) {
+      return {
+        provider: this.name,
+        status: "no_match",
+        message: "المصدر متصل، لكن هذه المباراة ليست ضمن تغطيته.",
+        data: null
+      };
+    }
+
+    return {
+      provider: this.name,
+      status: "success",
+      message: "تم العثور على بيانات عبر OpenLigaDB.",
+      data: {
+        fixture: foundFixture,
+        homeRecent,
+        awayRecent
+      }
+    };
+  }
+}
+
+async function openLigaLeagues() {
+  const r = await fetchJson(
+    "https://api.openligadb.de/getavailableleagues",
+    {},
+    1800
+  );
+
+  if (!r.ok) return [];
+
+  const rows = Array.isArray(r.data) ? r.data : [];
+
+  const now = new Date();
+  const currentYear = now.getUTCFullYear();
+
+  return rows
+    .filter(x => {
+      const sport = String(x.sport || x.Sport || "").toLowerCase();
+      return !sport ||
+        sport.includes("fußball") ||
+        sport.includes("fussball") ||
+        sport.includes("football");
+    })
+    .map(x => ({
+      shortcut: x.leagueShortcut || x.LeagueShortcut || x.shortcut,
+      season: x.leagueSeason || x.LeagueSeason || currentYear
+    }))
+    .filter(x => x.shortcut)
+    .sort((a,b) => Number(b.season) - Number(a.season));
+}
+
+function normalizeBsdMatch(x) {
+  if (!x) return null;
+
+  const home = x.home_team || x.homeTeam || x.home || {};
+  const away = x.away_team || x.awayTeam || x.away || {};
+
+  const hs = numberOrNull(
+    x.home_score ??
+    x.homeScore ??
+    x.score?.home ??
+    x.result?.home
+  );
+
+  const as = numberOrNull(
+    x.away_score ??
+    x.awayScore ??
+    x.score?.away ??
+    x.result?.away
+  );
+
+  const status = normalizeStatus(
+    x.status?.name ??
+    x.status ??
+    x.state
+  );
+
+  return {
+    id: String(x.id ?? x.event_id ?? x.match_id ?? ""),
+    utcDate: x.utc_date || x.date || x.start_time || x.kickoff || null,
+    status,
+    home: {
+      id: home.id ?? home.team_id ?? null,
+      name: home.name ?? home.team_name ?? null
+    },
+    away: {
+      id: away.id ?? away.team_id ?? null,
+      name: away.name ?? away.team_name ?? null
+    },
+    score: { home: hs, away: as },
+    league: x.league?.name ?? x.league_name ?? null
+  };
+}
+
+function normalizeTsdbMatch(x) {
+  if (!x) return null;
+
+  return {
+    id: String(x.idEvent || ""),
+    utcDate: x.strTimestamp || x.dateEvent || x.strTime || null,
+    status: x.intHomeScore != null && x.intAwayScore != null
+      ? "finished"
+      : "upcoming",
+    home: {
+      id: x.idHomeTeam || null,
+      name: x.strHomeTeam || null
+    },
+    away: {
+      id: x.idAwayTeam || null,
+      name: x.strAwayTeam || null
+    },
+    score: {
+      home: numberOrNull(x.intHomeScore),
+      away: numberOrNull(x.intAwayScore)
+    },
+    league: x.strLeague || null
+  };
+}
+
+function normalizeOpenLigaMatch(x) {
+  if (!x) return null;
+
+  const h = x.team1 || x.Team1 || {};
+  const a = x.team2 || x.Team2 || {};
+
+  const hs =
+    x.matchResults?.find?.(r => r.resultTypeID === 2)?.pointsTeam1 ??
+    x.matchResults?.[0]?.pointsTeam1 ??
     null;
 
+  const as =
+    x.matchResults?.find?.(r => r.resultTypeID === 2)?.pointsTeam2 ??
+    x.matchResults?.[0]?.pointsTeam2 ??
+    null;
 
-  const homeMatches =
-    [];
+  return {
+    id: String(x.matchID || x.MatchID || ""),
+    utcDate: x.matchDateTimeUTC || x.matchDateTime || null,
+    status: hs != null && as != null ? "finished" : "upcoming",
+    home: {
+      id: h.teamId || h.TeamId || null,
+      name: h.teamName || h.TeamName || null
+    },
+    away: {
+      id: a.teamId || a.TeamId || null,
+      name: a.teamName || a.TeamName || null
+    },
+    score: {
+      home: numberOrNull(hs),
+      away: numberOrNull(as)
+    },
+    league: x.leagueName || x.LeagueName || null
+  };
+}
 
+function mergeProviderData(results, home, away) {
+  let fixture = null;
+  let homeRecent = [];
+  let awayRecent = [];
 
-  const awayMatches =
-    [];
-
-
-  for(
-    const item
-    of results
-  ){
-
-    const data =
-      item.data ||
-      {};
-
-
-    if(
+  for (const r of results) {
+    if (
       !fixture &&
-      data.fixture
-    ){
-
-      fixture =
-        data.fixture;
-
+      r.data?.fixture &&
+      teamsPairMatch(r.data.fixture, home, away)
+    ) {
+      fixture = r.data.fixture;
     }
 
-
-    if(
-      Array.isArray(
-        data.recentMatches?.home
-      )
-    ){
-
-      homeMatches.push(
-        ...data.recentMatches.home
-      );
-
-    }
-
-
-    if(
-      Array.isArray(
-        data.recentMatches?.away
-      )
-    ){
-
-      awayMatches.push(
-        ...data.recentMatches.away
-      );
-
-    }
-
+    homeRecent.push(...(r.data?.homeRecent || []));
+    awayRecent.push(...(r.data?.awayRecent || []));
   }
 
-
   return {
-
     fixture,
+    home: dedupeMatches(homeRecent)
+      .filter(x => x.status === "finished")
+      .sort(byDateDesc)
+      .slice(0, 15),
 
-    homeMatches:
-      dedupeMatches(
-        homeMatches
-      ),
-
-    awayMatches:
-      dedupeMatches(
-        awayMatches
-      )
-
+    away: dedupeMatches(awayRecent)
+      .filter(x => x.status === "finished")
+      .sort(byDateDesc)
+      .slice(0, 15)
   };
-
 }
 
-
-// ==========================================================
-// DEDUPE MATCHES
-// ==========================================================
-
-function dedupeMatches(
-  matches
-){
-
-  const seen =
-    new Set();
-
-
-  return matches
-
-    .filter(
-      match => {
-
-        const key =
-          String(
-
-            match.id ||
-
-            [
-              match.utcDate,
-              match.homeTeam?.name,
-              match.awayTeam?.name
-            ].join("|")
-
-          );
-
-
-        if(
-          seen.has(
-            key
-          )
-        ){
-
-          return false;
-
-        }
-
-
-        seen.add(
-          key
-        );
-
-
-        return true;
-
-      }
-    )
-
-    .sort(
-      (a,b) =>
-        new Date(
-          b.utcDate ||
-          0
-        ) -
-
-        new Date(
-          a.utcDate ||
-          0
-        )
-    )
-
-    .slice(
-      0,
-      15
-    );
-
-}
-
-
-// ==========================================================
-// TEAM ANALYSIS
-// ==========================================================
-
-function buildTeamAnalysis(
+function buildAnalysis(
+  homeMatches,
+  awayMatches,
+  fixture,
   homeName,
-  awayName,
-  merged
-){
-
-  const home =
-    calculateTeamStats(
-      homeName,
-      merged.homeMatches
-    );
-
-
-  const away =
-    calculateTeamStats(
-      awayName,
-      merged.awayMatches
-    );
-
-
-  const homeXg =
-    clamp(
-
-      (
-        home.goalsForAvg *
-        0.55
-
-        +
-
-        away.goalsAgainstAvg *
-        0.45
-
-      )
-
-      *
-
-      1.08,
-
-      0.15,
-
-      4
-
-    );
-
-
-  const awayXg =
-    clamp(
-
-      (
-        away.goalsForAvg *
-        0.55
-
-        +
-
-        home.goalsAgainstAvg *
-        0.45
-
-      )
-
-      *
-
-      0.92,
-
-      0.10,
-
-      3.50
-
-    );
-
-
-  const model =
-    buildModel(
-      homeXg,
-      awayXg
-    );
-
-
-  return {
-
-    home,
-
-    away,
-
-    model
-
-  };
-
-}
-
-
-// ==========================================================
-// TEAM STATS
-// ==========================================================
-
-function calculateTeamStats(
-  teamName,
-  matches
-){
-
-  const team =
-    normalizeName(
-      teamName
-    );
-
-
-  const usable =
-    matches
-
-      .map(
-        match => {
-
-          const home =
-            normalizeName(
-              match
-                .homeTeam
-                ?.name
-            );
-
-
-          const away =
-            normalizeName(
-              match
-                .awayTeam
-                ?.name
-            );
-
-
-          const homeGoals =
-            Number(
-              match
-                .score
-                ?.fullTime
-                ?.home
-            );
-
-
-          const awayGoals =
-            Number(
-              match
-                .score
-                ?.fullTime
-                ?.away
-            );
-
-
-          if(
-
-            !Number.isFinite(
-              homeGoals
-            )
-
-            ||
-
-            !Number.isFinite(
-              awayGoals
-            )
-
-            ||
-
-            (
-
-              !namesMatch(
-                home,
-                team
-              )
-
-              &&
-
-              !namesMatch(
-                away,
-                team
-              )
-
-            )
-
-          ){
-
-            return null;
-
-          }
-
-
-          const isHome =
-            namesMatch(
-              home,
-              team
-            );
-
-
-          const gf =
-            isHome
-              ? homeGoals
-              : awayGoals;
-
-
-          const ga =
-            isHome
-              ? awayGoals
-              : homeGoals;
-
-
-          return {
-
-            gf,
-
-            ga,
-
-            result:
-
-              gf > ga
-                ? "W"
-
-                : gf < ga
-                  ? "L"
-                  : "D"
-
-          };
-
-        }
-      )
-
-      .filter(
-        Boolean
-      );
-
-
-  const last5 =
-    usable.slice(
-      0,
-      5
-    );
-
-
-  const last10 =
-    usable.slice(
-      0,
-      10
-    );
-
-
-  const average =
-    (
-      items,
-      key
-    ) =>
-
-      items.length
-
-        ? items.reduce(
-            (
-              sum,
-              item
-            ) =>
-              sum +
-              item[key],
-
-            0
-          )
-
-          /
-
-          items.length
-
-        : 0;
-
-
-  const gf5 =
-    average(
-      last5,
-      "gf"
-    );
-
-
-  const gf10 =
-    average(
-      last10,
-      "gf"
-    );
-
-
-  const ga5 =
-    average(
-      last5,
-      "ga"
-    );
-
-
-  const ga10 =
-    average(
-      last10,
-      "ga"
-    );
-
-
-  const wins =
-    usable.filter(
-      item =>
-        item.result ===
-        "W"
-    ).length;
-
-
-  const draws =
-    usable.filter(
-      item =>
-        item.result ===
-        "D"
-    ).length;
-
-
-  const formPoints =
-    wins * 3 +
-    draws;
-
-
-  return {
-
-    team:
-      teamName,
-
-    games:
-      usable.length,
-
-    wins,
-
-    draws,
-
-    losses:
-      usable.length -
-      wins -
-      draws,
-
-    formPoints,
-
-    formRate:
-      round(
-
-        usable.length
-          ? formPoints /
-            (
-              usable.length *
-              3
-            )
-          : 0
-
-      ),
-
-    goalsForAvg:
-      round(
-
-        last5.length
-
-          ? gf5 * 0.60 +
-            gf10 * 0.40
-
-          : gf10
-
-      ),
-
-    goalsAgainstAvg:
-      round(
-
-        last5.length
-
-          ? ga5 * 0.60 +
-            ga10 * 0.40
-
-          : ga10
-
-      )
-
-  };
-
-}
-
-
-// ==========================================================
-// POISSON MODEL
-// ==========================================================
-
-function buildModel(
-  homeXg,
-  awayXg
-){
-
-  const matrix =
-    poissonMatrix(
-      homeXg,
-      awayXg,
-      8
-    );
-
-
-  let homeWin =
-    0;
-
-  let draw =
-    0;
-
-  let awayWin =
-    0;
-
-  let over25 =
-    0;
-
-  let under25 =
-    0;
-
-  let bttsYes =
-    0;
-
-  let bttsNo =
-    0;
-
-
-  let best = {
-
-    probability:
-      -1,
-
-    home:
-      0,
-
-    away:
-      0
-
-  };
-
-
-  for(
-    let h=0;
-    h<matrix.length;
-    h++
-  ){
-
-    for(
-      let a=0;
-      a<matrix[h].length;
-      a++
-    ){
-
-      const p =
-        matrix[h][a];
-
-
-      if(
-        p >
-        best.probability
-      ){
-
-        best = {
-
-          probability:
-            p,
-
-          home:
-            h,
-
-          away:
-            a
-
-        };
-
+  awayName
+) {
+  const homeStats = summarizeTeam(homeMatches);
+  const awayStats = summarizeTeam(awayMatches);
+
+  const totalHistorical =
+    homeStats.matches + awayStats.matches;
+
+  if (totalHistorical < 4) {
+    return {
+      predictions: [],
+      metrics: {
+        homeXG: 0,
+        awayXG: 0,
+        homeWin: 0,
+        draw: 0,
+        awayWin: 0,
+        btts: 0
+      },
+      dataSummary: {
+        homeMatches: homeStats.matches,
+        awayMatches: awayStats.matches,
+        homeGoalsPerMatch: 0,
+        awayGoalsPerMatch: 0,
+        homeConcededPerMatch: 0,
+        awayConcededPerMatch: 0
+      },
+      summary: {
+        strongestLabel: "لا توجد توصية",
+        strongestProbability: 0,
+        mostLikelyScore: "—",
+        dataQuality: calculateDataQuality(
+          homeMatches,
+          awayMatches,
+          fixture
+        )
       }
-
-
-      if(
-        h > a
-      ){
-
-        homeWin +=
-          p;
-
-      }
-
-      else if(
-        h === a
-      ){
-
-        draw +=
-          p;
-
-      }
-
-      else{
-
-        awayWin +=
-          p;
-
-      }
-
-
-      if(
-        h + a >= 3
-      ){
-
-        over25 +=
-          p;
-
-      }
-
-      else{
-
-        under25 +=
-          p;
-
-      }
-
-
-      if(
-        h >= 1 &&
-        a >= 1
-      ){
-
-        bttsYes +=
-          p;
-
-      }
-
-      else{
-
-        bttsNo +=
-          p;
-
-      }
-
-    }
-
+    };
   }
 
-
-  return {
-
-    homeXg:
-      round(
-        homeXg
-      ),
-
-    awayXg:
-      round(
-        awayXg
-      ),
-
-    homeWin,
-
-    draw,
-
-    awayWin,
-
-    over25,
-
-    under25,
-
-    bttsYes,
-
-    bttsNo,
-
-    bestScore:
-      best
-
-  };
-
-}
-
-
-// ==========================================================
-// Y.C.B BET SELECTION ENGINE
-// ==========================================================
-
-function buildPredictions(
-  analysis
-){
-
-  const model =
-    analysis.model;
-
-
-  const home =
-    analysis.home;
-
-
-  const away =
-    analysis.away;
-
-
-  // --------------------------------------------------------
-  // 1X2
-  // --------------------------------------------------------
-
-  const oneXtwo = [
-
-    {
-
-      outcome:
-        "homeWin",
-
-      label:
-        `فوز ${home.team}`,
-
-      probabilityValue:
-        model.homeWin,
-
-      explanation:
-        "أقوى خيار في سوق 1X2 وفق نموذج بواسون."
-
-    },
-
-    {
-
-      outcome:
-        "draw",
-
-      label:
-        "التعادل",
-
-      probabilityValue:
-        model.draw,
-
-      explanation:
-        "أقوى خيار في سوق 1X2 وفق نموذج بواسون."
-
-    },
-
-    {
-
-      outcome:
-        "awayWin",
-
-      label:
-        `فوز ${away.team}`,
-
-      probabilityValue:
-        model.awayWin,
-
-      explanation:
-        "أقوى خيار في سوق 1X2 وفق نموذج بواسون."
-
-    }
-
-  ];
-
-
-  // --------------------------------------------------------
-  // GOALS
-  // --------------------------------------------------------
-
-  const goalsMarket = [
-
-    {
-
-      outcome:
-        "over25",
-
-      label:
-        "أكثر من 2.5 هدف",
-
-      probabilityValue:
-        model.over25,
-
-      explanation:
-        "أقوى خيار في سوق إجمالي الأهداف وفق توزيع بواسون."
-
-    },
-
-    {
-
-      outcome:
-        "under25",
-
-      label:
-        "أقل من 2.5 هدف",
-
-      probabilityValue:
-        model.under25,
-
-      explanation:
-        "أقوى خيار في سوق إجمالي الأهداف وفق توزيع بواسون."
-
-    }
-
-  ];
-
-
-  // --------------------------------------------------------
-  // BTTS
-  // --------------------------------------------------------
-
-  const bttsMarket = [
-
-    {
-
-      outcome:
-        "bttsYes",
-
-      label:
-        "كلا الفريقين يسجلان",
-
-      probabilityValue:
-        model.bttsYes,
-
-      explanation:
-        "أقوى خيار في سوق تسجيل الفريقين وفق نموذج بواسون."
-
-    },
-
-    {
-
-      outcome:
-        "bttsNo",
-
-      label:
-        "ليس كلا الفريقين يسجلان",
-
-      probabilityValue:
-        model.bttsNo,
-
-      explanation:
-        "أقوى خيار في سوق تسجيل الفريقين وفق نموذج بواسون."
-
-    }
-
-  ];
-
-
-  // --------------------------------------------------------
-  // BEST OPTION PER MARKET
-  // --------------------------------------------------------
-
-  const bestOneXtwo =
-    getBestMarketOption(
-      oneXtwo
-    );
-
-
-  const bestGoals =
-    getBestMarketOption(
-      goalsMarket
-    );
-
-
-  const bestBtts =
-    getBestMarketOption(
-      bttsMarket
-    );
-
-
-  // --------------------------------------------------------
-  // THREE DIFFERENT MARKETS
-  // --------------------------------------------------------
-
-  const selected = [
-
-    bestOneXtwo,
-
-    bestGoals,
-
-    bestBtts
-
-  ].filter(
-    Boolean
+  const homeAttack =
+    homeStats.goalsFor / homeStats.matches;
+
+  const homeDefense =
+    homeStats.goalsAgainst / homeStats.matches;
+
+  const awayAttack =
+    awayStats.goalsFor / awayStats.matches;
+
+  const awayDefense =
+    awayStats.goalsAgainst / awayStats.matches;
+
+  const lambdaHome = clamp(
+    0.55 * homeAttack +
+    0.45 * awayDefense +
+    0.18,
+    0.20,
+    3.50
   );
 
-
-  // --------------------------------------------------------
-  // SORT
-  // --------------------------------------------------------
-
-  selected.sort(
-    (a,b) =>
-      b.probabilityValue -
-      a.probabilityValue
+  const lambdaAway = clamp(
+    0.55 * awayAttack +
+    0.45 * homeDefense,
+    0.15,
+    3.20
   );
 
+  const probs =
+    poissonMatchProbabilities(
+      lambdaHome,
+      lambdaAway
+    );
 
-  // --------------------------------------------------------
-  // OUTPUT
-  // --------------------------------------------------------
+  const xgHome = lambdaHome;
+  const xgAway = lambdaAway;
+  const totalXg = xgHome + xgAway;
 
-  const predictions =
-    selected
+  const btts = clamp(
+    1 -
+    poissonP0(lambdaHome) -
+    poissonP0(lambdaAway) +
+    poissonP0(lambdaHome + lambdaAway),
+    0,
+    1
+  );
 
-      .slice(
-        0,
-        3
-      )
+  const over25 =
+    1 - poissonCdf(2, totalXg);
 
-      .map(
-        item => ({
+  const predictions = [
+    {
+      key: "btts",
+      label: "كلا الفريقين يسجلان",
+      probability: btts * 100,
+      reason:
+        `النموذج الإحصائي يقدّر احتمال التسجيل من متوسطات الهجوم والدفاع (${totalHistorical} مباراة فعلية).`
+    },
 
-          outcome:
-            item.outcome,
+    {
+      key: "over25",
+      label: "أكثر من 2.5 هدف",
+      probability: over25 * 100,
+      reason:
+        "الاحتمال مبني على توزيع بواسون للمتوسط المتوقع للأهداف، وليس قيمة ثابتة."
+    },
 
-          label:
-            item.label,
+    {
+      key: "home",
+      label: `فوز ${homeName}`,
+      probability: probs.home * 100,
+      reason:
+        "الاحتمال يجمع قوة الهجوم والدفاع مع أفضلية الأرض."
+    },
 
-          probabilityValue:
-            item.probabilityValue,
+    {
+      key: "draw",
+      label: "التعادل",
+      probability: probs.draw * 100,
+      reason:
+        "احتمال التعادل الناتج مباشرة من توزيع النتائج الممكنة."
+    },
 
-          probability:
-            `${round(
-              item.probabilityValue *
-              100
-            )}%`,
+    {
+      key: "away",
+      label: `فوز ${awayName}`,
+      probability: probs.away * 100,
+      reason:
+        "الاحتمال يعتمد على قوة الضيف الهجومية ودفاع المضيف."
+    }
+  ]
+    .filter(x => Number.isFinite(x.probability))
+    .sort((a,b) => b.probability - a.probability)
+    .slice(0, 3)
+    .map((x, i) => ({
+      ...x,
+      rank: i + 1,
+      probability: round2(x.probability)
+    }));
 
-          explanation:
-            item.explanation
+  const score =
+    mostLikelyScore(
+      lambdaHome,
+      lambdaAway
+    );
 
-        })
-      );
-
+  const dataQuality =
+    calculateDataQuality(
+      homeMatches,
+      awayMatches,
+      fixture
+    );
 
   return {
-
     predictions,
 
-    predictedScore:
+    metrics: {
+      homeXG: round2(xgHome),
+      awayXG: round2(xgAway),
+      homeWin: round2(probs.home * 100),
+      draw: round2(probs.draw * 100),
+      awayWin: round2(probs.away * 100),
+      btts: round2(btts * 100)
+    },
 
-      `${model.bestScore.home} - ${model.bestScore.away}`
+    dataSummary: {
+      homeMatches: homeStats.matches,
+      awayMatches: awayStats.matches,
 
-  };
+      homeGoalsPerMatch:
+        homeStats.goalsFor /
+        Math.max(homeStats.matches, 1),
 
-}
+      awayGoalsPerMatch:
+        awayStats.goalsFor /
+        Math.max(awayStats.matches, 1),
 
+      homeConcededPerMatch:
+        homeStats.goalsAgainst /
+        Math.max(homeStats.matches, 1),
 
-// ==========================================================
-// BEST MARKET OPTION
-// ==========================================================
+      awayConcededPerMatch:
+        awayStats.goalsAgainst /
+        Math.max(awayStats.matches, 1)
+    },
 
-function getBestMarketOption(
-  candidates
-){
+    summary: {
+      strongestLabel:
+        predictions[0]?.label ||
+        "لا يوجد",
 
-  if(
-    !Array.isArray(
-      candidates
-    ) ||
-    !candidates.length
-  ){
+      strongestProbability:
+        predictions[0]?.probability ||
+        0,
 
-    return null;
+      mostLikelyScore:
+        score,
 
-  }
-
-
-  return candidates.reduce(
-    (
-      best,
-      current
-    ) =>
-
-      !best ||
-
-      current.probabilityValue >
-      best.probabilityValue
-
-        ? current
-
-        : best,
-
-    null
-
-  );
-
-}
-
-
-// ==========================================================
-// POISSON MATRIX
-// ==========================================================
-
-function poissonMatrix(
-  lambdaHome,
-  lambdaAway,
-  maxGoals
-){
-
-  const homeP =
-    poissonSeries(
-      lambdaHome,
-      maxGoals
-    );
-
-
-  const awayP =
-    poissonSeries(
-      lambdaAway,
-      maxGoals
-    );
-
-
-  const matrix =
-    [];
-
-
-  for(
-    let h=0;
-    h<=maxGoals;
-    h++
-  ){
-
-    matrix[h] =
-      [];
-
-
-    for(
-      let a=0;
-      a<=maxGoals;
-      a++
-    ){
-
-      matrix[h][a] =
-        homeP[h] *
-        awayP[a];
-
+      dataQuality
     }
+  };
+}
 
-  }
+function summarizeTeam(matches) {
+  let goalsFor = 0;
+  let goalsAgainst = 0;
+  let wins = 0;
+  let draws = 0;
+  let losses = 0;
 
-
-  const total =
-    matrix
-      .flat()
-      .reduce(
-        (
-          sum,
-          value
-        ) =>
-          sum +
-          value,
-
-        0
+  for (const m of matches) {
+    const hs =
+      numberOrNull(
+        m.score?.home
       );
 
+    const as =
+      numberOrNull(
+        m.score?.away
+      );
 
-  return matrix.map(
-    row =>
-      row.map(
-        value =>
-          value /
-          total
-      )
-  );
+    if (hs == null || as == null)
+      continue;
 
-}
+    const gf =
+      m._teamSide === "away"
+        ? as
+        : hs;
 
+    const ga =
+      m._teamSide === "away"
+        ? hs
+        : as;
 
-// ==========================================================
-// POISSON SERIES
-// ==========================================================
+    goalsFor += gf;
+    goalsAgainst += ga;
 
-function poissonSeries(
-  lambda,
-  max
-){
-
-  const result =
-    [];
-
-
-  for(
-    let k=0;
-    k<=max;
-    k++
-  ){
-
-    result.push(
-
-      Math.exp(
-        -lambda
-      )
-
-      *
-
-      Math.pow(
-        lambda,
-        k
-      )
-
-      /
-
-      factorial(
-        k
-      )
-
-    );
-
+    if (gf > ga)
+      wins++;
+    else if (gf === ga)
+      draws++;
+    else
+      losses++;
   }
-
-
-  return result;
-
-}
-
-
-// ==========================================================
-// FACTORIAL
-// ==========================================================
-
-function factorial(
-  n
-){
-
-  let result =
-    1;
-
-
-  for(
-    let i=2;
-    i<=n;
-    i++
-  ){
-
-    result *=
-      i;
-
-  }
-
-
-  return result;
-
-}
-
-
-// ==========================================================
-// DATA QUALITY 2.2.2
-// ==========================================================
-//
-// الجديد:
-//
-// التاريخ = 60 نقطة
-// تعدد المصادر = 30 نقطة
-// التحقق من المباراة = 10 نقاط
-//
-// ثم يوجد سقف حسب عدد المصادر:
-//
-// مصدر واحد  => حد أقصى 55
-// مصدران     => حد أقصى 75
-// 3 مصادر    => حد أقصى 90
-// 4+ مصادر   => 100
-//
-// لذلك لا يمكن لمصدر واحد أن يعطي 100/100.
-// ==========================================================
-
-function calculateDataQuality(
-  analysis,
-  providerCount,
-  fixture
-){
-
-  const games =
-    Math.min(
-      analysis.home.games,
-      analysis.away.games
-    );
-
-
-  // --------------------------------------------------------
-  // التاريخ: 60 نقطة كحد أقصى
-  // --------------------------------------------------------
-
-  const history =
-    (
-      Math.min(
-        games,
-        10
-      ) /
-      10
-    ) * 60;
-
-
-  // --------------------------------------------------------
-  // تعدد المصادر: 30 نقطة كحد أقصى
-  // --------------------------------------------------------
-
-  const providerScore =
-    Math.min(
-      providerCount,
-      4
-    ) * 7.5;
-
-
-  // --------------------------------------------------------
-  // التحقق من المباراة: 10 نقاط
-  // --------------------------------------------------------
-
-  const fixtureScore =
-    fixture
-      ? 10
-      : 0;
-
-
-  const raw =
-    history +
-    providerScore +
-    fixtureScore;
-
-
-  // --------------------------------------------------------
-  // HARD CAPS BY PROVIDER COUNT
-  // --------------------------------------------------------
-
-  let providerCap;
-
-
-  if(
-    providerCount <= 0
-  ){
-
-    providerCap =
-      0;
-
-  }
-
-  else if(
-    providerCount === 1
-  ){
-
-    providerCap =
-      55;
-
-  }
-
-  else if(
-    providerCount === 2
-  ){
-
-    providerCap =
-      75;
-
-  }
-
-  else if(
-    providerCount === 3
-  ){
-
-    providerCap =
-      90;
-
-  }
-
-  else{
-
-    providerCap =
-      100;
-
-  }
-
-
-  return Math.round(
-
-    clamp(
-      Math.min(
-        raw,
-        providerCap
-      ),
-
-      0,
-
-      100
-    )
-
-  );
-
-}
-
-
-// ==========================================================
-// BASE RESPONSE
-// ==========================================================
-
-function baseResponse(
-  home,
-  away,
-  providers,
-  usable,
-  status,
-  message
-){
 
   return {
+    matches:
+      wins + draws + losses,
 
-    success:
-      true,
-
-    app:
-      "Y.C.B",
-
-    engine:
-      "Y.C.B Prediction Engine",
-
-    version:
-      VERSION,
-
-    architecture:
-      "Multi Provider Architecture",
-
-    match: {
-
-      home,
-
-      away
-
-    },
-
-    analysisStatus:
-      status,
-
-    message,
-
-    predictions:
-      fallbackPredictions(
-        home,
-        away
-      ),
-
-    recommendation: {
-
-      recommended:
-        false,
-
-      message:
-        "لا يوجد رهان موصى به: البيانات غير كافية أو لم يتم التحقق من المباراة عبر مصادر متعددة."
-
-    },
-
-    providers,
-
-    providerCount:
-      providers.length,
-
-    successfulProviderCount:
-      usable.length,
-
-    dataQuality:
-      0,
-
-    validation: {
-
-      minimumProvidersRequired:
-        2,
-
-      successfulProviders:
-        usable.length,
-
-      multiProviderVerified:
-        usable.length >= 2
-
-    }
-
+    goalsFor,
+    goalsAgainst,
+    wins,
+    draws,
+    losses
   };
-
 }
 
+function recentForTeam(
+  matches,
+  team,
+  limit
+) {
+  return matches
+    .filter(m =>
+      m?.status === "finished" &&
+      (
+        teamNameMatch(
+          m.home?.name,
+          team
+        ) ||
+        teamNameMatch(
+          m.away?.name,
+          team
+        )
+      )
+    )
+    .map(m => {
+      const isAway =
+        teamNameMatch(
+          m.away?.name,
+          team
+        );
 
-// ==========================================================
-// FALLBACK
-// ==========================================================
+      return {
+        ...m,
+        _teamSide:
+          isAway
+            ? "away"
+            : "home"
+      };
+    })
+    .sort(byDateDesc)
+    .slice(0, limit);
+}
 
-function fallbackPredictions(
+function findFixture(
+  matches,
   home,
   away
-){
-
-  return [
-
-    {
-
-      outcome:
-        "unavailable",
-
-      label:
-        `فوز ${home}`,
-
-      probability:
-        "غير متاح",
-
-      probabilityValue:
-        0,
-
-      explanation:
-        "لا توجد بيانات كافية."
-
-    },
-
-    {
-
-      outcome:
-        "unavailable",
-
-      label:
-        "التعادل",
-
-      probability:
-        "غير متاح",
-
-      probabilityValue:
-        0,
-
-      explanation:
-        "لا توجد بيانات كافية."
-
-    },
-
-    {
-
-      outcome:
-        "unavailable",
-
-      label:
-        `فوز ${away}`,
-
-      probability:
-        "غير متاح",
-
-      probabilityValue:
-        0,
-
-      explanation:
-        "لا توجد بيانات كافية."
-
-    }
-
-  ];
-
+) {
+  return matches.find(
+    x =>
+      teamsPairMatch(
+        x,
+        home,
+        away
+      )
+  ) || null;
 }
 
+function teamsPairMatch(
+  m,
+  home,
+  away
+) {
+  if (!m)
+    return false;
 
-// ==========================================================
-// NORMALIZE TEAM NAME
-// ==========================================================
+  return (
+    teamNameMatch(
+      m.home?.name,
+      home
+    ) &&
+    teamNameMatch(
+      m.away?.name,
+      away
+    )
+  );
+}
+
+function teamNameMatch(
+  a,
+  b
+) {
+  const x =
+    normalizeName(a);
+
+  const y =
+    normalizeName(b);
+
+  if (!x || !y)
+    return false;
+
+  if (x === y)
+    return true;
+
+  if (
+    x.includes(y) ||
+    y.includes(x)
+  )
+    return true;
+
+  const xt =
+    new Set(
+      x
+        .split(" ")
+        .filter(
+          t =>
+            t.length >= 3
+        )
+    );
+
+  return y
+    .split(" ")
+    .some(
+      t =>
+        t.length >= 3 &&
+        xt.has(t)
+    );
+}
+
+function bestTeam(
+  rows,
+  name
+) {
+  let best = null;
+  let bestScore = -1;
+
+  for (
+    const row of rows || []
+  ) {
+    const rowName =
+      row?.name ||
+      row?.strTeam ||
+      "";
+
+    const score =
+      similarity(
+        normalizeName(rowName),
+        normalizeName(name)
+      );
+
+    if (score > bestScore) {
+      bestScore = score;
+
+      best = {
+        id:
+          row?.id ||
+          row?.idTeam ||
+          null,
+
+        name:
+          rowName
+      };
+    }
+  }
+
+  return bestScore >= 0.45
+    ? best
+    : null;
+}
+
+function similarity(
+  a,
+  b
+) {
+  if (!a || !b)
+    return 0;
+
+  if (a === b)
+    return 1;
+
+  if (
+    a.includes(b) ||
+    b.includes(a)
+  )
+    return 0.85;
+
+  const aa =
+    new Set(
+      a.split(" ")
+    );
+
+  const bb =
+    new Set(
+      b.split(" ")
+    );
+
+  let common = 0;
+
+  for (
+    const t of aa
+  ) {
+    if (bb.has(t))
+      common++;
+  }
+
+  return (
+    common /
+    Math.max(
+      aa.size,
+      bb.size,
+      1
+    )
+  );
+}
 
 function normalizeName(
   value
-){
-
+) {
   return String(
-    value ||
-    ""
+    value || ""
   )
-
     .toLowerCase()
-
     .trim()
-
-    .normalize(
-      "NFD"
-    )
-
+    .normalize("NFD")
     .replace(
       /[\u0300-\u036f]/g,
       ""
     )
-
     .replace(
       /&/g,
       " and "
     )
-
     .replace(
-      /\b(fc|cf|afc|sc|ac|fk|club)\b/g,
+      /\b(fc|cf|afc|sc|ac|fk|club|football club)\b/g,
       " "
     )
-
     .replace(
       /[^a-z0-9\u0600-\u06ff\s]/gi,
       " "
     )
-
     .replace(
       /\s+/g,
       " "
     )
-
     .trim();
-
 }
 
-
-// ==========================================================
-// TEAM NAME MATCH
-// ==========================================================
-
-function namesMatch(
-  first,
-  second
-){
-
-  if(
-    !first ||
-    !second
-  ){
-
-    return false;
-
-  }
-
-
-  if(
-    first === second ||
-    first.includes(second) ||
-    second.includes(first)
-  ){
-
-    return true;
-
-  }
-
-
-  const tokens =
-    new Set(
-
-      first
-        .split(" ")
-        .filter(
-          item =>
-            item.length >= 3
-        )
-
-    );
-
-
-  return second
-    .split(" ")
-    .some(
-      item =>
-        item.length >= 3 &&
-        tokens.has(
-          item
-        )
-    );
-
+function slug(value) {
+  return normalizeName(
+    value
+  ).replace(
+    /\s+/g,
+    "_"
+  );
 }
 
+function normalizeStatus(
+  value
+) {
+  const s =
+    String(
+      value || ""
+    ).toLowerCase();
 
-// ==========================================================
-// CLAMP
-// ==========================================================
+  if (
+    s.includes("finish") ||
+    s.includes("complete") ||
+    s === "ft"
+  )
+    return "finished";
+
+  if (
+    s.includes("live") ||
+    s.includes("progress") ||
+    s.includes("playing")
+  )
+    return "live";
+
+  if (
+    s.includes("cancel") ||
+    s.includes("postpon")
+  )
+    return "cancelled";
+
+  return "upcoming";
+}
+
+function byDateDesc(
+  a,
+  b
+) {
+  const aa =
+    Date.parse(
+      a?.utcDate || ""
+    ) || 0;
+
+  const bb =
+    Date.parse(
+      b?.utcDate || ""
+    ) || 0;
+
+  return bb - aa;
+}
+
+function dedupeMatches(
+  rows
+) {
+  const map =
+    new Map();
+
+  for (
+    const row of rows || []
+  ) {
+    const key =
+      row?.id ||
+      `${normalizeName(row?.home?.name)}|${normalizeName(row?.away?.name)}|${row?.utcDate || ""}`;
+
+    if (!map.has(key))
+      map.set(
+        key,
+        row
+      );
+  }
+
+  return [
+    ...map.values()
+  ];
+}
+
+function poissonP0(
+  lambda
+) {
+  return Math.exp(
+    -lambda
+  );
+}
+
+function poissonPmf(
+  k,
+  lambda
+) {
+  let p =
+    Math.exp(
+      -lambda
+    );
+
+  for (
+    let i = 1;
+    i <= k;
+    i++
+  ) {
+    p *=
+      lambda /
+      i;
+  }
+
+  return p;
+}
+
+function poissonCdf(
+  k,
+  lambda
+) {
+  let sum = 0;
+
+  for (
+    let i = 0;
+    i <= k;
+    i++
+  ) {
+    sum +=
+      poissonPmf(
+        i,
+        lambda
+      );
+  }
+
+  return sum;
+}
+
+function poissonMatchProbabilities(
+  homeLambda,
+  awayLambda
+) {
+  let home = 0;
+  let draw = 0;
+  let away = 0;
+
+  for (
+    let h = 0;
+    h <= 8;
+    h++
+  ) {
+    for (
+      let a = 0;
+      a <= 8;
+      a++
+    ) {
+      const p =
+        poissonPmf(
+          h,
+          homeLambda
+        ) *
+        poissonPmf(
+          a,
+          awayLambda
+        );
+
+      if (h > a)
+        home += p;
+      else if (h === a)
+        draw += p;
+      else
+        away += p;
+    }
+  }
+
+  const total =
+    home +
+    draw +
+    away;
+
+  return {
+    home:
+      home / total,
+
+    draw:
+      draw / total,
+
+    away:
+      away / total
+  };
+}
+
+function mostLikelyScore(
+  homeLambda,
+  awayLambda
+) {
+  let best = null;
+  let bestP = -1;
+
+  for (
+    let h = 0;
+    h <= 6;
+    h++
+  ) {
+    for (
+      let a = 0;
+      a <= 6;
+      a++
+    ) {
+      const p =
+        poissonPmf(
+          h,
+          homeLambda
+        ) *
+        poissonPmf(
+          a,
+          awayLambda
+        );
+
+      if (p > bestP) {
+        bestP = p;
+        best = `${h} - ${a}`;
+      }
+    }
+  }
+
+  return best || "—";
+}
+
+function calculateDataQuality(
+  homeMatches,
+  awayMatches,
+  fixture
+) {
+  let score = 0;
+
+  if (fixture)
+    score += 20;
+
+  score +=
+    Math.min(
+      homeMatches.length,
+      15
+    ) * 2;
+
+  score +=
+    Math.min(
+      awayMatches.length,
+      15
+    ) * 2;
+
+  return Math.round(
+    clamp(
+      score,
+      0,
+      100
+    )
+  );
+}
+
+function getBsdToken(
+  env
+) {
+  return String(
+    env?.BSD_API_TOKEN ||
+    env?.BSD_TOKEN ||
+    env?.BZZOIRO_API_KEY ||
+    ""
+  ).trim();
+}
+
+function numberOrNull(
+  value
+) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  )
+    return null;
+
+  const n =
+    Number(value);
+
+  return Number.isFinite(n)
+    ? n
+    : null;
+}
+
+function percentValue(
+  value
+) {
+  const n =
+    numberOrNull(
+      value
+    );
+
+  if (n == null)
+    return null;
+
+  return n > 1
+    ? n
+    : n * 100;
+}
+
+function round2(
+  value
+) {
+  return Math.round(
+    Number(value) *
+    100
+  ) / 100;
+}
 
 function clamp(
   value,
   min,
   max
-){
+) {
+  return Math.max(
+    min,
+    Math.min(
+      max,
+      value
+    )
+  );
+}
 
-  return Math.min(
+function dateShift(
+  days
+) {
+  const d =
+    new Date();
 
-    Math.max(
-      value,
-      min
-    ),
-
-    max
-
+  d.setUTCDate(
+    d.getUTCDate() +
+    days
   );
 
+  return d
+    .toISOString()
+    .slice(
+      0,
+      10
+    );
 }
 
+async function fetchJson(
+  url,
+  options = {},
+  cacheSeconds = 0
+) {
+  const request =
+    new Request(
+      url,
+      {
+        method:
+          options.method ||
+          "GET",
 
-// ==========================================================
-// ROUND
-// ==========================================================
-
-function round(
-  value
-){
-
-  return Math.round(
-    Number(value) *
-    100
-  ) / 100;
-
-}
-
-
-// ==========================================================
-// JSON RESPONSE
-// ==========================================================
-
-function json(
-  data,
-  status = 200
-){
-
-  return new Response(
-
-    JSON.stringify(
-      data,
-      null,
-      2
-    ),
-
-    {
-
-      status,
-
-      headers: {
-
-        "Content-Type":
-          "application/json;charset=UTF-8",
-
-        "Access-Control-Allow-Origin":
-          "*",
-
-        "Access-Control-Allow-Methods":
-          "GET,POST,OPTIONS",
-
-        "Access-Control-Allow-Headers":
-          "Content-Type"
-
+        headers:
+          options.headers ||
+          {}
       }
+    );
 
+  if (
+    cacheSeconds > 0 &&
+    request.method === "GET"
+  ) {
+    const cache =
+      caches.default;
+
+    const cached =
+      await cache.match(
+        request
+      );
+
+    if (cached) {
+      const data =
+        await cached
+          .clone()
+          .json()
+          .catch(
+            () => null
+          );
+
+      return {
+        ok:
+          cached.ok,
+
+        status:
+          cached.status,
+
+        data,
+
+        text: ""
+      };
     }
 
-  );
+    const response =
+      await fetch(
+        request
+      );
 
+    const clone =
+      response.clone();
+
+    if (response.ok) {
+      const cacheResponse =
+        new Response(
+          clone.body,
+          clone
+        );
+
+      cacheResponse.headers.set(
+        "Cache-Control",
+        `public, max-age=${cacheSeconds}`
+      );
+
+      await cache.put(
+        request,
+        cacheResponse
+      );
+    }
+
+    const text =
+      await response.text();
+
+    let data = null;
+
+    try {
+      data =
+        text
+          ? JSON.parse(text)
+          : null;
+    } catch {}
+
+    return {
+      ok:
+        response.ok,
+
+      status:
+        response.status,
+
+      data,
+
+      text
+    };
+  }
+
+  const response =
+    await fetch(
+      request
+    );
+
+  const text =
+    await response.text();
+
+  let data = null;
+
+  try {
+    data =
+      text
+        ? JSON.parse(text)
+        : null;
+  } catch {}
+
+  return {
+    ok:
+      response.ok,
+
+    status:
+      response.status,
+
+    data,
+
+    text
+  };
 }
