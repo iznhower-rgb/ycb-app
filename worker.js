@@ -9,6 +9,7 @@ import "./espnProvider.js";
 import "./footballDataProvider.js";
 import "./sofaScoreProvider.js";
 import "./theSportsDBProvider.js";
+import "./bsdProvider.js";;
 
 const VERSION =
   "2.2.0";
