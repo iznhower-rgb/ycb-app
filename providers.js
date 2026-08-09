@@ -73,11 +73,40 @@ export function getProviders() {
   return providers.map(
     provider => ({
 
-      name: provider.name,
+      name:
+        provider.name,
 
-      status: "registered"
+      status:
+        "registered"
 
     })
+  );
+
+}
+
+
+// ==========================================
+// CHECK PROVIDER RESULT
+// ==========================================
+//
+// مهم جدًا:
+//
+// الاتصال بالمزود لا يعني أن البيانات
+// المطلوبة للمباراة موجودة.
+//
+// success = true فقط عندما يعيد المزود
+// status === "success".
+//
+// ==========================================
+
+function isSuccessfulResult(result) {
+
+  return Boolean(
+
+    result &&
+
+    result.status === "success"
+
   );
 
 }
@@ -96,16 +125,24 @@ export async function getAllMatchData(
   const results = [];
 
 
+  // ----------------------------------------
+  // لا نوقف جميع المزودين إذا فشل واحد منهم
+  // ----------------------------------------
+
   for (const provider of providers) {
 
     try {
 
-      const data =
+      const result =
         await provider.getMatchData(
           home,
           away,
           env
         );
+
+
+      const success =
+        isSuccessfulResult(result);
 
 
       results.push({
@@ -114,10 +151,19 @@ export async function getAllMatchData(
           provider.name,
 
         success:
-          true,
+          success,
+
+        status:
+          result?.status ||
+          "unknown",
+
+        message:
+          result?.message ||
+          null,
 
         data:
-          data
+          result?.data ||
+          null
 
       });
 
@@ -131,6 +177,16 @@ export async function getAllMatchData(
 
         success:
           false,
+
+        status:
+          "error",
+
+        message:
+          error?.message ||
+          String(error),
+
+        data:
+          null,
 
         error:
           error?.message ||
