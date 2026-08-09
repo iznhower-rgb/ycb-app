@@ -12,9 +12,7 @@ const providers = [];
 export class DataProvider {
 
   constructor(name) {
-
     this.name = name;
-
   }
 
 
@@ -100,75 +98,71 @@ export async function getAllMatchData(
   env
 ) {
 
-  const results =
-    await Promise.all(
+  return Promise.all(
 
-      providers.map(
-        async provider => {
+    providers.map(
+      async provider => {
 
-          try {
+        try {
 
-            const result =
-              await provider.getMatchData(
-                home,
-                away,
-                env
-              );
+          const result =
+            await provider.getMatchData(
+              home,
+              away,
+              env
+            );
 
 
-            return {
+          return {
 
-              provider:
-                provider.name,
+            provider:
+              provider.name,
 
-              success:
-                result?.status === "success",
+            success:
+              result?.status === "success",
 
-              status:
-                result?.status ||
-                "unknown",
+            status:
+              result?.status ||
+              "unknown",
 
-              message:
-                result?.message ||
-                "",
+            message:
+              result?.message ||
+              "",
 
-              data:
-                result?.data ||
-                null
+            data:
+              result?.data ||
+              null
 
-            };
+          };
 
-          } catch (error) {
+        } catch (error) {
 
-            return {
+          return {
 
-              provider:
-                provider.name,
+            provider:
+              provider.name,
 
-              success:
-                false,
+            success:
+              false,
 
-              status:
-                "provider_error",
+            status:
+              "provider_error",
 
-              message:
-                error?.message ||
-                String(error),
+            message:
+              error?.message ||
+              String(error),
 
-              data:
-                null
+            data:
+              null
 
-            };
-
-          }
+          };
 
         }
-      )
 
-    );
+      }
+    )
 
-
-  return results;
+  );
 
 }
 
