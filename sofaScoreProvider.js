@@ -1,4 +1,12 @@
 // Y.C.B SOFASCORE PROVIDER
+// Browser / HTML / JavaScript compatible
+// Compatible with Y.C.B PROVIDERS CORE
+//
+// IMPORTANT:
+// Direct browser requests to SofaScore may fail because of
+// CORS / WAF / anti-bot protection.
+// If you have a proxy, pass it through env.sofascoreProxy
+// or env.fetch.
 
 import {
   DataProvider,
@@ -6,9 +14,55 @@ import {
 } from "./providers.js";
 
 
-const API =
+/* ==========================================
+   CONFIG
+========================================== */
+
+const SOFASCORE_API =
   "https://api.sofascore.com/api/v1";
 
+
+const PROVIDER_NAME =
+  "SofaScore";
+
+
+/*
+ * Search only a small reasonable date range.
+ *
+ * -1 = yesterday
+ *  0 = today
+ *  1 = tomorrow
+ *  2 = +2 days
+ *  3 = +3 days
+ */
+const SEARCH_FROM =
+  -1;
+
+
+const SEARCH_TO =
+  3;
+
+
+/*
+ * Number of recent matches to return.
+ */
+const MAX_RECENT_MATCHES =
+  15;
+
+
+/*
+ * Simple in-memory cache.
+ *
+ * This is very important in a browser application
+ * because it prevents repeated identical requests.
+ */
+const CACHE_TTL =
+  60 * 1000;
+
+
+/* ==========================================
+   PROVIDER
+========================================== */
 
 class SofaScoreProvider
   extends DataProvider {
@@ -16,7 +70,7 @@ class SofaScoreProvider
   constructor() {
 
     super(
-      "SofaScore"
+      PROVIDER_NAME
     );
 
   }
@@ -24,30 +78,79 @@ class SofaScoreProvider
 
   async getMatchData(
     home,
-    away
+    away,
+    env = {}
   ) {
 
-    const now =
-      new Date();
-
-
-    const from =
-      -7;
-
-
-    const to =
-      14;
+    const startedAt =
+      Date.now();
 
 
     try {
+
+      if (
+        !home ||
+        !away
+      ) {
+
+        return {
+
+          status:
+            "invalid_input",
+
+          message:
+            "SofaScore يحتاج إلى اسم الفريق المضيف والفريق الضيف.",
+
+          data:
+            null
+
+        };
+
+      }
+
+
+      /*
+       * Select the fetch implementation.
+       *
+       * Priority:
+       *
+       * 1. env.sofascoreFetch
+       * 2. env.fetch
+       * 3. native browser fetch
+       */
+
+      const fetchFn =
+        getFetchFunction(
+          env
+        );
+
+
+      /*
+       * If a proxy URL is supplied, all SofaScore
+       * requests go through it.
+       */
+
+      const proxy =
+        getProxy(
+          env
+        );
+
 
       let match =
         null;
 
 
+      const now =
+        new Date();
+
+
+      /*
+       * Search the configured date range.
+       */
+
       for (
-        let offset = from;
-        offset <= to;
+        let offset = SEARCH_FROM;
+        offset <= SEARCH_TO;
         offset++
       ) {
 
@@ -58,11 +161,23 @@ class SofaScoreProvider
           );
 
 
+        const dateString =
+          formatDate(
+            date
+          );
+
+
+        const url =
+          `${SOFASCORE_API}/sport/football/scheduled-events/${dateString}`;
+
+
         const payload =
           await fetchJSON(
-
-            `${API}/sport/football/scheduled-events/${formatDate(date)}`
-
+            url,
+            {
+              fetchFn,
+              proxy
+            }
           );
 
 
@@ -82,7 +197,9 @@ class SofaScoreProvider
           );
 
 
-        if (match) {
+        if (
+          match
+        ) {
 
           break;
 
@@ -91,7 +208,13 @@ class SofaScoreProvider
       }
 
 
-      if (!match) {
+      /*
+       * No match found.
+       */
+
+      if (
+        !match
+      ) {
 
         return {
 
@@ -110,7 +233,21 @@ class SofaScoreProvider
               true,
 
             matchFound:
-              false
+              false,
+
+            requestedMatch: {
+
+              home:
+                String(
+                  home
+                ),
+
+              away:
+                String(
+                  away
+                )
+
+            }
 
           }
 
@@ -131,6 +268,13 @@ class SofaScoreProvider
           ?.id;
 
 
+      /*
+       * Get recent matches independently.
+       *
+       * If one team request fails, do not destroy
+       * the entire match result.
+       */
+
       const [
         homeRecent,
         awayRecent
@@ -139,17 +283,30 @@ class SofaScoreProvider
 
           homeId
             ? getRecentTeamMatches(
-                homeId
+                homeId,
+                {
+                  fetchFn,
+                  proxy
+                }
               )
             : Promise.resolve([]),
 
           awayId
             ? getRecentTeamMatches(
-                awayId
+                awayId,
+                {
+                  fetchFn,
+                  proxy
+                }
               )
             : Promise.resolve([])
 
         ]);
+
+
+      const durationMs =
+        Date.now() -
+        startedAt;
 
 
       return {
@@ -171,6 +328,8 @@ class SofaScoreProvider
           matchFound:
             true,
 
+          durationMs,
+
           fixture:
             normalizeEvent(
               match
@@ -190,19 +349,35 @@ class SofaScoreProvider
 
       };
 
-    } catch (error) {
+    } catch (
+      error
+    ) {
 
       return {
 
         status:
-          "network_error",
+          classifyError(
+            error
+          ),
 
         message:
           error?.message ||
-          String(error),
+          String(
+            error
+          ),
 
-        data:
-          null
+        data: {
+
+          source:
+            "sofascore",
+
+          available:
+            false,
+
+          matchFound:
+            false
+
+        }
 
       };
 
@@ -213,29 +388,140 @@ class SofaScoreProvider
 }
 
 
+/* ==========================================
+   FETCH FUNCTION
+========================================== */
 
-async function fetchJSON(url) {
+function getFetchFunction(
+  env
+) {
+
+  if (
+    env &&
+    typeof env.sofascoreFetch ===
+    "function"
+  ) {
+
+    return env.sofascoreFetch;
+
+  }
+
+
+  if (
+    env &&
+    typeof env.fetch ===
+    "function"
+  ) {
+
+    return env.fetch;
+
+  }
+
+
+  if (
+    typeof fetch ===
+    "function"
+  ) {
+
+    return fetch.bind(
+      globalThis
+    );
+
+  }
+
+
+  throw new Error(
+    "Fetch API غير متوفر في بيئة التطبيق."
+  );
+
+}
+
+
+/* ==========================================
+   PROXY
+========================================== */
+
+function getProxy(
+  env
+) {
+
+  const proxy =
+    env?.sofascoreProxy;
+
+
+  if (
+    typeof proxy !==
+    "string"
+  ) {
+
+    return "";
+
+  }
+
+
+  return proxy.trim();
+
+}
+
+
+/* ==========================================
+   FETCH JSON
+========================================== */
+
+async function fetchJSON(
+  url,
+  options = {}
+) {
+
+  const fetchFn =
+    options.fetchFn ||
+    getFetchFunction({});
+
+
+  const proxy =
+    options.proxy ||
+    "";
+
+
+  /*
+   * If a proxy exists, send the target URL
+   * to the proxy instead of directly to SofaScore.
+   */
+
+  const requestUrl =
+    proxy
+      ? buildProxyUrl(
+          proxy,
+          url
+        )
+      : url;
+
+
+  /*
+   * Browser-safe headers.
+   *
+   * Do NOT try to spoof User-Agent or Origin
+   * from browser JavaScript.
+   */
 
   const response =
-    await fetch(
-      url,
+    await fetchFn(
+      requestUrl,
       {
+
+        method:
+          "GET",
+
         headers: {
+
           "Accept":
-            "application/json, text/plain, */*",
+            "application/json"
 
-          "User-Agent":
-            "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36",
+        },
 
-          "Referer":
-            "https://www.sofascore.com/",
+        cache:
+          "no-store"
 
-          "Origin":
-            "https://www.sofascore.com",
-
-          "X-Requested-With":
-            "XMLHttpRequest"
-        }
       }
     );
 
@@ -250,7 +536,19 @@ async function fetchJSON(url) {
   ) {
 
     throw new Error(
-      "SofaScore HTTP 403 - access blocked"
+      "SofaScore HTTP 403 - access blocked or CORS/WAF protection."
+    );
+
+  }
+
+
+  if (
+    response.status ===
+    429
+  ) {
+
+    throw new Error(
+      "SofaScore HTTP 429 - too many requests."
     );
 
   }
@@ -267,16 +565,25 @@ async function fetchJSON(url) {
   }
 
 
+  if (
+    !text
+  ) {
+
+    return null;
+
+  }
+
+
   try {
 
-    return text
-      ? JSON.parse(text)
-      : null;
+    return JSON.parse(
+      text
+    );
 
   } catch {
 
     throw new Error(
-      "SofaScore returned invalid JSON"
+      "SofaScore returned invalid JSON."
     );
 
   }
@@ -284,27 +591,162 @@ async function fetchJSON(url) {
 }
 
 
-async function getRecentTeamMatches(
-  teamId
+/* ==========================================
+   PROXY URL BUILDER
+========================================== */
+
+function buildProxyUrl(
+  proxy,
+  targetUrl
 ) {
 
-  const data =
-    await fetchJSON(
+  /*
+   * Supports proxies such as:
+   *
+   * https://your-domain.com/api/sofascore
+   *
+   * Result:
+   *
+   * https://your-domain.com/api/sofascore?url=...
+   */
 
-      `${API}/team/${teamId}/events/last/0`
+  const separator =
+    proxy.includes("?")
+      ? "&"
+      : "?";
 
+
+  return (
+    proxy +
+    separator +
+    "url=" +
+    encodeURIComponent(
+      targetUrl
+    )
+  );
+
+}
+
+
+/* ==========================================
+   RECENT TEAM MATCHES
+========================================== */
+
+async function getRecentTeamMatches(
+  teamId,
+  options = {}
+) {
+
+  if (
+    !teamId
+  ) {
+
+    return [];
+
+  }
+
+
+  const fetchFn =
+    options.fetchFn ||
+    getFetchFunction({});
+
+
+  const proxy =
+    options.proxy ||
+    "";
+
+
+  const allEvents =
+    [];
+
+
+  /*
+   * SofaScore uses pagination.
+   *
+   * Fetch only a couple of pages instead of
+   * repeatedly requesting the same endpoint.
+   */
+
+  for (
+    let page = 0;
+    page < 2;
+    page++
+  ) {
+
+    const url =
+      `${SOFASCORE_API}/team/${teamId}/events/last/${page}`;
+
+
+    let data;
+
+
+    try {
+
+      data =
+        await fetchJSON(
+          url,
+          {
+            fetchFn,
+            proxy
+          }
+        );
+
+    } catch (
+      error
+    ) {
+
+      /*
+       * Recent form is supplementary.
+       *
+       * Do not fail the entire provider if
+       * the recent matches endpoint fails.
+       */
+
+      break;
+
+    }
+
+
+    const events =
+      Array.isArray(
+        data?.events
+      )
+        ? data.events
+        : [];
+
+
+    allEvents.push(
+      ...events
     );
 
 
-  const events =
-    Array.isArray(
-      data?.events
-    )
-      ? data.events
-      : [];
+    /*
+     * If the page contains fewer events,
+     * there is probably no need for another page.
+     */
+
+    if (
+      events.length === 0
+    ) {
+
+      break;
+
+    }
+
+  }
 
 
-  return events
+  /*
+   * Remove duplicate events.
+   */
+
+  const unique =
+    uniqueEvents(
+      allEvents
+    );
+
+
+  return unique
 
     .filter(
       event =>
@@ -313,9 +755,21 @@ async function getRecentTeamMatches(
         )
     )
 
+    .sort(
+      (a, b) =>
+        Number(
+          b?.startTimestamp ||
+          0
+        ) -
+        Number(
+          a?.startTimestamp ||
+          0
+        )
+    )
+
     .slice(
       0,
-      15
+      MAX_RECENT_MATCHES
     )
 
     .map(
@@ -324,6 +778,66 @@ async function getRecentTeamMatches(
 
 }
 
+
+/* ==========================================
+   UNIQUE EVENTS
+========================================== */
+
+function uniqueEvents(
+  events
+) {
+
+  const map =
+    new Map();
+
+
+  for (
+    const event of events
+  ) {
+
+    const id =
+      event?.id;
+
+
+    if (
+      id == null
+    ) {
+
+      continue;
+
+    }
+
+
+    if (
+      !map.has(
+        String(
+          id
+        )
+      )
+    ) {
+
+      map.set(
+        String(
+          id
+        ),
+        event
+      );
+
+    }
+
+  }
+
+
+  return [
+    ...map.values()
+  ];
+
+}
+
+
+/* ==========================================
+   NORMALIZE EVENT
+========================================== */
 
 function normalizeEvent(
   event
@@ -349,12 +863,11 @@ function normalizeEvent(
 
     utcDate:
       event?.startTimestamp
-
         ? new Date(
-            event.startTimestamp *
-            1000
+            Number(
+              event.startTimestamp
+            ) * 1000
           ).toISOString()
-
         : null,
 
     status:
@@ -440,11 +953,26 @@ function normalizeEvent(
 }
 
 
+/* ==========================================
+   FIND MATCH
+========================================== */
+
 function findMatch(
   events,
   home,
   away
 ) {
+
+  if (
+    !Array.isArray(
+      events
+    )
+  ) {
+
+    return null;
+
+  }
+
 
   const homeName =
     normalizeName(
@@ -458,59 +986,130 @@ function findMatch(
     );
 
 
-  return events.find(
-    event =>
+  /*
+   * First try exact normalized matching.
+   */
 
-      namesMatch(
-        normalizeName(
-          event
-            ?.homeTeam
-            ?.name
-        ),
+  let match =
+    events.find(
+      event => {
 
-        homeName
-      )
+        const eventHome =
+          normalizeName(
+            event
+              ?.homeTeam
+              ?.name
+          );
 
-      &&
 
-      namesMatch(
-        normalizeName(
-          event
-            ?.awayTeam
-            ?.name
-        ),
+        const eventAway =
+          normalizeName(
+            event
+              ?.awayTeam
+              ?.name
+          );
 
-        awayName
-      )
 
+        return (
+          eventHome === homeName &&
+          eventAway === awayName
+        );
+
+      }
+    );
+
+
+  if (
+    match
+  ) {
+
+    return match;
+
+  }
+
+
+  /*
+   * Second attempt: flexible matching.
+   */
+
+  match =
+    events.find(
+      event => {
+
+        const eventHome =
+          normalizeName(
+            event
+              ?.homeTeam
+              ?.name
+          );
+
+
+        const eventAway =
+          normalizeName(
+            event
+              ?.awayTeam
+              ?.name
+          );
+
+
+        return (
+
+          namesMatch(
+            eventHome,
+            homeName
+          )
+
+          &&
+
+          namesMatch(
+            eventAway,
+            awayName
+          )
+
+        );
+
+      }
+    );
+
+
+  return (
+    match ||
+    null
   );
 
 }
 
 
+/* ==========================================
+   FINISHED
+========================================== */
+
 function isFinished(
   event
 ) {
 
+  const type =
+    String(
+      event
+        ?.status
+        ?.type ||
+      ""
+    ).toLowerCase();
+
+
   return (
 
-    event
-      ?.status
-      ?.type ===
+    type ===
     "finished"
 
     ||
 
-    event
-      ?.status
-      ?.type ===
+    type ===
     "after_penalties"
 
     ||
 
-    event
-      ?.status
-      ?.type ===
+    type ===
     "after_extra_time"
 
   );
@@ -518,9 +1117,24 @@ function isFinished(
 }
 
 
+/* ==========================================
+   NUMBER
+========================================== */
+
 function finiteOrNull(
   value
 ) {
+
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+
+    return null;
+
+  }
+
 
   const number =
     Number(
@@ -537,6 +1151,10 @@ function finiteOrNull(
 }
 
 
+/* ==========================================
+   DATE SHIFT
+========================================== */
+
 function shiftDate(
   date,
   days
@@ -550,7 +1168,9 @@ function shiftDate(
 
   result.setUTCDate(
     result.getUTCDate() +
-    days
+    Number(
+      days
+    )
   );
 
 
@@ -558,6 +1178,10 @@ function shiftDate(
 
 }
 
+
+/* ==========================================
+   DATE FORMAT
+========================================== */
 
 function formatDate(
   date
@@ -572,6 +1196,10 @@ function formatDate(
 
 }
 
+
+/* ==========================================
+   NORMALIZE TEAM NAME
+========================================== */
 
 function normalizeName(
   value
@@ -600,10 +1228,18 @@ function normalizeName(
       " and "
     )
 
+    /*
+     * Common football club prefixes/suffixes.
+     */
+
     .replace(
       /\b(fc|cf|afc|sc|ac|fk|club)\b/g,
       " "
     )
+
+    /*
+     * Keep Latin, Arabic and numbers.
+     */
 
     .replace(
       /[^a-z0-9\u0600-\u06ff\s]/gi,
@@ -619,6 +1255,10 @@ function normalizeName(
 
 }
 
+
+/* ==========================================
+   TEAM NAME MATCH
+========================================== */
 
 function namesMatch(
   first,
@@ -636,9 +1276,7 @@ function namesMatch(
 
 
   if (
-    first === second ||
-    first.includes(second) ||
-    second.includes(first)
+    first === second
   ) {
 
     return true;
@@ -646,31 +1284,199 @@ function namesMatch(
   }
 
 
-  const tokens =
-    new Set(
+  /*
+   * Avoid matching extremely short names.
+   */
 
+  if (
+    first.length < 3 ||
+    second.length < 3
+  ) {
+
+    return false;
+
+  }
+
+
+  /*
+   * Full substring match.
+   */
+
+  if (
+    first.includes(
+      second
+    ) ||
+
+    second.includes(
       first
-        .split(" ")
-        .filter(
-          item =>
-            item.length >= 3
-        )
+    )
+  ) {
 
+    return true;
+
+  }
+
+
+  /*
+   * Token based comparison.
+   *
+   * Requires at least one meaningful token.
+   */
+
+  const firstTokens =
+    first
+      .split(" ")
+      .filter(
+        token =>
+          token.length >= 3
+      );
+
+
+  const secondTokens =
+    second
+      .split(" ")
+      .filter(
+        token =>
+          token.length >= 3
+      );
+
+
+  if (
+    !firstTokens.length ||
+    !secondTokens.length
+  ) {
+
+    return false;
+
+  }
+
+
+  const firstSet =
+    new Set(
+      firstTokens
     );
 
 
-  return second
-    .split(" ")
-    .some(
-      item =>
-        item.length >= 3 &&
-        tokens.has(
-          item
+  const common =
+    secondTokens.filter(
+      token =>
+        firstSet.has(
+          token
         )
     );
+
+
+  /*
+   * One common token is allowed only when
+   * it is reasonably distinctive.
+   */
+
+  if (
+    common.length >= 2
+  ) {
+
+    return true;
+
+  }
+
+
+  if (
+    common.length === 1
+  ) {
+
+    const token =
+      common[0];
+
+
+    return (
+      token.length >= 5
+    );
+
+  }
+
+
+  return false;
 
 }
 
+
+/* ==========================================
+   ERROR CLASSIFICATION
+========================================== */
+
+function classifyError(
+  error
+) {
+
+  const message =
+    String(
+      error?.message ||
+      error ||
+      ""
+    ).toLowerCase();
+
+
+  if (
+    message.includes(
+      "403"
+    ) ||
+
+    message.includes(
+      "blocked"
+    ) ||
+
+    message.includes(
+      "waf"
+    )
+  ) {
+
+    return "access_blocked";
+
+  }
+
+
+  if (
+    message.includes(
+      "429"
+    ) ||
+
+    message.includes(
+      "too many"
+    )
+  ) {
+
+    return "rate_limited";
+
+  }
+
+
+  if (
+    message.includes(
+      "failed to fetch"
+    ) ||
+
+    message.includes(
+      "cors"
+    ) ||
+
+    message.includes(
+      "network"
+    )
+  ) {
+
+    return "network_error";
+
+  }
+
+
+  return "provider_error";
+
+}
+
+
+/* ==========================================
+   CREATE + REGISTER
+========================================== */
 
 const provider =
   new SofaScoreProvider();
