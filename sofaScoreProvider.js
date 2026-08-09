@@ -1,5 +1,6 @@
 // ==========================================
 // Y.C.B SOFASCORE PROVIDER
+// FINAL VERSION
 // ==========================================
 
 import {
@@ -13,7 +14,7 @@ import {
 // ==========================================
 
 const API_BASE =
-  "https://www.sofascore.com/api/v1";
+  "https://api.sofascore.com/api/v1";
 
 
 // ==========================================
@@ -43,14 +44,14 @@ class SofaScoreProvider
 
     try {
 
-      // --------------------------------------
-      // SEARCH TODAY + PREVIOUS DAY + NEXT 7
-      // --------------------------------------
+      // ------------------------------------
+      // SEARCH TODAY + NEXT 7 DAYS
+      // ------------------------------------
 
       let match = null;
 
       for (
-        let offset = -1;
+        let offset = 0;
         offset <= 7;
         offset++
       ) {
@@ -59,10 +60,8 @@ class SofaScoreProvider
           new Date();
 
         date.setUTCDate(
-          date.getUTCDate() +
-          offset
+          date.getUTCDate() + offset
         );
-
 
         const dateString =
           date
@@ -74,7 +73,7 @@ class SofaScoreProvider
           `${API_BASE}/sport/football/scheduled-events/${dateString}`;
 
 
-        const result =
+        const data =
           await fetchJSON(
             url
           );
@@ -82,9 +81,9 @@ class SofaScoreProvider
 
         const events =
           Array.isArray(
-            result?.events
+            data?.events
           )
-            ? result.events
+            ? data.events
             : [];
 
 
@@ -105,9 +104,9 @@ class SofaScoreProvider
       }
 
 
-      // --------------------------------------
+      // ------------------------------------
       // MATCH NOT FOUND
-      // --------------------------------------
+      // ------------------------------------
 
       if (!match) {
 
@@ -117,7 +116,7 @@ class SofaScoreProvider
             "api_ok_no_match",
 
           message:
-            "تم الاتصال بـ SofaScore بنجاح، لكن المباراة المطلوبة لم يتم العثور عليها.",
+            "SofaScore متصل بنجاح، لكن المباراة المطلوبة غير موجودة خلال الأيام السبعة القادمة.",
 
           data: {
 
@@ -128,17 +127,7 @@ class SofaScoreProvider
               true,
 
             matchFound:
-              false,
-
-            requested: {
-
-              home:
-                home,
-
-              away:
-                away
-
-            }
+              false
 
           }
 
@@ -147,30 +136,28 @@ class SofaScoreProvider
       }
 
 
-      // --------------------------------------
+      // ------------------------------------
       // TEAM IDS
-      // --------------------------------------
+      // ------------------------------------
 
       const homeTeamId =
         Number(
-          match?.homeTeam?.id
+          match?.homeTeam?.id || 0
         );
 
 
       const awayTeamId =
         Number(
-          match?.awayTeam?.id
+          match?.awayTeam?.id || 0
         );
 
 
-      // --------------------------------------
+      // ------------------------------------
       // RECENT MATCHES
-      // --------------------------------------
+      // ------------------------------------
 
       const homeRecent =
-        Number.isFinite(
-          homeTeamId
-        )
+        homeTeamId
           ? await getRecentTeamMatches(
               homeTeamId
             )
@@ -178,84 +165,32 @@ class SofaScoreProvider
 
 
       const awayRecent =
-        Number.isFinite(
-          awayTeamId
-        )
+        awayTeamId
           ? await getRecentTeamMatches(
               awayTeamId
             )
           : [];
 
 
-      // --------------------------------------
-      // STANDARDIZED FIXTURE
-      // --------------------------------------
+      // ------------------------------------
+      // CONVERT TO Y.C.B FORMAT
+      // ------------------------------------
 
-      const fixture = {
-
-        id:
-          match.id ||
-          null,
-
-        utcDate:
-          match.startTimestamp
-            ? new Date(
-                match.startTimestamp *
-                1000
-              ).toISOString()
-            : null,
-
-        status:
-          match.status?.type ||
-          match.status?.description ||
-          null,
-
-        competition:
-          match.tournament?.name
-            ? {
-                name:
-                  match.tournament.name
-              }
-            : null,
-
-        homeTeam: {
-
-          id:
-            match.homeTeam?.id ||
-            null,
-
-          name:
-            match.homeTeam?.name ||
-            null,
-
-          shortName:
-            match.homeTeam?.shortName ||
-            null
-
-        },
-
-        awayTeam: {
-
-          id:
-            match.awayTeam?.id ||
-            null,
-
-          name:
-            match.awayTeam?.name ||
-            null,
-
-          shortName:
-            match.awayTeam?.shortName ||
-            null
-
-        }
-
-      };
+      const homeMatches =
+        convertRecentMatches(
+          homeRecent
+        );
 
 
-      // --------------------------------------
-      // SUCCESS
-      // --------------------------------------
+      const awayMatches =
+        convertRecentMatches(
+          awayRecent
+        );
+
+
+      // ------------------------------------
+      // RESULT
+      // ------------------------------------
 
       return {
 
@@ -276,15 +211,66 @@ class SofaScoreProvider
           matchFound:
             true,
 
-          fixture,
+          fixture: {
+
+            id:
+              match.id || null,
+
+            utcDate:
+              match.startTimestamp
+                ? new Date(
+                    match.startTimestamp * 1000
+                  ).toISOString()
+                : null,
+
+            status:
+              match.status || null,
+
+            tournament:
+              match.tournament?.name ||
+              null,
+
+            homeTeam: {
+
+              id:
+                match.homeTeam?.id ||
+                null,
+
+              name:
+                match.homeTeam?.name ||
+                null,
+
+              shortName:
+                match.homeTeam?.shortName ||
+                null
+
+            },
+
+            awayTeam: {
+
+              id:
+                match.awayTeam?.id ||
+                null,
+
+              name:
+                match.awayTeam?.name ||
+                null,
+
+              shortName:
+                match.awayTeam?.shortName ||
+                null
+
+            }
+
+          },
 
           recentMatches: {
 
             home:
-              homeRecent,
+              homeMatches,
 
             away:
-              awayRecent
+              awayMatches
 
           }
 
@@ -300,8 +286,7 @@ class SofaScoreProvider
           "network_error",
 
         message:
-          error?.message ||
-          String(error),
+          `SofaScore: ${error?.message || String(error)}`,
 
         data:
           null
@@ -323,48 +308,26 @@ async function fetchJSON(
   url
 ) {
 
-  let response;
+  const response =
+    await fetch(
+      url,
+      {
 
-  try {
+        method:
+          "GET",
 
-    response =
-      await fetch(
-        url,
-        {
+        headers: {
 
-          method:
-            "GET",
+          "Accept":
+            "application/json",
 
-          headers: {
-
-            "Accept":
-              "application/json"
-
-          },
-
-          cf: {
-
-            cacheTtl:
-              0,
-
-            cacheEverything:
-              false
-
-          }
+          "User-Agent":
+            "YCB-Football-Prediction-Engine/2.0"
 
         }
-      );
 
-  } catch (error) {
-
-    throw new Error(
-      `SofaScore connection failed: ${
-        error?.message ||
-        String(error)
-      }`
+      }
     );
-
-  }
 
 
   const text =
@@ -394,15 +357,25 @@ async function fetchJSON(
 
   if (!response.ok) {
 
-    const apiMessage =
-      data?.message ||
-      data?.error ||
-      text ||
-      "Unknown SofaScore error";
+    throw new Error(
 
+      `HTTP ${response.status}` +
+
+      (
+        data?.message
+          ? `: ${data.message}`
+          : ""
+      )
+
+    );
+
+  }
+
+
+  if (!data) {
 
     throw new Error(
-      `SofaScore HTTP ${response.status}: ${apiMessage}`
+      "استجابة JSON فارغة أو غير صالحة."
     );
 
   }
@@ -423,16 +396,26 @@ function findMatch(
   away
 ) {
 
-  const requestedHome =
+  const homeName =
     normalizeName(
       home
     );
 
 
-  const requestedAway =
+  const awayName =
     normalizeName(
       away
     );
+
+
+  if (
+    !homeName ||
+    !awayName
+  ) {
+
+    return null;
+
+  }
 
 
   return events.find(
@@ -456,26 +439,26 @@ function findMatch(
 
         namesMatch(
           eventHome,
-          requestedHome
+          homeName
         )
 
         &&
 
         namesMatch(
           eventAway,
-          requestedAway
+          awayName
         )
 
       );
 
     }
-  );
+  ) || null;
 
 }
 
 
 // ==========================================
-// RECENT MATCHES
+// RECENT TEAM MATCHES
 // ==========================================
 
 async function getRecentTeamMatches(
@@ -484,9 +467,13 @@ async function getRecentTeamMatches(
 
   try {
 
+    const url =
+      `${API_BASE}/team/${teamId}/events/last/0`;
+
+
     const data =
       await fetchJSON(
-        `${API_BASE}/team/${teamId}/events/last/0`
+        url
       );
 
 
@@ -499,20 +486,17 @@ async function getRecentTeamMatches(
 
 
     return events
-
       .filter(
         event =>
           event?.status?.type ===
-          "finished" ||
+            "finished" ||
           event?.status?.type ===
-          "after_penalties"
+            "ended"
       )
-
       .slice(
         0,
         10
       )
-
       .map(
         event => {
 
@@ -523,50 +507,47 @@ async function getRecentTeamMatches(
             Number(teamId);
 
 
-          const homeGoals =
+          const homeScore =
             Number(
               event?.homeScore?.current
             );
 
 
-          const awayGoals =
+          const awayScore =
             Number(
               event?.awayScore?.current
             );
 
 
-          if (
-            !Number.isFinite(
-              homeGoals
-            ) ||
-            !Number.isFinite(
-              awayGoals
-            )
-          ) {
+          const goalsFor =
+            isHome
+              ? homeScore
+              : awayScore;
 
-            return null;
 
-          }
+          const goalsAgainst =
+            isHome
+              ? awayScore
+              : homeScore;
 
 
           return {
 
             id:
-              event.id ||
+              event?.id ||
               null,
 
             utcDate:
-              event.startTimestamp
+              event?.startTimestamp
                 ? new Date(
-                    event.startTimestamp *
-                    1000
+                    event.startTimestamp * 1000
                   ).toISOString()
                 : null,
 
             homeTeam: {
 
               name:
-                event.homeTeam?.name ||
+                event?.homeTeam?.name ||
                 null
 
             },
@@ -574,7 +555,7 @@ async function getRecentTeamMatches(
             awayTeam: {
 
               name:
-                event.awayTeam?.name ||
+                event?.awayTeam?.name ||
                 null
 
             },
@@ -584,22 +565,45 @@ async function getRecentTeamMatches(
               fullTime: {
 
                 home:
-                  homeGoals,
+                  Number.isFinite(
+                    homeScore
+                  )
+                    ? homeScore
+                    : 0,
 
                 away:
-                  awayGoals
+                  Number.isFinite(
+                    awayScore
+                  )
+                    ? awayScore
+                    : 0
 
               }
 
-            }
+            },
+
+            opponent:
+              isHome
+                ? event?.awayTeam?.name ||
+                  null
+                : event?.homeTeam?.name ||
+                  null,
+
+            isHome,
+
+            result:
+              getResult(
+                goalsFor,
+                goalsAgainst
+              ),
+
+            goalsFor,
+
+            goalsAgainst
 
           };
 
         }
-      )
-
-      .filter(
-        Boolean
       );
 
   } catch {
@@ -607,6 +611,73 @@ async function getRecentTeamMatches(
     return [];
 
   }
+
+}
+
+
+// ==========================================
+// CONVERT MATCHES
+// ==========================================
+
+function convertRecentMatches(
+  matches
+) {
+
+  if (
+    !Array.isArray(matches)
+  ) {
+
+    return [];
+
+  }
+
+
+  return matches
+    .filter(
+      match =>
+        match &&
+        match.score &&
+        match.homeTeam &&
+        match.awayTeam
+    )
+    .slice(
+      0,
+      10
+    );
+
+}
+
+
+// ==========================================
+// RESULT
+// ==========================================
+
+function getResult(
+  goalsFor,
+  goalsAgainst
+) {
+
+  if (
+    goalsFor >
+    goalsAgainst
+  ) {
+
+    return "W";
+
+  }
+
+
+  if (
+    goalsFor <
+    goalsAgainst
+  ) {
+
+    return "L";
+
+  }
+
+
+  return "D";
 
 }
 
@@ -662,7 +733,7 @@ function normalizeName(
 
 
 // ==========================================
-// MATCH TEAM NAMES
+// TEAM NAME MATCH
 // ==========================================
 
 function namesMatch(
@@ -680,6 +751,7 @@ function namesMatch(
   }
 
 
+  // Exact
   if (
     first === second
   ) {
@@ -689,13 +761,10 @@ function namesMatch(
   }
 
 
+  // One contains the other
   if (
-    first.includes(
-      second
-    ) ||
-    second.includes(
-      first
-    )
+    first.includes(second) ||
+    second.includes(first)
   ) {
 
     return true;
@@ -703,24 +772,46 @@ function namesMatch(
   }
 
 
+  // Token comparison
   const firstTokens =
-    first.split(" ");
+    first
+      .split(" ")
+      .filter(
+        token =>
+          token.length >= 3
+      );
 
 
   const secondTokens =
-    second.split(" ");
+    second
+      .split(" ")
+      .filter(
+        token =>
+          token.length >= 3
+      );
+
+
+  if (
+    !firstTokens.length ||
+    !secondTokens.length
+  ) {
+
+    return false;
+
+  }
 
 
   const common =
     secondTokens.filter(
       token =>
-        token.length >= 3 &&
         firstTokens.includes(
           token
         )
     );
 
 
+  // Require at least one meaningful
+  // common token
   return (
     common.length >= 1
   );
@@ -729,7 +820,7 @@ function namesMatch(
 
 
 // ==========================================
-// REGISTER
+// REGISTER PROVIDER
 // ==========================================
 
 const sofaScoreProvider =
