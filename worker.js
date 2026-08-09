@@ -8,7 +8,7 @@ import {
 import "./espnProvider.js";
 import "./footballDataProvider.js";
 import "./sofaScoreProvider.js";
-import "./openLigaDBProvider.js";
+import "./openLigaProvider.js";
 import "./theSportsDBProvider.js";
 import "./bsdProvider.js";
 
