@@ -1,253 +1,95 @@
-// ==========================================
-// Y.C.B FOOTBALL-DATA.ORG PROVIDER
-// ==========================================
-//
-// الهدف من هذا المزود:
-//
-// 1. الاتصال الحقيقي بـ Football-Data.org
-// 2. عدم افتراض أن المباراة في Premier League
-// 3. البحث في مباريات Football-Data.org المتاحة
-// 4. مطابقة اسم الفريقين بمرونة
-// 5. عدم إنشاء أي توقعات وهمية
-// 6. إرجاع حالة واضحة عند عدم العثور على المباراة
-//
-// ==========================================
-
-
 import {
   DataProvider,
   registerProvider
 } from "./providers.js";
 
-
-// ==========================================
-// CONFIGURATION
-// ==========================================
-
 const API_BASE =
   "https://api.football-data.org/v4";
-
-
-// ==========================================
-// FOOTBALL-DATA.ORG PROVIDER
-// ==========================================
 
 class FootballDataProvider extends DataProvider {
 
   constructor() {
-
     super("Football-Data.org");
-
   }
 
-
-  // ========================================
-  // GET MATCH DATA
-  // ========================================
-
-  async getMatchData(
-    home,
-    away,
-    env
-  ) {
-
-    // --------------------------------------
-    // Validate environment
-    // --------------------------------------
+  async getMatchData(home, away, env) {
 
     if (!env) {
 
       return {
-
-        provider:
-          this.name,
-
-        status:
-          "environment_missing",
-
+        provider: this.name,
+        status: "environment_missing",
         home,
         away,
-
-        data:
-          null,
-
-        message:
-          "Worker environment is missing"
-
+        data: null,
+        message: "Worker environment is missing"
       };
 
     }
-
-
-    // --------------------------------------
-    // Validate token
-    // --------------------------------------
 
     const token =
       String(
         env.FOOTBALL_DATA_TOKEN || ""
       ).trim();
 
-
     if (!token) {
 
       return {
-
-        provider:
-          this.name,
-
-        status:
-          "not_configured",
-
+        provider: this.name,
+        status: "not_configured",
         home,
         away,
-
-        data:
-          null,
-
-        dataSource:
-          "Football-Data.org",
-
+        data: null,
         message:
           "FOOTBALL_DATA_TOKEN is missing"
-
       };
 
     }
-
-
-    // ======================================
-    // NORMALIZE SEARCH NAMES
-    // ======================================
-
-    const homeSearch =
-      normalizeName(home);
-
-
-    const awaySearch =
-      normalizeName(away);
-
-
-    if (
-      !homeSearch ||
-      !awaySearch
-    ) {
-
-      return {
-
-        provider:
-          this.name,
-
-        status:
-          "invalid_team_names",
-
-        home,
-        away,
-
-        data:
-          null,
-
-        message:
-          "Invalid home or away team name"
-
-      };
-
-    }
-
-
-    // ======================================
-    // DATE RANGE
-    // ======================================
-    //
-    // نبحث في:
-    //
-    // - آخر 90 يومًا
-    // - الـ 365 يومًا القادمة
-    //
-    // هذا يسمح لنا بالعثور على:
-    //
-    // - مباريات مكتملة
-    // - مباريات حالية
-    // - مباريات مستقبلية
-    //
-    // ولا نقيد البحث ببطولة واحدة.
-    //
-    // ======================================
 
     const today =
       new Date();
 
-
     const startDate =
       new Date(today);
 
-
     startDate.setUTCDate(
-      startDate.getUTCDate() - 90
+      startDate.getUTCDate() - 30
     );
-
 
     const endDate =
       new Date(today);
-
 
     endDate.setUTCDate(
       endDate.getUTCDate() + 365
     );
 
-
     const dateFrom =
       formatDate(startDate);
 
-
     const dateTo =
       formatDate(endDate);
-
-
-    // ======================================
-    // BUILD MATCH API URL
-    // ======================================
-    //
-    // Football-Data.org v4 يدعم:
-    //
-    // /v4/matches
-    //
-    // مع dateFrom + dateTo.
-    //
-    // ======================================
 
     const apiUrl =
       new URL(
         `${API_BASE}/matches`
       );
 
-
     apiUrl.searchParams.set(
       "dateFrom",
       dateFrom
     );
-
 
     apiUrl.searchParams.set(
       "dateTo",
       dateTo
     );
 
-
-    // نحدد عددًا كبيرًا ولكن آمنًا
-    // ضمن الحد المسموح به للـ API.
     apiUrl.searchParams.set(
       "limit",
       "500"
     );
 
-
-    // ======================================
-    // API REQUEST
-    // ======================================
-
     let response;
-
 
     try {
 
@@ -255,134 +97,78 @@ class FootballDataProvider extends DataProvider {
         await fetch(
           apiUrl.toString(),
           {
-
-            method:
-              "GET",
+            method: "GET",
 
             headers: {
-
-              "X-Auth-Token":
-                token,
-
-              "Accept":
-                "application/json"
-
+              "X-Auth-Token": token,
+              "Accept": "application/json"
             }
-
           }
         );
 
     } catch (error) {
 
       return {
-
-        provider:
-          this.name,
-
-        status:
-          "network_error",
-
+        provider: this.name,
+        status: "network_error",
         home,
         away,
-
-        data:
-          null,
-
+        data: null,
         message:
           error?.message ||
           String(error)
-
       };
 
     }
 
-
-    // ======================================
-    // READ RESPONSE
-    // ======================================
-
     const responseText =
       await response.text();
 
+    let parsed = null;
 
-    // ======================================
-    // HTTP ERROR
-    // ======================================
+    try {
+
+      parsed =
+        JSON.parse(
+          responseText
+        );
+
+    } catch (_) {
+
+      parsed = null;
+
+    }
 
     if (!response.ok) {
 
       let apiMessage =
-        responseText;
-
-
-      try {
-
-        const parsed =
-          JSON.parse(
-            responseText
-          );
-
-
-        if (
-          parsed &&
-          parsed.error
-        ) {
-
-          apiMessage =
-            parsed.error;
-
-        }
-
-      } catch (_) {
-
-        // Keep raw response
-
-      }
-
+        parsed?.message ||
+        parsed?.error ||
+        responseText ||
+        "Unknown API error";
 
       let status =
         "api_error";
 
-
-      if (
-        response.status === 401
-      ) {
-
-        status =
-          "unauthorized";
-
+      if (response.status === 400) {
+        status = "bad_request";
       }
 
-
-      if (
-        response.status === 403
-      ) {
-
-        status =
-          "forbidden";
-
+      if (response.status === 401) {
+        status = "unauthorized";
       }
 
-
-      if (
-        response.status === 404
-      ) {
-
-        status =
-          "not_found";
-
+      if (response.status === 403) {
+        status = "forbidden";
       }
 
-
-      if (
-        response.status === 429
-      ) {
-
-        status =
-          "rate_limited";
-
+      if (response.status === 404) {
+        status = "not_found";
       }
 
+      if (response.status === 429) {
+        status = "rate_limited";
+      }
 
       return {
 
@@ -398,8 +184,21 @@ class FootballDataProvider extends DataProvider {
         home,
         away,
 
-        data:
-          null,
+        data: {
+
+          endpoint:
+            apiUrl.toString(),
+
+          dateFrom:
+            dateFrom,
+
+          dateTo:
+            dateTo,
+
+          apiResponse:
+            parsed || responseText
+
+        },
 
         message:
           `Football-Data.org HTTP ${response.status}: ${apiMessage}`
@@ -408,22 +207,7 @@ class FootballDataProvider extends DataProvider {
 
     }
 
-
-    // ======================================
-    // PARSE JSON
-    // ======================================
-
-    let result;
-
-
-    try {
-
-      result =
-        JSON.parse(
-          responseText
-        );
-
-    } catch (error) {
+    if (!parsed) {
 
       return {
 
@@ -439,8 +223,7 @@ class FootballDataProvider extends DataProvider {
         home,
         away,
 
-        data:
-          null,
+        data: null,
 
         message:
           "Football-Data.org returned invalid JSON"
@@ -449,85 +232,53 @@ class FootballDataProvider extends DataProvider {
 
     }
 
-
-    // ======================================
-    // EXTRACT MATCHES
-    // ======================================
-
     const matches =
       Array.isArray(
-        result?.matches
+        parsed.matches
       )
-        ? result.matches
+        ? parsed.matches
         : [];
 
+    const homeSearch =
+      normalizeName(home);
 
-    // ======================================
-    // FIND MATCH
-    // ======================================
-    //
-    // نبحث عن:
-    //
-    // Home = الفريق الأول
-    // Away = الفريق الثاني
-    //
-    // مع دعم:
-    //
-    // - الاسم الكامل
-    // - الاسم المختصر
-    // - TLA
-    //
-    // ======================================
+    const awaySearch =
+      normalizeName(away);
 
     const match =
       matches.find(
         item => {
 
-          const apiHomeNames = [
+          const apiHome =
+            normalizeName(
+              item?.homeTeam?.name ||
+              item?.homeTeam?.shortName ||
+              item?.homeTeam?.tla ||
+              ""
+            );
 
-            item?.homeTeam?.name,
-
-            item?.homeTeam?.shortName,
-
-            item?.homeTeam?.tla
-
-          ];
-
-
-          const apiAwayNames = [
-
-            item?.awayTeam?.name,
-
-            item?.awayTeam?.shortName,
-
-            item?.awayTeam?.tla
-
-          ];
-
+          const apiAway =
+            normalizeName(
+              item?.awayTeam?.name ||
+              item?.awayTeam?.shortName ||
+              item?.awayTeam?.tla ||
+              ""
+            );
 
           return (
-
-            teamNamesMatch(
-              apiHomeNames,
+            namesMatch(
+              apiHome,
               homeSearch
             )
-
             &&
-
-            teamNamesMatch(
-              apiAwayNames,
+            namesMatch(
+              apiAway,
               awaySearch
             )
-
           );
 
         }
       );
-
-
-    // ======================================
-    // MATCH NOT FOUND
-    // ======================================
 
     if (!match) {
 
@@ -556,29 +307,26 @@ class FootballDataProvider extends DataProvider {
           dateTo:
             dateTo,
 
-          competitionCount:
-            getCompetitionCount(
-              matches
-            ),
-
           competitions:
-            getCompetitionCodes(
-              matches
-            )
+            [
+              ...new Set(
+                matches
+                  .map(
+                    m =>
+                      m?.competition?.code
+                  )
+                  .filter(Boolean)
+              )
+            ]
 
         },
 
         message:
-          "Football-Data.org connection works, but the requested match was not found in the available match data"
+          "API connection works, but requested match was not found"
 
       };
 
     }
-
-
-    // ======================================
-    // MATCH FOUND
-    // ======================================
 
     return {
 
@@ -594,10 +342,82 @@ class FootballDataProvider extends DataProvider {
       home,
       away,
 
-      data:
-        normalizeMatch(
-          match
-        ),
+      data: {
+
+        id:
+          match.id || null,
+
+        utcDate:
+          match.utcDate || null,
+
+        status:
+          match.status || null,
+
+        competition: {
+
+          id:
+            match.competition?.id ||
+            null,
+
+          name:
+            match.competition?.name ||
+            null,
+
+          code:
+            match.competition?.code ||
+            null
+
+        },
+
+        homeTeam: {
+
+          id:
+            match.homeTeam?.id ||
+            null,
+
+          name:
+            match.homeTeam?.name ||
+            null,
+
+          shortName:
+            match.homeTeam?.shortName ||
+            null,
+
+          tla:
+            match.homeTeam?.tla ||
+            null
+
+        },
+
+        awayTeam: {
+
+          id:
+            match.awayTeam?.id ||
+            null,
+
+          name:
+            match.awayTeam?.name ||
+            null,
+
+          shortName:
+            match.awayTeam?.shortName ||
+            null,
+
+          tla:
+            match.awayTeam?.tla ||
+            null
+
+        },
+
+        score:
+          match.score ||
+          null,
+
+        odds:
+          match.odds ||
+          null
+
+      },
 
       message:
         "Match data received successfully"
@@ -609,197 +429,38 @@ class FootballDataProvider extends DataProvider {
 }
 
 
-// ==========================================
-// NORMALIZE MATCH
-// ==========================================
+function normalizeName(name) {
 
-function normalizeMatch(
-  match
-) {
-
-  return {
-
-    id:
-      match?.id ||
-      null,
-
-
-    utcDate:
-      match?.utcDate ||
-      null,
-
-
-    status:
-      match?.status ||
-      null,
-
-
-    minute:
-      match?.minute ||
-      null,
-
-
-    injuryTime:
-      match?.injuryTime ||
-      null,
-
-
-    stage:
-      match?.stage ||
-      null,
-
-
-    group:
-      match?.group ||
-      null,
-
-
-    matchday:
-      match?.matchday ||
-      null,
-
-
-    venue:
-      match?.venue ||
-      null,
-
-
-    competition: {
-
-      id:
-        match?.competition?.id ||
-        null,
-
-      name:
-        match?.competition?.name ||
-        null,
-
-      code:
-        match?.competition?.code ||
-        null,
-
-      type:
-        match?.competition?.type ||
-        null
-
-    },
-
-
-    season: {
-
-      id:
-        match?.season?.id ||
-        null,
-
-      startDate:
-        match?.season?.startDate ||
-        null,
-
-      endDate:
-        match?.season?.endDate ||
-        null
-
-    },
-
-
-    homeTeam: {
-
-      id:
-        match?.homeTeam?.id ||
-        null,
-
-      name:
-        match?.homeTeam?.name ||
-        null,
-
-      shortName:
-        match?.homeTeam?.shortName ||
-        null,
-
-      tla:
-        match?.homeTeam?.tla ||
-        null
-
-    },
-
-
-    awayTeam: {
-
-      id:
-        match?.awayTeam?.id ||
-        null,
-
-      name:
-        match?.awayTeam?.name ||
-        null,
-
-      shortName:
-        match?.awayTeam?.shortName ||
-        null,
-
-      tla:
-        match?.awayTeam?.tla ||
-        null
-
-    },
-
-
-    score:
-      match?.score ||
-      null,
-
-
-    odds:
-      match?.odds ||
-      null
-
-  };
+  return String(
+    name || ""
+  )
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(
+      /[\u0300-\u036f]/g,
+      ""
+    )
+    .replace(
+      /&/g,
+      " and "
+    )
+    .replace(
+      /\b(fc|cf|afc|sc|ac|fk|club)\b/gi,
+      ""
+    )
+    .replace(
+      /[^a-z0-9\s]/gi,
+      " "
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .trim();
 
 }
 
-
-// ==========================================
-// TEAM NAME MATCH
-// ==========================================
-
-function teamNamesMatch(
-  apiNames,
-  searchName
-) {
-
-  if (
-    !Array.isArray(apiNames) ||
-    !searchName
-  ) {
-
-    return false;
-
-  }
-
-
-  return apiNames.some(
-    name => {
-
-      const normalized =
-        normalizeName(
-          name
-        );
-
-
-      return namesMatch(
-        normalized,
-        searchName
-      );
-
-    }
-  );
-
-}
-
-
-// ==========================================
-// COMPARE TEAM NAMES
-// ==========================================
 
 function namesMatch(
   apiName,
@@ -815,8 +476,6 @@ function namesMatch(
 
   }
 
-
-  // Exact match
   if (
     apiName === searchName
   ) {
@@ -825,252 +484,65 @@ function namesMatch(
 
   }
 
-
-  // API name contains search
   if (
-    apiName.includes(
-      searchName
-    )
+    apiName.includes(searchName)
   ) {
 
     return true;
 
   }
 
-
-  // Search contains API name
   if (
-    searchName.includes(
-      apiName
-    )
+    searchName.includes(apiName)
   ) {
 
     return true;
 
   }
-
-
-  // --------------------------------------
-  // TOKEN MATCH
-  // --------------------------------------
-  //
-  // مثال:
-  //
-  // "arsenal"
-  // مع
-  // "arsenal fc"
-  //
-  // أو:
-  //
-  // "coventry city"
-  // مع
-  // "coventry"
-  //
-  // --------------------------------------
 
   const apiTokens =
-    apiName
-      .split(" ")
-      .filter(Boolean);
-
+    apiName.split(" ");
 
   const searchTokens =
-    searchName
-      .split(" ")
-      .filter(Boolean);
+    searchName.split(" ");
 
-
-  if (
-    apiTokens.length === 0 ||
-    searchTokens.length === 0
-  ) {
-
-    return false;
-
-  }
-
-
-  const commonTokens =
+  const common =
     searchTokens.filter(
       token =>
-        apiTokens.includes(
-          token
-        )
+        token.length >= 3 &&
+        apiTokens.includes(token)
     );
 
-
-  // يجب أن يكون هناك تطابق
-  // في كلمة ذات معنى.
-  //
-  // الكلمات القصيرة جدًا لا نعتمد عليها.
-  //
-
-  const meaningfulTokens =
-    commonTokens.filter(
-      token =>
-        token.length >= 3
-    );
-
-
-  return (
-    meaningfulTokens.length >= 1
-  );
+  return common.length > 0;
 
 }
 
 
-// ==========================================
-// NORMALIZE TEAM NAME
-// ==========================================
-
-function normalizeName(
-  name
-) {
-
-  return String(
-    name || ""
-  )
-
-    .toLowerCase()
-
-    .trim()
-
-    // إزالة العلامات الصوتية
-    // من اللغات التي تستخدم Unicode accents
-    .normalize("NFD")
-
-    .replace(
-      /[\u0300-\u036f]/g,
-      ""
-    )
-
-    // توحيد بعض الرموز
-    .replace(
-      /&/g,
-      " and "
-    )
-
-    // إزالة أسماء الشركات/الاختصارات
-    // الشائعة في أسماء الأندية
-    .replace(
-      /\b(fc|cf|afc|sc|ac|fk|fk\.|club)\b/gi,
-      ""
-    )
-
-    // إزالة علامات الترقيم
-    .replace(
-      /[^a-z0-9\s]/gi,
-      " "
-    )
-
-    // إزالة المسافات المتكررة
-    .replace(
-      /\s+/g,
-      " "
-    )
-
-    .trim();
-
-}
-
-
-// ==========================================
-// FORMAT DATE
-// ==========================================
-
-function formatDate(
-  date
-) {
+function formatDate(date) {
 
   const year =
     date.getUTCFullYear();
 
-
   const month =
     String(
       date.getUTCMonth() + 1
-    ).padStart(
-      2,
-      "0"
-    );
-
+    ).padStart(2, "0");
 
   const day =
     String(
       date.getUTCDate()
-    ).padStart(
-      2,
-      "0"
-    );
+    ).padStart(2, "0");
 
-
-  return (
-    `${year}-${month}-${day}`
-  );
+  return `${year}-${month}-${day}`;
 
 }
 
-
-// ==========================================
-// GET COMPETITION CODES
-// ==========================================
-
-function getCompetitionCodes(
-  matches
-) {
-
-  const codes =
-    matches
-      .map(
-        match =>
-          match?.competition?.code
-      )
-      .filter(Boolean);
-
-
-  return [
-    ...new Set(
-      codes
-    )
-  ];
-
-}
-
-
-// ==========================================
-// GET COMPETITION COUNT
-// ==========================================
-
-function getCompetitionCount(
-  matches
-) {
-
-  return getCompetitionCodes(
-    matches
-  ).length;
-
-}
-
-
-// ==========================================
-// CREATE PROVIDER
-// ==========================================
 
 const footballDataProvider =
   new FootballDataProvider();
 
-
-// ==========================================
-// REGISTER PROVIDER
-// ==========================================
-
 registerProvider(
   footballDataProvider
 );
-
-
-// ==========================================
-// EXPORT
-// ==========================================
 
 export default footballDataProvider;
