@@ -1,4 +1,4 @@
-// Y.C.B FINAL WORKER 2.2.0
+// Y.C.B FINAL WORKER 2.2.1
 
 import {
   getProviders,
@@ -11,16 +11,12 @@ import "./sofaScoreProvider.js";
 import "./theSportsDBProvider.js";
 import "./bsdProvider.js";
 
-const VERSION =
-  "2.2.0";
+const VERSION = "2.2.1";
 
 
 const HTML = `<!doctype html>
 
-<html
-  lang="ar"
-  dir="rtl"
->
+<html lang="ar" dir="rtl">
 
 <head>
 
@@ -28,7 +24,7 @@ const HTML = `<!doctype html>
 
 <meta
   name="viewport"
-  content="width=device-width,initial-scale=1"
+  content="width=device-width,initial-scale=1,maximum-scale=1"
 >
 
 <title>
@@ -41,17 +37,24 @@ Y.C.B Football Prediction Engine
   box-sizing:border-box
 }
 
+html,
 body{
   margin:0;
+  padding:0;
+  overflow-x:hidden
+}
+
+body{
   font-family:Arial,sans-serif;
   background:#0f172a;
   color:#fff
 }
 
 .app{
+  width:100%;
   max-width:620px;
   margin:auto;
-  padding:22px 16px 50px
+  padding:18px 10px 50px
 }
 
 h1{
@@ -70,8 +73,9 @@ h1{
 .panel{
   background:#1e293b;
   border-radius:18px;
-  padding:18px;
-  margin-bottom:16px
+  padding:16px;
+  margin-bottom:16px;
+  overflow:hidden
 }
 
 input{
@@ -130,13 +134,15 @@ button:disabled{
 .prediction{
   background:#334155;
   border-radius:14px;
-  padding:15px;
-  margin:10px 0
+  padding:14px;
+  margin:10px 0;
+  overflow:hidden
 }
 
 .rank{
   font-size:18px;
-  font-weight:bold
+  font-weight:bold;
+  overflow-wrap:anywhere
 }
 
 .probability{
@@ -159,62 +165,55 @@ button:disabled{
   border-radius:12px;
   padding:12px;
   line-height:1.7;
-  margin-top:12px
+  margin-top:12px;
+  overflow-wrap:anywhere
 }
 
-.stats{
+.recommended-box{
+  background:#064e3b;
+  color:#4ade80
+}
+
+.stats,
+.analysis-grid{
   display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:9px
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px
 }
 
-.stat{
+.stat,
+.analysis-item{
   background:#0f172a;
   border-radius:11px;
-  padding:11px;
+  padding:10px 6px;
   text-align:center;
-  color:#cbd5e1
+  color:#cbd5e1;
+  min-width:0;
+  overflow:hidden
 }
 
-.stat strong{
+.stat strong,
+.analysis-item b{
   display:block;
   color:#fff;
-  font-size:18px;
-  margin-top:4px
+  font-size:17px;
+  margin-top:4px;
+  overflow-wrap:anywhere
 }
 
 .providers{
   color:#cbd5e1;
   font-size:13px;
-  line-height:2
+  line-height:2;
+  overflow-wrap:anywhere
 }
 
 .scoreline{
   text-align:center;
   color:#cbd5e1;
   line-height:1.8;
-  margin-top:12px
-}
-
-.analysis-grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:9px
-}
-
-.analysis-item{
-  background:#0f172a;
-  border-radius:11px;
-  padding:11px;
-  text-align:center;
-  color:#cbd5e1
-}
-
-.analysis-item b{
-  display:block;
-  color:#fff;
-  font-size:18px;
-  margin-top:4px
+  margin-top:12px;
+  overflow-wrap:anywhere
 }
 
 .note{
@@ -222,6 +221,24 @@ button:disabled{
   color:#94a3b8;
   line-height:1.6;
   margin-top:12px
+}
+
+@media(max-width:420px){
+
+  h1{
+    font-size:36px
+  }
+
+  .card,
+  .panel{
+    padding:13px
+  }
+
+  .stat strong,
+  .analysis-item b{
+    font-size:16px
+  }
+
 }
 
 </style>
@@ -483,28 +500,16 @@ BTTS
 async function analyzeMatch(){
 
   const input =
-    document.getElementById(
-      "match"
-    );
-
+    document.getElementById("match");
 
   const button =
-    document.getElementById(
-      "analyzeButton"
-    );
-
+    document.getElementById("analyzeButton");
 
   const status =
-    document.getElementById(
-      "status"
-    );
-
+    document.getElementById("status");
 
   const result =
-    document.getElementById(
-      "result"
-    );
-
+    document.getElementById("result");
 
   const match =
     input.value.trim();
@@ -526,15 +531,12 @@ async function analyzeMatch(){
   button.disabled =
     true;
 
-
   result.classList.add(
     "hidden"
   );
 
-
   status.className =
     "";
-
 
   status.textContent =
     "جاري جمع البيانات وتحليل المباراة...";
@@ -574,9 +576,7 @@ async function analyzeMatch(){
     try{
 
       data =
-        JSON.parse(
-          text
-        );
+        JSON.parse(text);
 
     }catch{
 
@@ -617,7 +617,6 @@ async function analyzeMatch(){
       const prediction =
         predictions[i] ||
         {
-
           label:
             "غير متاح",
 
@@ -626,7 +625,6 @@ async function analyzeMatch(){
 
           explanation:
             ""
-
         };
 
 
@@ -646,7 +644,10 @@ async function analyzeMatch(){
 
         +
 
-        prediction.label;
+        (
+          prediction.label ||
+          "غير متاح"
+        );
 
 
       document.getElementById(
@@ -671,14 +672,20 @@ async function analyzeMatch(){
       );
 
 
+    const recommended =
+      Boolean(
+        data.recommendation?.recommended
+      );
+
+
     recommendation.textContent =
       data.recommendation?.message ||
       "لا توجد توصية.";
 
 
     recommendation.className =
-      data.recommendation?.recommended
-        ? "warning-box success"
+      recommended
+        ? "warning-box recommended-box"
         : "warning-box";
 
 
@@ -687,81 +694,82 @@ async function analyzeMatch(){
       {};
 
 
-    set(
+    setValue(
       "homeGames",
       analysis.home?.games
     );
 
-
-    set(
+    setValue(
       "awayGames",
       analysis.away?.games
     );
 
-
-    set(
+    setValue(
       "homeGF",
-      analysis.home?.goalsForAvg
+      fixed(
+        analysis.home?.goalsForAvg
+      )
     );
 
-
-    set(
+    setValue(
       "awayGF",
-      analysis.away?.goalsForAvg
+      fixed(
+        analysis.away?.goalsForAvg
+      )
     );
 
-
-    set(
+    setValue(
       "homeGA",
-      analysis.home?.goalsAgainstAvg
+      fixed(
+        analysis.home?.goalsAgainstAvg
+      )
     );
 
-
-    set(
+    setValue(
       "awayGA",
-      analysis.away?.goalsAgainstAvg
+      fixed(
+        analysis.away?.goalsAgainstAvg
+      )
     );
 
-
-    set(
+    setValue(
       "homeXg",
-      analysis.model?.homeXg
+      fixed(
+        analysis.model?.homeXg
+      )
     );
 
-
-    set(
+    setValue(
       "awayXg",
-      analysis.model?.awayXg
+      fixed(
+        analysis.model?.awayXg
+      )
     );
 
-
-    set(
+    setValue(
       "homeWin",
-      pct(
+      percent(
         analysis.model?.homeWin
       )
     );
 
-
-    set(
+    setValue(
       "draw",
-      pct(
+      percent(
         analysis.model?.draw
       )
     );
 
-
-    set(
+    setValue(
       "awayWin",
-      pct(
+      percent(
         analysis.model?.awayWin
       )
     );
 
-
-    set(
+    setValue(
       "btts",
-      pct(
+      percent(
         analysis.model?.bttsYes
       )
     );
@@ -866,7 +874,6 @@ async function analyzeMatch(){
     status.className =
       "error";
 
-
     status.textContent =
       error?.message ||
       "حدث خطأ غير معروف.";
@@ -881,7 +888,7 @@ async function analyzeMatch(){
 }
 
 
-function set(
+function setValue(
   id,
   value
 ){
@@ -896,19 +903,32 @@ function set(
 }
 
 
-function pct(
+function fixed(
   value
 ){
 
   return typeof value ===
-    "number"
+    "number" &&
+    Number.isFinite(value)
+
+    ? value.toFixed(2)
+
+    : "-";
+
+}
+
+
+function percent(
+  value
+){
+
+  return typeof value ===
+    "number" &&
+    Number.isFinite(value)
 
     ? (
-        Math.round(
-          value *
-          10000
-        ) / 100
-      ) + "%"
+        value * 100
+      ).toFixed(2) + "%"
 
     : "-";
 
@@ -1150,9 +1170,7 @@ export default {
           calculateDataQuality(
             analysis,
             usable.length,
-            Boolean(
-              merged.fixture
-            )
+            true
           );
 
 
@@ -1932,26 +1950,20 @@ function buildModel(
   let homeWin =
     0;
 
-
   let draw =
     0;
-
 
   let awayWin =
     0;
 
-
   let over25 =
     0;
-
 
   let under25 =
     0;
 
-
   let bttsYes =
     0;
-
 
   let bttsNo =
     0;
@@ -2075,9 +2087,15 @@ function buildModel(
 
   return {
 
-    homeXg,
+    homeXg:
+      round(
+        homeXg
+      ),
 
-    awayXg,
+    awayXg:
+      round(
+        awayXg
+      ),
 
     homeWin,
 
