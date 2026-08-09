@@ -213,7 +213,7 @@ class SofaScoreProvider
 }
 
 
-async function fetchJSON(
+
 async function fetchJSON(url) {
 
   const response =
