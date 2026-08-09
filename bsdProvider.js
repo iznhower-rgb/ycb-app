@@ -70,14 +70,14 @@ class BSDProvider
       const from =
         shiftDate(
           now,
-          -30
+          -365
         );
 
 
       const to =
         shiftDate(
           now,
-          30
+          365
         );
 
 
