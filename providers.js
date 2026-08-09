@@ -1,6 +1,7 @@
 // Y.C.B PROVIDERS CORE
-// Phase 2.1
+// Phase 2.2
 // Stable provider registry + safe multi-provider execution
+// Browser-safe / no provider can break the analysis
 
 const providers = [];
 
@@ -22,7 +23,7 @@ export class DataProvider {
   async getMatchData(
     home,
     away,
-    env
+    env = {}
   ) {
 
     throw new Error(
@@ -114,14 +115,20 @@ export function getProviderInstances() {
 export async function getAllMatchData(
   home,
   away,
-  env
+  env = {}
 ) {
 
   /*
-   * Every provider is executed independently.
+   * Every provider is completely isolated.
    *
-   * A failure in one provider must NEVER
-   * stop the other providers.
+   * A provider can:
+   * - succeed
+   * - fail
+   * - timeout
+   * - be blocked
+   *
+   * None of these conditions can stop
+   * the remaining providers.
    */
 
   const results =
@@ -142,11 +149,6 @@ export async function getAllMatchData(
                 away,
                 env
               );
-
-
-            const durationMs =
-              Date.now() -
-              startedAt;
 
 
             return {
@@ -170,7 +172,9 @@ export async function getAllMatchData(
                 result?.data ||
                 null,
 
-              durationMs
+              durationMs:
+                Date.now() -
+                startedAt
 
             };
 
@@ -178,10 +182,13 @@ export async function getAllMatchData(
             error
           ) {
 
-            const durationMs =
-              Date.now() -
-              startedAt;
-
+            /*
+             * Absolute safety layer.
+             *
+             * Even if a provider accidentally
+             * throws outside its own try/catch,
+             * the whole Y.C.B engine remains alive.
+             */
 
             return {
 
@@ -192,7 +199,9 @@ export async function getAllMatchData(
                 false,
 
               status:
-                "provider_error",
+                classifyProviderError(
+                  error
+                ),
 
               message:
                 error?.message ||
@@ -201,7 +210,9 @@ export async function getAllMatchData(
               data:
                 null,
 
-              durationMs
+              durationMs:
+                Date.now() -
+                startedAt
 
             };
 
@@ -225,5 +236,88 @@ export async function getAllMatchData(
 export function getProviderCount() {
 
   return providers.length;
+
+}
+
+
+/* ==========================================
+   PROVIDER ERROR CLASSIFICATION
+========================================== */
+
+function classifyProviderError(
+  error
+) {
+
+  const message =
+    String(
+      error?.message ||
+      error ||
+      ""
+    ).toLowerCase();
+
+
+  if (
+    message.includes(
+      "timeout"
+    ) ||
+    message.includes(
+      "timed out"
+    )
+  ) {
+
+    return "timeout";
+
+  }
+
+
+  if (
+    message.includes(
+      "cors"
+    ) ||
+    message.includes(
+      "access-control"
+    ) ||
+    message.includes(
+      "blocked"
+    ) ||
+    message.includes(
+      "forbidden"
+    ) ||
+    message.includes(
+      "403"
+    )
+  ) {
+
+    return "access_blocked";
+
+  }
+
+
+  if (
+    message.includes(
+      "401"
+    ) ||
+    message.includes(
+      "unauthorized"
+    )
+  ) {
+
+    return "auth_error";
+
+  }
+
+
+  if (
+    message.includes(
+      "429"
+    )
+  ) {
+
+    return "rate_limited";
+
+  }
+
+
+  return "provider_error";
 
 }
