@@ -157,21 +157,13 @@ button:disabled{
   line-height:1.6;
 }
 
-.recommendation{
-  border-radius:12px;
-  padding:14px;
-  margin-top:15px;
-  line-height:1.7;
-}
-
-.recommended{
-  background:#064e3b;
-  color:#6ee7b7;
-}
-
-.no-bet{
+.warning-box{
   background:#422006;
   color:#fbbf24;
+  border-radius:12px;
+  padding:13px;
+  margin-top:14px;
+  line-height:1.7;
 }
 
 .stats{
@@ -200,13 +192,12 @@ button:disabled{
   margin-top:15px;
 }
 
-.fixture{
-  background:#0f172a;
-  border-radius:12px;
-  padding:14px;
-  line-height:1.9;
-  margin-top:15px;
+.scoreline{
   text-align:center;
+  font-size:16px;
+  color:#cbd5e1;
+  line-height:1.8;
+  margin-top:10px;
 }
 
 </style>
@@ -254,7 +245,6 @@ Football Prediction Engine
   id="result"
   class="hidden"
 >
-
 
 <div class="panel">
 
@@ -340,7 +330,14 @@ Football Prediction Engine
 
 <div
   id="recommendation"
-  class="recommendation no-bet"
+  class="warning-box"
+>
+</div>
+
+
+<div
+  id="scoreline"
+  class="scoreline"
 >
 </div>
 
@@ -348,25 +345,6 @@ Football Prediction Engine
 
 
 <div class="panel">
-
-<h3 class="section-title">
-بيانات المباراة
-</h3>
-
-<div
-  id="fixture"
-  class="fixture"
->
--
-</div>
-
-</div>
-
-
-<div
-  id="statsPanel"
-  class="panel"
->
 
 <h3 class="section-title">
 ملخص البيانات
@@ -385,22 +363,22 @@ Football Prediction Engine
 </div>
 
 <div class="stat">
-متوسط أهداف المضيف
+أهداف المضيف/مباراة
 <strong id="homeGF">-</strong>
 </div>
 
 <div class="stat">
-متوسط أهداف الضيف
+أهداف الضيف/مباراة
 <strong id="awayGF">-</strong>
 </div>
 
 <div class="stat">
-متوسط استقبال المضيف
+استقبال المضيف
 <strong id="homeGA">-</strong>
 </div>
 
 <div class="stat">
-متوسط استقبال الضيف
+استقبال الضيف
 <strong id="awayGA">-</strong>
 </div>
 
@@ -422,7 +400,6 @@ Football Prediction Engine
 </div>
 
 </div>
-
 
 </div>
 
@@ -488,7 +465,7 @@ async function analyzeMatch(){
 
 
   status.textContent =
-    "جاري جمع البيانات وتحليل المباراة...";
+    "جاري جمع البيانات من المصادر وتحليل المباراة...";
 
 
   try{
@@ -525,7 +502,9 @@ async function analyzeMatch(){
     try{
 
       data =
-        JSON.parse(text);
+        JSON.parse(
+          text
+        );
 
     }catch{
 
@@ -557,167 +536,140 @@ async function analyzeMatch(){
         : [];
 
 
-    if(
-      predictions.length !== 3
+    for(
+      let i=0;
+      i<3;
+      i++
     ){
 
-      throw new Error(
-        "المحرك لم يُرجع ثلاثة توقعات."
-      );
+      const prediction =
+        predictions[i] ||
+        {
+
+          label:
+            "غير متاح",
+
+          probability:
+            "غير متاح",
+
+          explanation:
+            ""
+
+        };
+
+
+      const n =
+        i + 1;
+
+
+      document.getElementById(
+        "prediction" + n
+      ).textContent =
+
+        [
+          "🥇 ",
+          "🥈 ",
+          "🥉 "
+        ][i]
+
+        +
+
+        prediction.label;
+
+
+      document.getElementById(
+        "probability" + n
+      ).textContent =
+        prediction.probability;
+
+
+      document.getElementById(
+        "meta" + n
+      ).textContent =
+        prediction.explanation ||
+        "";
 
     }
 
 
-    predictions.forEach(
-      (
-        prediction,
-        index
-      ) => {
-
-        const n =
-          index + 1;
-
-
-        const medals =
-          [
-            "🥇 ",
-            "🥈 ",
-            "🥉 "
-          ];
-
-
-        document.getElementById(
-          "prediction" + n
-        ).textContent =
-          medals[index] +
-          prediction.label;
-
-
-        document.getElementById(
-          "probability" + n
-        ).textContent =
-          prediction.probability;
-
-
-        document.getElementById(
-          "meta" + n
-        ).textContent =
-          prediction.explanation ||
-          "";
-
-      }
-    );
-
-
     const recommendation =
-      data.recommendation || {};
-
-
-    const recommendationElement =
       document.getElementById(
         "recommendation"
       );
 
 
-    recommendationElement.textContent =
-      recommendation.message ||
+    recommendation.textContent =
+      data.recommendation?.message ||
       "لا توجد توصية.";
 
 
-    recommendationElement.className =
-      recommendation.recommended
-        ? "recommendation recommended"
-        : "recommendation no-bet";
+    recommendation.className =
+      data.recommendation?.recommended
+        ? "success"
+        : "warning-box";
 
 
-    const fixture =
-      data.analysis?.fixture ||
-      null;
-
-
-    const fixtureElement =
-      document.getElementById(
-        "fixture"
-      );
-
-
-    if(fixture){
-
-      fixtureElement.innerHTML =
-        "<strong>" +
-        (
-          fixture.homeTeam?.name ||
-          data.match.home
-        ) +
-        "</strong>" +
-        " 🆚 " +
-        "<strong>" +
-        (
-          fixture.awayTeam?.name ||
-          data.match.away
-        ) +
-        "</strong>" +
-        "<br>" +
-        "🏆 " +
-        (
-          fixture.competition ||
-          "-"
-        ) +
-        "<br>" +
-        "📅 " +
-        (
-          fixture.utcDate ||
-          "-"
-        );
-
-    }else{
-
-      fixtureElement.textContent =
-        "لم يتم العثور على بيانات المباراة.";
-
-    }
+    const analysis =
+      data.analysis ||
+      {};
 
 
     document.getElementById(
       "homeGames"
     ).textContent =
-      data.analysis?.home?.games ??
+      analysis.home?.games ??
       "-";
 
 
     document.getElementById(
       "awayGames"
     ).textContent =
-      data.analysis?.away?.games ??
+      analysis.away?.games ??
       "-";
 
 
     document.getElementById(
       "homeGF"
     ).textContent =
-      data.analysis?.home?.goalsForAvg ??
+      analysis.home?.goalsForAvg ??
       "-";
 
 
     document.getElementById(
       "awayGF"
     ).textContent =
-      data.analysis?.away?.goalsForAvg ??
+      analysis.away?.goalsForAvg ??
       "-";
 
 
     document.getElementById(
       "homeGA"
     ).textContent =
-      data.analysis?.home?.goalsAgainstAvg ??
+      analysis.home?.goalsAgainstAvg ??
       "-";
 
 
     document.getElementById(
       "awayGA"
     ).textContent =
-      data.analysis?.away?.goalsAgainstAvg ??
+      analysis.away?.goalsAgainstAvg ??
       "-";
+
+
+    document.getElementById(
+      "scoreline"
+    ).textContent =
+
+      data.predictedScore
+
+        ? "النتيجة الأكثر ترجيحًا: " +
+          data.predictedScore
+
+        : "جودة البيانات: " +
+          (
+            data.dataQuality ??
+            "-"
+          );
 
 
     const providers =
@@ -733,34 +685,30 @@ async function analyzeMatch(){
     ).innerHTML =
 
       providers.map(
-        item => {
+        item =>
 
-          const icon =
+          (
             item.success
               ? "✓"
-              : "✗";
+              : "✗"
+          )
 
+          +
 
-          return (
+          " " +
 
-            icon +
-            " " +
-            item.provider +
-            " — " +
-            (
-              item.status ||
-              "unknown"
-            ) +
-            "<br>" +
-            (
-              item.message ||
-              ""
-            )
+          item.provider +
 
-          );
+          " — " +
 
-        }
-      ).join("<br>");
+          (
+            item.status ||
+            "unknown"
+          )
+
+      ).join(
+        "<br>"
+      );
 
 
     result.classList.remove(
@@ -768,33 +716,21 @@ async function analyzeMatch(){
     );
 
 
-    if(
+    status.className =
+
       data.analysisStatus ===
       "ready"
-    ){
 
-      status.className =
-        "success";
+        ? "success"
 
-    }else{
-
-      status.className =
-        "warning";
-
-    }
+        : "warning";
 
 
     status.textContent =
       data.message ||
       "اكتمل التحليل.";
 
-
   }catch(error){
-
-    console.error(
-      error
-    );
-
 
     status.className =
       "error";
@@ -925,16 +861,13 @@ export default {
       ){
 
         return json(
-
           {
             success:false,
 
             error:
               "POST method required"
           },
-
           405
-
         );
 
       }
@@ -946,50 +879,25 @@ export default {
           await request.json();
 
 
-        const match =
-          String(
-            body?.match ||
-            ""
-          ).trim();
-
-
-        if(!match){
-
-          return json(
-
-            {
-              success:false,
-
-              error:
-                "يجب إدخال المباراة."
-            },
-
-            400
-
-          );
-
-        }
-
-
         const parsed =
           parseMatch(
-            match
+            String(
+              body?.match ||
+              ""
+            )
           );
 
 
         if(!parsed){
 
           return json(
-
             {
               success:false,
 
               error:
                 "اكتب المباراة بهذا الشكل: Arsenal vs Coventry City"
             },
-
             400
-
           );
 
         }
@@ -1033,7 +941,7 @@ export default {
 
 
         // ==================================
-        // NO FIXTURE
+        // FIXTURE NOT FOUND
         // ==================================
 
         if(
@@ -1053,9 +961,6 @@ export default {
             version:
               VERSION,
 
-            architecture:
-              "Multi Provider Architecture",
-
             match:{
               home,
               away
@@ -1065,24 +970,7 @@ export default {
               "insufficient_data",
 
             message:
-              "لم يتم العثور على المباراة في مصادر البيانات الحالية.",
-
-            analysis:{
-
-              home:
-                emptyTeamAnalysis(
-                  home
-                ),
-
-              away:
-                emptyTeamAnalysis(
-                  away
-                ),
-
-              fixture:
-                null
-
-            },
+              "لم يتم العثور على المباراة المطلوبة في المصادر الحالية.",
 
             predictions:
               fallbackPredictions(
@@ -1095,16 +983,13 @@ export default {
               recommended:
                 false,
 
-              market:
-                null,
-
-              probability:
-                null,
-
               message:
-                "لا يوجد رهان موصى به: المباراة غير متاحة في مصادر البيانات."
+                "لا يوجد رهان موصى به: لم يتم التحقق من المباراة."
 
             },
+
+            providers:
+              providerResults,
 
             providerCount:
               providerResults.length,
@@ -1112,8 +997,8 @@ export default {
             successfulProviderCount:
               usable.length,
 
-            providers:
-              providerResults
+            dataQuality:
+              0
 
           });
 
@@ -1121,7 +1006,7 @@ export default {
 
 
         // ==================================
-        // TEAM ANALYSIS
+        // ANALYSIS
         // ==================================
 
         const analysis =
@@ -1136,6 +1021,17 @@ export default {
           analysis.home.games >= 3 &&
           analysis.away.games >= 3;
 
+
+        const dataQuality =
+          calculateDataQuality(
+            analysis,
+            usable.length
+          );
+
+
+        // ==================================
+        // NOT ENOUGH HISTORY
+        // ==================================
 
         if(!enoughData){
 
@@ -1152,9 +1048,6 @@ export default {
             version:
               VERSION,
 
-            architecture:
-              "Multi Provider Architecture",
-
             match:{
               home,
               away
@@ -1164,7 +1057,7 @@ export default {
               "insufficient_data",
 
             message:
-              "تم العثور على المباراة، لكن البيانات التاريخية غير كافية لبناء توقع موثوق.",
+              "تم العثور على المباراة، لكن البيانات التاريخية المتاحة غير كافية لإصدار توقع موثوق.",
 
             analysis,
 
@@ -1179,16 +1072,13 @@ export default {
               recommended:
                 false,
 
-              market:
-                null,
-
-              probability:
-                null,
-
               message:
-                "No Bet — البيانات التاريخية غير كافية."
+                "لا يوجد رهان موصى به حتى تتوفر بيانات تاريخية كافية."
 
             },
+
+            providers:
+              providerResults,
 
             providerCount:
               providerResults.length,
@@ -1196,8 +1086,7 @@ export default {
             successfulProviderCount:
               usable.length,
 
-            providers:
-              providerResults
+            dataQuality
 
           });
 
@@ -1205,28 +1094,38 @@ export default {
 
 
         // ==================================
-        // PREDICTIONS
+        // PREDICTION ENGINE
         // ==================================
 
-        const predictions =
+        const predictionResult =
           buildPredictions(
             analysis
           );
+
+
+        const predictions =
+          predictionResult.predictions;
+
+
+        const top =
+          predictions[0];
 
 
         // ==================================
         // RECOMMENDATION
         // ==================================
 
-        const top =
-          predictions[0];
-
-
         const recommended =
           Boolean(
+
             top &&
+
             top.probabilityValue >=
-              0.60
+              0.60 &&
+
+            dataQuality >=
+              60
+
           );
 
 
@@ -1245,11 +1144,12 @@ export default {
               : null,
 
           message:
+
             recommended
 
               ? `التوقع الأقوى حاليًا: ${top.label} بنسبة ${top.probability}.`
 
-              : "No Bet — لا يوجد توقع تجاوز حد الثقة الحالي."
+              : "لا يوجد رهان موصى به: الثقة أو جودة البيانات أقل من الحد المطلوب."
 
         };
 
@@ -1292,14 +1192,19 @@ export default {
 
           recommendation,
 
+          predictedScore:
+            predictionResult.predictedScore,
+
+          dataQuality,
+
+          providers:
+            providerResults,
+
           providerCount:
             providerResults.length,
 
           successfulProviderCount:
-            usable.length,
-
-          providers:
-            providerResults
+            usable.length
 
         });
 
@@ -1314,14 +1219,11 @@ export default {
         return json(
 
           {
-            success:
-              false,
+            success:false,
 
             error:
               error?.message ||
-              String(error) ||
-              "Unknown server error"
-
+              String(error)
           },
 
           500
@@ -1366,7 +1268,7 @@ export default {
 
 
 // ==========================================
-// PARSE MATCH
+// MATCH PARSER
 // ==========================================
 
 function parseMatch(
@@ -1374,9 +1276,11 @@ function parseMatch(
 ){
 
   const parts =
-    value.split(
-      /\s+vs\s+/i
-    );
+    value
+      .trim()
+      .split(
+        /\s+vs\s+/i
+      );
 
 
   if(
@@ -1419,7 +1323,7 @@ function parseMatch(
 // ==========================================
 
 function mergeProviderData(
-  successfulProviders
+  results
 ){
 
   let fixture =
@@ -1435,12 +1339,12 @@ function mergeProviderData(
 
 
   for(
-    const provider
-    of successfulProviders
+    const item
+    of results
   ){
 
     const data =
-      provider.data ||
+      item.data ||
       {};
 
 
@@ -1455,19 +1359,14 @@ function mergeProviderData(
     }
 
 
-    const recent =
-      data.recentMatches ||
-      {};
-
-
     if(
       Array.isArray(
-        recent.home
+        data.recentMatches?.home
       )
     ){
 
       homeMatches.push(
-        ...recent.home
+        ...data.recentMatches.home
       );
 
     }
@@ -1475,12 +1374,12 @@ function mergeProviderData(
 
     if(
       Array.isArray(
-        recent.away
+        data.recentMatches?.away
       )
     ){
 
       awayMatches.push(
-        ...recent.away
+        ...data.recentMatches.away
       );
 
     }
@@ -1526,12 +1425,15 @@ function dedupeMatches(
 
         const key =
           String(
+
             match.id ||
+
             [
               match.utcDate,
               match.homeTeam?.name,
               match.awayTeam?.name
             ].join("|")
+
           );
 
 
@@ -1602,54 +1504,7 @@ function buildTeamAnalysis(
       calculateTeamStats(
         awayName,
         merged.awayMatches
-      ),
-
-    fixture:
-      merged.fixture
-
-  };
-
-}
-
-
-// ==========================================
-// EMPTY ANALYSIS
-// ==========================================
-
-function emptyTeamAnalysis(
-  team
-){
-
-  return {
-
-    team,
-
-    games:
-      0,
-
-    wins:
-      0,
-
-    draws:
-      0,
-
-    losses:
-      0,
-
-    formPoints:
-      0,
-
-    formMax:
-      0,
-
-    formRate:
-      0,
-
-    goalsForAvg:
-      0,
-
-    goalsAgainstAvg:
-      0
+      )
 
   };
 
@@ -1665,7 +1520,7 @@ function calculateTeamStats(
   matches
 ){
 
-  const normalizedTeam =
+  const team =
     normalizeName(
       teamName
     );
@@ -1689,13 +1544,13 @@ function calculateTeamStats(
             );
 
 
-          const hg =
+          const homeGoals =
             Number(
               match.score?.fullTime?.home
             );
 
 
-          const ag =
+          const awayGoals =
             Number(
               match.score?.fullTime?.away
             );
@@ -1703,10 +1558,11 @@ function calculateTeamStats(
 
           if(
             !Number.isFinite(
-              hg
+              homeGoals
             ) ||
+
             !Number.isFinite(
-              ag
+              awayGoals
             )
           ){
 
@@ -1716,10 +1572,15 @@ function calculateTeamStats(
 
 
           if(
-            home !==
-              normalizedTeam &&
-            away !==
-              normalizedTeam
+            !namesMatch(
+              home,
+              team
+            ) &&
+
+            !namesMatch(
+              away,
+              team
+            )
           ){
 
             return null;
@@ -1728,51 +1589,37 @@ function calculateTeamStats(
 
 
           const isHome =
-            home ===
-            normalizedTeam;
+            namesMatch(
+              home,
+              team
+            );
 
 
           const gf =
             isHome
-              ? hg
-              : ag;
+              ? homeGoals
+              : awayGoals;
 
 
           const ga =
             isHome
-              ? ag
-              : hg;
-
-
-          let result =
-            "D";
-
-
-          if(
-            gf > ga
-          ){
-
-            result =
-              "W";
-
-          }
-
-
-          if(
-            gf < ga
-          ){
-
-            result =
-              "L";
-
-          }
+              ? awayGoals
+              : homeGoals;
 
 
           return {
 
             gf,
             ga,
-            result
+
+            result:
+
+              gf > ga
+                ? "W"
+
+                : gf < ga
+                  ? "L"
+                  : "D"
 
           };
 
@@ -1816,6 +1663,7 @@ function calculateTeamStats(
 
             0
           ) /
+
           items.length
 
         : 0;
@@ -1849,32 +1697,6 @@ function calculateTeamStats(
     );
 
 
-  const goalsForAvg =
-    last5.length
-
-      ? (
-          gf5 * 0.60
-        ) +
-        (
-          gf10 * 0.40
-        )
-
-      : gf10;
-
-
-  const goalsAgainstAvg =
-    last5.length
-
-      ? (
-          ga5 * 0.60
-        ) +
-        (
-          ga10 * 0.40
-        )
-
-      : ga10;
-
-
   const wins =
     usable.filter(
       item =>
@@ -1892,11 +1714,9 @@ function calculateTeamStats(
 
 
   const losses =
-    usable.filter(
-      item =>
-        item.result ===
-        "L"
-    ).length;
+    usable.length -
+    wins -
+    draws;
 
 
   const formPoints =
@@ -1904,8 +1724,16 @@ function calculateTeamStats(
     draws;
 
 
-  const formMax =
-    usable.length * 3;
+  const formRate =
+    usable.length
+
+      ? formPoints /
+        (
+          usable.length *
+          3
+        )
+
+      : 0;
 
 
   return {
@@ -1924,22 +1752,36 @@ function calculateTeamStats(
 
     formPoints,
 
-    formMax,
-
     formRate:
-      formMax
-        ? formPoints /
-          formMax
-        : 0,
+
+      round(
+        formRate
+      ),
 
     goalsForAvg:
+
       round(
-        goalsForAvg
+
+        last5.length
+
+          ? gf5 * 0.6 +
+            gf10 * 0.4
+
+          : gf10
+
       ),
 
     goalsAgainstAvg:
+
       round(
-        goalsAgainstAvg
+
+        last5.length
+
+          ? ga5 * 0.6 +
+            ga10 * 0.4
+
+          : ga10
+
       )
 
   };
@@ -1967,6 +1809,7 @@ function buildPredictions(
     clamp(
 
       (
+
         home.goalsForAvg *
         0.55
 
@@ -1975,7 +1818,9 @@ function buildPredictions(
         away.goalsAgainstAvg *
         0.45
 
-      ) *
+      )
+
+      *
 
       1.08,
 
@@ -1990,6 +1835,7 @@ function buildPredictions(
     clamp(
 
       (
+
         away.goalsForAvg *
         0.55
 
@@ -1998,7 +1844,9 @@ function buildPredictions(
         home.goalsAgainstAvg *
         0.45
 
-      ) *
+      )
+
+      *
 
       0.92,
 
@@ -2020,45 +1868,73 @@ function buildPredictions(
   let homeWin =
     0;
 
-
   let draw =
     0;
-
 
   let awayWin =
     0;
 
-
   let over25 =
     0;
-
 
   let under25 =
     0;
 
-
   let bttsYes =
     0;
-
 
   let bttsNo =
     0;
 
 
+  let bestScore = {
+
+    probability:
+      -1,
+
+    home:
+      0,
+
+    away:
+      0
+
+  };
+
+
   for(
-    let h = 0;
-    h < matrix.length;
+    let h=0;
+    h<matrix.length;
     h++
   ){
 
     for(
-      let a = 0;
-      a < matrix[h].length;
+      let a=0;
+      a<matrix[h].length;
       a++
     ){
 
-      const p =
+      const probability =
         matrix[h][a];
+
+
+      if(
+        probability >
+        bestScore.probability
+      ){
+
+        bestScore = {
+
+          probability,
+
+          home:
+            h,
+
+          away:
+            a
+
+        };
+
+      }
 
 
       if(
@@ -2066,19 +1942,23 @@ function buildPredictions(
       ){
 
         homeWin +=
-          p;
+          probability;
 
-      }else if(
+      }
+
+      else if(
         h === a
       ){
 
         draw +=
-          p;
+          probability;
 
-      }else{
+      }
+
+      else{
 
         awayWin +=
-          p;
+          probability;
 
       }
 
@@ -2088,12 +1968,14 @@ function buildPredictions(
       ){
 
         over25 +=
-          p;
+          probability;
 
-      }else{
+      }
+
+      else{
 
         under25 +=
-          p;
+          probability;
 
       }
 
@@ -2104,12 +1986,14 @@ function buildPredictions(
       ){
 
         bttsYes +=
-          p;
+          probability;
 
-      }else{
+      }
+
+      else{
 
         bttsNo +=
-          p;
+          probability;
 
       }
 
@@ -2132,7 +2016,7 @@ function buildPredictions(
         homeWin,
 
       explanation:
-        `Poisson | xG تقديري: ${round(homeXg)} - ${round(awayXg)}`
+        "مبني على قوة التسجيل والاستقبال وآخر النتائج."
 
     },
 
@@ -2149,7 +2033,7 @@ function buildPredictions(
         draw,
 
       explanation:
-        `Poisson | xG تقديري: ${round(homeXg)} - ${round(awayXg)}`
+        "احتمال التعادل وفق توزيع أهداف بواسون."
 
     },
 
@@ -2166,7 +2050,7 @@ function buildPredictions(
         awayWin,
 
       explanation:
-        `Poisson | xG تقديري: ${round(homeXg)} - ${round(awayXg)}`
+        "مبني على قوة التسجيل والاستقبال وآخر النتائج."
 
     },
 
@@ -2183,7 +2067,7 @@ function buildPredictions(
         over25,
 
       explanation:
-        "Poisson | ثلاثة أهداف أو أكثر"
+        "احتمال تسجيل ثلاثة أهداف أو أكثر."
 
     },
 
@@ -2200,7 +2084,7 @@ function buildPredictions(
         under25,
 
       explanation:
-        "Poisson | صفر إلى هدفين"
+        "احتمال تسجيل صفر إلى هدفين."
 
     },
 
@@ -2217,7 +2101,7 @@ function buildPredictions(
         bttsYes,
 
       explanation:
-        "Poisson | تسجيل الفريقين هدفًا على الأقل"
+        "احتمال تسجيل الفريقين هدفًا واحدًا على الأقل."
 
     },
 
@@ -2234,7 +2118,7 @@ function buildPredictions(
         bttsNo,
 
       explanation:
-        "Poisson | أحد الفريقين على الأقل لا يسجل"
+        "احتمال عدم تسجيل أحد الفريقين على الأقل."
 
     }
 
@@ -2251,111 +2135,47 @@ function buildPredictions(
   );
 
 
-  return candidates
+  return {
 
-    .slice(
-      0,
-      3
-    )
+    predictions:
 
-    .map(
-      item => ({
+      candidates
 
-        outcome:
-          item.key,
+        .slice(
+          0,
+          3
+        )
 
-        label:
-          item.label,
+        .map(
+          item => ({
 
-        probabilityValue:
-          item.probabilityValue,
+            outcome:
+              item.key,
 
-        probability:
-          `${round(
-            item.probabilityValue *
-            100
-          )}%`,
+            label:
+              item.label,
 
-        explanation:
-          item.explanation
+            probabilityValue:
+              item.probabilityValue,
 
-      })
-    );
+            probability:
+              `${round(
+                item.probabilityValue *
+                100
+              )}%`,
 
-}
+            explanation:
+              item.explanation
 
-
-// ==========================================
-// FALLBACK
-// ==========================================
-
-function fallbackPredictions(
-  home,
-  away
-){
-
-  return [
-
-    {
-
-      outcome:
-        "unavailable",
-
-      label:
-        `فوز ${home}`,
-
-      probability:
-        "غير متاح",
-
-      probabilityValue:
-        0,
-
-      explanation:
-        "لا توجد بيانات تاريخية كافية."
-
-    },
+          })
+        ),
 
 
-    {
+    predictedScore:
 
-      outcome:
-        "unavailable",
+      `${bestScore.home} - ${bestScore.away}`
 
-      label:
-        "التعادل",
-
-      probability:
-        "غير متاح",
-
-      probabilityValue:
-        0,
-
-      explanation:
-        "لا توجد بيانات تاريخية كافية."
-
-    },
-
-
-    {
-
-      outcome:
-        "unavailable",
-
-      label:
-        `فوز ${away}`,
-
-      probability:
-        "غير متاح",
-
-      probabilityValue:
-        0,
-
-      explanation:
-        "لا توجد بيانات تاريخية كافية."
-
-    }
-
-  ];
+  };
 
 }
 
@@ -2389,8 +2209,8 @@ function poissonMatrix(
 
 
   for(
-    let h = 0;
-    h <= maxGoals;
+    let h=0;
+    h<=maxGoals;
     h++
   ){
 
@@ -2399,8 +2219,8 @@ function poissonMatrix(
 
 
     for(
-      let a = 0;
-      a <= maxGoals;
+      let a=0;
+      a<=maxGoals;
       a++
     ){
 
@@ -2413,7 +2233,28 @@ function poissonMatrix(
   }
 
 
-  return matrix;
+  const total =
+    matrix
+      .flat()
+      .reduce(
+        (
+          sum,
+          value
+        ) =>
+          sum + value,
+
+        0
+      );
+
+
+  return matrix.map(
+    row =>
+      row.map(
+        value =>
+          value /
+          total
+      )
+  );
 
 }
 
@@ -2432,8 +2273,8 @@ function poissonSeries(
 
 
   for(
-    let k = 0;
-    k <= max;
+    let k=0;
+    k<=max;
     k++
   ){
 
@@ -2441,12 +2282,16 @@ function poissonSeries(
 
       Math.exp(
         -lambda
-      ) *
+      )
+
+      *
 
       Math.pow(
         lambda,
         k
-      ) /
+      )
+
+      /
 
       factorial(
         k
@@ -2475,8 +2320,8 @@ function factorial(
 
 
   for(
-    let i = 2;
-    i <= n;
+    let i=2;
+    i<=n;
     i++
   ){
 
@@ -2487,6 +2332,134 @@ function factorial(
 
 
   return result;
+
+}
+
+
+// ==========================================
+// FALLBACK
+// ==========================================
+
+function fallbackPredictions(
+  home,
+  away
+){
+
+  return [
+
+    {
+
+      outcome:
+        "unavailable",
+
+      label:
+        `فوز ${home}`,
+
+      probability:
+        "غير متاح",
+
+      probabilityValue:
+        0,
+
+      explanation:
+        "لا توجد بيانات كافية."
+
+    },
+
+
+    {
+
+      outcome:
+        "unavailable",
+
+      label:
+        "التعادل",
+
+      probability:
+        "غير متاح",
+
+      probabilityValue:
+        0,
+
+      explanation:
+        "لا توجد بيانات كافية."
+
+    },
+
+
+    {
+
+      outcome:
+        "unavailable",
+
+      label:
+        `فوز ${away}`,
+
+      probability:
+        "غير متاح",
+
+      probabilityValue:
+        0,
+
+      explanation:
+        "لا توجد بيانات كافية."
+
+    }
+
+  ];
+
+}
+
+
+// ==========================================
+// DATA QUALITY
+// ==========================================
+
+function calculateDataQuality(
+  analysis,
+  providerCount
+){
+
+  const games =
+    Math.min(
+      analysis.home.games,
+      analysis.away.games
+    );
+
+
+  const historyScore =
+    (
+      Math.min(
+        games,
+        10
+      ) /
+      10
+    ) *
+
+    80;
+
+
+  const providerScore =
+    Math.min(
+      providerCount,
+      2
+    ) *
+
+    10;
+
+
+  return Math.round(
+
+    clamp(
+      historyScore +
+      providerScore,
+
+      0,
+
+      100
+    )
+
+  );
 
 }
 
@@ -2540,6 +2513,62 @@ function normalizeName(
 
 
 // ==========================================
+// TEAM NAME MATCH
+// ==========================================
+
+function namesMatch(
+  first,
+  second
+){
+
+  if(
+    !first ||
+    !second
+  ){
+
+    return false;
+
+  }
+
+
+  if(
+    first === second ||
+    first.includes(second) ||
+    second.includes(first)
+  ){
+
+    return true;
+
+  }
+
+
+  const tokens =
+    new Set(
+
+      first
+        .split(" ")
+        .filter(
+          token =>
+            token.length >= 3
+        )
+
+    );
+
+
+  return second
+    .split(" ")
+    .some(
+      token =>
+        token.length >= 3 &&
+        tokens.has(
+          token
+        )
+    );
+
+}
+
+
+// ==========================================
 // CLAMP
 // ==========================================
 
@@ -2580,7 +2609,7 @@ function round(
 
 
 // ==========================================
-// JSON RESPONSE
+// JSON
 // ==========================================
 
 function json(
