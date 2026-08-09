@@ -1,9 +1,19 @@
 // Y.C.B PROVIDERS CORE
 // Phase 2.2
 // Stable provider registry + safe multi-provider execution
-// Browser-safe / no provider can break the analysis
+// Browser-safe provider execution
+// No provider failure can stop the complete analysis
+
 
 const providers = [];
+
+
+/* ==========================================
+   CONSTANTS
+========================================== */
+
+const DEFAULT_PROVIDER_TIMEOUT =
+  15000;
 
 
 /* ==========================================
@@ -23,7 +33,7 @@ export class DataProvider {
   async getMatchData(
     home,
     away,
-    env = {}
+    env
   ) {
 
     throw new Error(
@@ -78,6 +88,63 @@ export function registerProvider(
 
 
 /* ==========================================
+   UNREGISTER PROVIDER
+========================================== */
+
+export function unregisterProvider(
+  name
+) {
+
+  const target =
+    String(
+      name || ""
+    ).trim();
+
+
+  if (!target) {
+    return false;
+  }
+
+
+  const index =
+    providers.findIndex(
+      provider =>
+        provider.name === target
+    );
+
+
+  if (
+    index === -1
+  ) {
+
+    return false;
+
+  }
+
+
+  providers.splice(
+    index,
+    1
+  );
+
+
+  return true;
+
+}
+
+
+/* ==========================================
+   CLEAR PROVIDERS
+========================================== */
+
+export function clearProviders() {
+
+  providers.length = 0;
+
+}
+
+
+/* ==========================================
    GET PROVIDERS
 ========================================== */
 
@@ -109,6 +176,104 @@ export function getProviderInstances() {
 
 
 /* ==========================================
+   SAFE PROVIDER EXECUTION
+========================================== */
+
+async function executeProvider(
+  provider,
+  home,
+  away,
+  env
+) {
+
+  const startedAt =
+    Date.now();
+
+
+  try {
+
+    const result =
+      await provider.getMatchData(
+        home,
+        away,
+        env
+      );
+
+
+    const durationMs =
+      Date.now() -
+      startedAt;
+
+
+    const safeResult =
+      result &&
+      typeof result === "object"
+        ? result
+        : {};
+
+
+    return {
+
+      provider:
+        provider.name,
+
+      success:
+        safeResult.status ===
+        "success",
+
+      status:
+        safeResult.status ||
+        "unknown",
+
+      message:
+        safeResult.message ||
+        "",
+
+      data:
+        safeResult.data ??
+        null,
+
+      durationMs
+
+    };
+
+  } catch (
+    error
+  ) {
+
+    const durationMs =
+      Date.now() -
+      startedAt;
+
+
+    return {
+
+      provider:
+        provider.name,
+
+      success:
+        false,
+
+      status:
+        "provider_error",
+
+      message:
+        error?.message ||
+        String(error),
+
+      data:
+        null,
+
+      durationMs
+
+    };
+
+  }
+
+}
+
+
+/* ==========================================
    GET ALL MATCH DATA
 ========================================== */
 
@@ -119,17 +284,72 @@ export async function getAllMatchData(
 ) {
 
   /*
-   * Every provider is completely isolated.
+   * Every provider runs independently.
    *
-   * A provider can:
-   * - succeed
-   * - fail
-   * - timeout
-   * - be blocked
-   *
-   * None of these conditions can stop
-   * the remaining providers.
+   * A failure in one provider NEVER
+   * stops another provider.
    */
+
+
+  if (
+    providers.length === 0
+  ) {
+
+    return [];
+
+  }
+
+
+  const results =
+    await Promise.all(
+      providers.map(
+        provider =>
+          executeProvider(
+            provider,
+            home,
+            away,
+            env
+          )
+      )
+    );
+
+
+  return results;
+
+}
+
+
+/* ==========================================
+   GET ALL MATCH DATA WITH TIMEOUT
+========================================== */
+
+export async function getAllMatchDataSafe(
+  home,
+  away,
+  env = {},
+  timeoutMs =
+    DEFAULT_PROVIDER_TIMEOUT
+) {
+
+  if (
+    providers.length === 0
+  ) {
+
+    return [];
+
+  }
+
+
+  const timeout =
+    Number.isFinite(
+      Number(timeoutMs)
+    )
+      ? Math.max(
+          1000,
+          Number(timeoutMs)
+        )
+      : DEFAULT_PROVIDER_TIMEOUT;
+
 
   const results =
     await Promise.all(
@@ -144,11 +364,45 @@ export async function getAllMatchData(
           try {
 
             const result =
-              await provider.getMatchData(
-                home,
-                away,
-                env
-              );
+              await Promise.race([
+
+                provider.getMatchData(
+                  home,
+                  away,
+                  env
+                ),
+
+                new Promise(
+                  (_, reject) => {
+
+                    setTimeout(
+                      () => {
+
+                        const error =
+                          new Error(
+                            `Provider timeout after ${timeout}ms`
+                          );
+
+                        error.code =
+                          "PROVIDER_TIMEOUT";
+
+                        reject(
+                          error
+                        );
+
+                      },
+                      timeout
+                    );
+
+                  }
+                )
+
+              ]);
+
+
+            const durationMs =
+              Date.now() -
+              startedAt;
 
 
             return {
@@ -169,12 +423,10 @@ export async function getAllMatchData(
                 "",
 
               data:
-                result?.data ||
+                result?.data ??
                 null,
 
-              durationMs:
-                Date.now() -
-                startedAt
+              durationMs
 
             };
 
@@ -182,13 +434,10 @@ export async function getAllMatchData(
             error
           ) {
 
-            /*
-             * Absolute safety layer.
-             *
-             * Even if a provider accidentally
-             * throws outside its own try/catch,
-             * the whole Y.C.B engine remains alive.
-             */
+            const durationMs =
+              Date.now() -
+              startedAt;
+
 
             return {
 
@@ -199,9 +448,12 @@ export async function getAllMatchData(
                 false,
 
               status:
-                classifyProviderError(
-                  error
-                ),
+                error?.code ===
+                  "PROVIDER_TIMEOUT"
+
+                  ? "timeout"
+
+                  : "provider_error",
 
               message:
                 error?.message ||
@@ -210,9 +462,7 @@ export async function getAllMatchData(
               data:
                 null,
 
-              durationMs:
-                Date.now() -
-                startedAt
+              durationMs
 
             };
 
@@ -241,83 +491,68 @@ export function getProviderCount() {
 
 
 /* ==========================================
-   PROVIDER ERROR CLASSIFICATION
+   PROVIDER STATUS SUMMARY
 ========================================== */
 
-function classifyProviderError(
-  error
+export function summarizeProviderResults(
+  results
 ) {
 
-  const message =
-    String(
-      error?.message ||
-      error ||
-      ""
-    ).toLowerCase();
+  const list =
+    Array.isArray(results)
+      ? results
+      : [];
 
 
-  if (
-    message.includes(
-      "timeout"
-    ) ||
-    message.includes(
-      "timed out"
-    )
-  ) {
+  return {
 
-    return "timeout";
+    total:
+      list.length,
 
-  }
+    successful:
+      list.filter(
+        item =>
+          item?.success === true
+      ).length,
 
+    available:
+      list.filter(
+        item =>
+          item?.data?.available === true
+      ).length,
 
-  if (
-    message.includes(
-      "cors"
-    ) ||
-    message.includes(
-      "access-control"
-    ) ||
-    message.includes(
-      "blocked"
-    ) ||
-    message.includes(
-      "forbidden"
-    ) ||
-    message.includes(
-      "403"
-    )
-  ) {
+    blocked:
+      list.filter(
+        item =>
+          item?.status ===
+          "access_blocked"
+      ).length,
 
-    return "access_blocked";
+    errors:
+      list.filter(
+        item =>
+          [
+            "provider_error",
+            "network_error",
+            "api_error",
+            "endpoint_not_found",
+            "timeout"
+          ].includes(
+            item?.status
+          )
+      ).length,
 
-  }
+    disabled:
+      list.filter(
+        item =>
+          String(
+            item?.status ||
+            ""
+          ).startsWith(
+            "disabled"
+          )
+      ).length
 
-
-  if (
-    message.includes(
-      "401"
-    ) ||
-    message.includes(
-      "unauthorized"
-    )
-  ) {
-
-    return "auth_error";
-
-  }
-
-
-  if (
-    message.includes(
-      "429"
-    )
-  ) {
-
-    return "rate_limited";
-
-  }
-
-
-  return "provider_error";
+  };
 
 }
