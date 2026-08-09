@@ -81,12 +81,32 @@ class BSDProvider
         );
 
 
+      /*
+       * أولاً نحاول الحصول على IDs دقيقة للفريقين.
+       * استخدام team_id أدق من البحث باسم الفريق.
+       */
+
+      const homeTeamId =
+        await findTeamId(
+          home,
+          token
+        );
+
+
+      const awayTeamId =
+        await findTeamId(
+          away,
+          token
+        );
+
+
       const homeEvents =
         await getTeamEvents(
           home,
           from,
           to,
-          token
+          token,
+          homeTeamId
         );
 
 
@@ -95,7 +115,8 @@ class BSDProvider
           away,
           from,
           to,
-          token
+          token,
+          awayTeamId
         );
 
 
@@ -119,14 +140,16 @@ class BSDProvider
       const homeRecent =
         await getRecentMatches(
           home,
-          token
+          token,
+          homeTeamId
         );
 
 
       const awayRecent =
         await getRecentMatches(
           away,
-          token
+          token,
+          awayTeamId
         );
 
 
@@ -164,6 +187,16 @@ class BSDProvider
                   fixture
                 )
               : null,
+
+          teamIds: {
+
+            home:
+              homeTeamId,
+
+            away:
+              awayTeamId
+
+          },
 
           recentMatches: {
 
@@ -217,11 +250,134 @@ class BSDProvider
 }
 
 
+/*
+ * البحث عن الفريق في BSD والحصول على team_id.
+ *
+ * BSD يوفر قائمة الفرق عبر /api/v2/teams/
+ * مع دعم البحث بالاسم.
+ */
+
+async function findTeamId(
+  team,
+  token
+) {
+
+  if (
+    !team
+  ) {
+
+    return null;
+
+  }
+
+
+  const url =
+    new URL(
+      `${API}/api/v2/teams/`
+    );
+
+
+  url.searchParams.set(
+    "search",
+    team
+  );
+
+
+  url.searchParams.set(
+    "limit",
+    "50"
+  );
+
+
+  url.searchParams.set(
+    "offset",
+    "0"
+  );
+
+
+  const data =
+    await fetchJSON(
+      url.toString(),
+      token
+    );
+
+
+  const results =
+    Array.isArray(
+      data?.results
+    )
+
+      ? data.results
+
+      : Array.isArray(
+          data?.teams
+        )
+
+        ? data.teams
+
+        : [];
+
+
+  if (
+    !results.length
+  ) {
+
+    return null;
+
+  }
+
+
+  const wanted =
+    normalizeName(
+      team
+    );
+
+
+  const exact =
+    results.find(
+      item =>
+        namesMatch(
+          normalizeName(
+            item?.name ||
+            item?.short_name ||
+            item?.shortName ||
+            ""
+          ),
+          wanted
+        )
+    );
+
+
+  if (
+    exact?.id != null
+  ) {
+
+    return exact.id;
+
+  }
+
+
+  return (
+    results[0]?.id ??
+    null
+  );
+
+}
+
+
+/*
+ * جلب مباريات الفريق.
+ *
+ * إذا وجدنا team_id نستخدمه لأنه أدق.
+ * إذا لم نجده نستخدم اسم الفريق كـ fallback.
+ */
+
 async function getTeamEvents(
   team,
   from,
   to,
-  token
+  token,
+  teamId = null
 ) {
 
   const url =
@@ -230,10 +386,25 @@ async function getTeamEvents(
     );
 
 
-  url.searchParams.set(
-    "team",
-    team
-  );
+  if (
+    teamId != null
+  ) {
+
+    url.searchParams.set(
+      "team_id",
+      String(
+        teamId
+      )
+    );
+
+  } else {
+
+    url.searchParams.set(
+      "team",
+      team
+    );
+
+  }
 
 
   url.searchParams.set(
@@ -254,7 +425,13 @@ async function getTeamEvents(
 
   url.searchParams.set(
     "limit",
-    "100"
+    "200"
+  );
+
+
+  url.searchParams.set(
+    "offset",
+    "0"
   );
 
 
@@ -272,8 +449,7 @@ async function getTeamEvents(
     ? data.results
 
     : Array.isArray(
-        data
-          ?.events
+        data?.events
       )
 
       ? data.events
@@ -285,7 +461,8 @@ async function getTeamEvents(
 
 async function getRecentMatches(
   team,
-  token
+  token,
+  teamId = null
 ) {
 
   const now =
@@ -304,7 +481,8 @@ async function getRecentMatches(
       team,
       from,
       now,
-      token
+      token,
+      teamId
     );
 
 
@@ -395,7 +573,6 @@ async function fetchJSON(
 
     throw new Error(
       `BSD HTTP ${response.status}`
-
     );
 
   }
@@ -439,7 +616,12 @@ function findMatch(
 
           event
             ?.home
-            ?.name
+            ?.name ||
+
+          event
+            ?.home_team_name ||
+
+          ""
         );
 
 
@@ -455,7 +637,12 @@ function findMatch(
 
           event
             ?.away
-            ?.name
+            ?.name ||
+
+          event
+            ?.away_team_name ||
+
+          ""
         );
 
 
@@ -549,21 +736,6 @@ function normalizeEvent(
     );
 
 
-  const timestamp =
-    event
-      ?.start_timestamp
-
-    ||
-
-    event
-      ?.startTimestamp
-
-    ||
-
-    event
-      ?.timestamp;
-
-
   return {
 
     id:
@@ -608,6 +780,9 @@ function normalizeEvent(
         home
           ?.name ||
 
+        event
+          ?.home_team_name ||
+
         null,
 
       shortName:
@@ -635,6 +810,9 @@ function normalizeEvent(
       name:
         away
           ?.name ||
+
+        event
+          ?.away_team_name ||
 
         null,
 
@@ -671,6 +849,9 @@ function normalizeEvent(
       event
         ?.tournament
         ?.name ||
+
+      event
+        ?.league_name ||
 
       null
 
@@ -765,7 +946,10 @@ function toISODate(
       ?.start_timestamp ||
 
     event
-      ?.startTimestamp;
+      ?.startTimestamp ||
+
+    event
+      ?.timestamp;
 
 
   if (
@@ -862,16 +1046,34 @@ function dedupeEvents(
           event?.id ||
 
           [
+
             event
               ?.start_timestamp,
 
             event
+              ?.startTimestamp,
+
+            event
               ?.home_team
-              ?.name,
+              ?.name ||
+
+            event
+              ?.homeTeam
+              ?.name ||
+
+            event
+              ?.home_team_name,
 
             event
               ?.away_team
-              ?.name
+              ?.name ||
+
+            event
+              ?.awayTeam
+              ?.name ||
+
+            event
+              ?.away_team_name
 
           ].join("|")
 
@@ -1028,17 +1230,21 @@ function namesMatch(
     );
 
 
-  return second
-    .split(" ")
-    .some(
-      item =>
+  const secondTokens =
+    second
+      .split(" ")
+      .filter(
+        item =>
+          item.length >= 3
+      );
 
-        item.length >= 3 &&
 
-        firstTokens.has(
-          item
-        )
-    );
+  return secondTokens.some(
+    item =>
+      firstTokens.has(
+        item
+      )
+  );
 
 }
 
