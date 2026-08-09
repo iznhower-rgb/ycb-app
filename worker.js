@@ -7,6 +7,7 @@ import {
   getAllMatchData
 } from "./providers.js";
 
+import "./espnProvider.js";
 import "./footballDataProvider.js";
 import "./sofaScoreProvider.js";
 
