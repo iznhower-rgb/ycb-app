@@ -16,6 +16,10 @@ const API_BASE =
   "https://api.football-data.org/v4";
 
 
+// ==========================================
+// COMPETITION
+// ==========================================
+
 // Premier League
 const COMPETITION_CODE =
   "PL";
@@ -25,11 +29,15 @@ const COMPETITION_CODE =
 // FOOTBALL-DATA.ORG PROVIDER
 // ==========================================
 
-class FootballDataProvider extends DataProvider {
+class FootballDataProvider
+  extends DataProvider {
+
 
   constructor() {
 
-    super("Football-Data.org");
+    super(
+      "Football-Data.org"
+    );
 
   }
 
@@ -38,24 +46,31 @@ class FootballDataProvider extends DataProvider {
   // GET MATCH DATA
   // ========================================
 
-  async getMatchData(home, away, env) {
+  async getMatchData(
+    home,
+    away,
+    env
+  ) {
 
-    // --------------------------------------
-    // Validate environment
-    // --------------------------------------
+    // ======================================
+    // VALIDATE ENVIRONMENT
+    // ======================================
 
     if (!env) {
 
       return {
 
-        provider: this.name,
+        provider:
+          this.name,
 
-        status: "environment_missing",
+        status:
+          "environment_missing",
 
         home,
         away,
 
-        data: null,
+        data:
+          null,
 
         message:
           "Worker environment is missing"
@@ -65,9 +80,9 @@ class FootballDataProvider extends DataProvider {
     }
 
 
-    // --------------------------------------
-    // Validate token
-    // --------------------------------------
+    // ======================================
+    // GET API TOKEN
+    // ======================================
 
     const token =
       String(
@@ -79,14 +94,17 @@ class FootballDataProvider extends DataProvider {
 
       return {
 
-        provider: this.name,
+        provider:
+          this.name,
 
-        status: "not_configured",
+        status:
+          "not_configured",
 
         home,
         away,
 
-        data: null,
+        data:
+          null,
 
         dataSource:
           "Football-Data.org",
@@ -126,11 +144,15 @@ class FootballDataProvider extends DataProvider {
 
 
     const dateFrom =
-      formatDate(startDate);
+      formatDate(
+        startDate
+      );
 
 
     const dateTo =
-      formatDate(endDate);
+      formatDate(
+        endDate
+      );
 
 
     // ======================================
@@ -169,7 +191,8 @@ class FootballDataProvider extends DataProvider {
           apiUrl.toString(),
           {
 
-            method: "GET",
+            method:
+              "GET",
 
             headers: {
 
@@ -188,14 +211,17 @@ class FootballDataProvider extends DataProvider {
 
       return {
 
-        provider: this.name,
+        provider:
+          this.name,
 
-        status: "network_error",
+        status:
+          "network_error",
 
         home,
         away,
 
-        data: null,
+        data:
+          null,
 
         message:
           error?.message ||
@@ -285,9 +311,11 @@ class FootballDataProvider extends DataProvider {
 
       return {
 
-        provider: this.name,
+        provider:
+          this.name,
 
-        status: status,
+        status:
+          status,
 
         httpStatus:
           response.status,
@@ -295,7 +323,8 @@ class FootballDataProvider extends DataProvider {
         home,
         away,
 
-        data: null,
+        data:
+          null,
 
         message:
           `Football-Data.org HTTP ${response.status}: ${apiMessage}`
@@ -323,7 +352,8 @@ class FootballDataProvider extends DataProvider {
 
       return {
 
-        provider: this.name,
+        provider:
+          this.name,
 
         status:
           "invalid_json",
@@ -334,7 +364,8 @@ class FootballDataProvider extends DataProvider {
         home,
         away,
 
-        data: null,
+        data:
+          null,
 
         message:
           "Football-Data.org returned invalid JSON"
@@ -361,11 +392,15 @@ class FootballDataProvider extends DataProvider {
     // ======================================
 
     const homeSearch =
-      normalizeName(home);
+      normalizeName(
+        home
+      );
 
 
     const awaySearch =
-      normalizeName(away);
+      normalizeName(
+        away
+      );
 
 
     // ======================================
@@ -420,7 +455,8 @@ class FootballDataProvider extends DataProvider {
 
       return {
 
-        provider: this.name,
+        provider:
+          this.name,
 
         status:
           "api_ok_no_match",
@@ -466,7 +502,8 @@ class FootballDataProvider extends DataProvider {
 
     return {
 
-      provider: this.name,
+      provider:
+        this.name,
 
       status:
         "success",
@@ -483,26 +520,21 @@ class FootballDataProvider extends DataProvider {
           match.id ||
           null,
 
-
         utcDate:
           match.utcDate ||
           null,
-
 
         status:
           match.status ||
           null,
 
-
         stage:
           match.stage ||
           null,
 
-
         group:
           match.group ||
           null,
-
 
         competition: {
 
@@ -520,7 +552,6 @@ class FootballDataProvider extends DataProvider {
 
         },
 
-
         season: {
 
           id:
@@ -536,7 +567,6 @@ class FootballDataProvider extends DataProvider {
             null
 
         },
-
 
         homeTeam: {
 
@@ -558,7 +588,6 @@ class FootballDataProvider extends DataProvider {
 
         },
 
-
         awayTeam: {
 
           id:
@@ -579,18 +608,15 @@ class FootballDataProvider extends DataProvider {
 
         },
 
-
         score:
           match.score ||
           null,
-
 
         odds:
           match.odds ||
           null
 
       },
-
 
       message:
         "Match data received successfully"
@@ -707,7 +733,9 @@ function namesMatch(
 
 
   if (
-    apiName.includes(searchName)
+    apiName.includes(
+      searchName
+    )
   ) {
 
     return true;
@@ -716,7 +744,9 @@ function namesMatch(
 
 
   if (
-    searchName.includes(apiName)
+    searchName.includes(
+      apiName
+    )
   ) {
 
     return true;
