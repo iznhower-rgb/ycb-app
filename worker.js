@@ -1,6 +1,6 @@
+// ==========================================================
 // Y.C.B FINAL WORKER 2.2.2
-// Multi Provider Architecture
-// Mobile / Cloudflare Worker
+// ==========================================================
 
 import {
   getProviders,
@@ -16,18 +16,12 @@ import "./bsdProvider.js";
 
 const VERSION = "2.2.2";
 
-/*
-==========================================================
-Y.C.B HTML APPLICATION
-==========================================================
-IMPORTANT:
-The HTML uses String.raw.
-There are NO nested JavaScript template literals inside it.
-This prevents the "Unterminated string literal" build error.
-==========================================================
-*/
 
-const HTML = String.raw`<!doctype html>
+// ==========================================================
+// HTML
+// ==========================================================
+
+const HTML = `<!doctype html>
 
 <html lang="ar" dir="rtl">
 
@@ -40,7 +34,9 @@ const HTML = String.raw`<!doctype html>
   content="width=device-width,initial-scale=1,maximum-scale=1"
 >
 
-<title>Y.C.B Football Prediction Engine</title>
+<title>
+Y.C.B Football Prediction Engine
+</title>
 
 <style>
 
@@ -234,6 +230,10 @@ button:disabled{
   margin-top:12px
 }
 
+.quality-warning{
+  color:#fbbf24
+}
+
 @media(max-width:420px){
 
   h1{
@@ -260,11 +260,14 @@ button:disabled{
 
 <div class="app">
 
-<h1>Y.C.B</h1>
+<h1>
+Y.C.B
+</h1>
 
 <div class="subtitle">
 Football Prediction Engine
 </div>
+
 
 <div class="card">
 
@@ -289,6 +292,7 @@ Football Prediction Engine
 
 </div>
 
+
 <div
   id="result"
   class="hidden"
@@ -300,56 +304,88 @@ Football Prediction Engine
 أفضل 3 توقعات
 </h2>
 
+
 <div class="prediction">
 
-<div id="prediction1" class="rank">
+<div
+  id="prediction1"
+  class="rank"
+>
 🥇 -
 </div>
 
-<div id="probability1" class="probability">
+<div
+  id="probability1"
+  class="probability"
+>
 -
 </div>
 
-<div id="meta1" class="meta">
+<div
+  id="meta1"
+  class="meta"
+>
 </div>
 
 </div>
+
 
 <div class="prediction">
 
-<div id="prediction2" class="rank">
+<div
+  id="prediction2"
+  class="rank"
+>
 🥈 -
 </div>
 
-<div id="probability2" class="probability">
+<div
+  id="probability2"
+  class="probability"
+>
 -
 </div>
 
-<div id="meta2" class="meta">
+<div
+  id="meta2"
+  class="meta"
+>
 </div>
 
 </div>
+
 
 <div class="prediction">
 
-<div id="prediction3" class="rank">
+<div
+  id="prediction3"
+  class="rank"
+>
 🥉 -
 </div>
 
-<div id="probability3" class="probability">
+<div
+  id="probability3"
+  class="probability"
+>
 -
 </div>
 
-<div id="meta3" class="meta">
+<div
+  id="meta3"
+  class="meta"
+>
 </div>
 
 </div>
+
 
 <div
   id="recommendation"
   class="warning-box"
 >
 </div>
+
 
 <div
   id="scoreline"
@@ -358,6 +394,7 @@ Football Prediction Engine
 </div>
 
 </div>
+
 
 <div class="panel">
 
@@ -400,6 +437,7 @@ BTTS
 </div>
 
 </div>
+
 
 <div class="panel">
 
@@ -448,6 +486,7 @@ BTTS
 
 </div>
 
+
 <div class="panel">
 
 <h3 class="section-title">
@@ -465,6 +504,7 @@ BTTS
 </div>
 
 </div>
+
 
 <script>
 
@@ -488,7 +528,8 @@ async function analyzeMatch(){
 
   if(!match){
 
-    status.className = "error";
+    status.className =
+      "error";
 
     status.textContent =
       "اكتب المباراة أولاً.";
@@ -498,11 +539,15 @@ async function analyzeMatch(){
   }
 
 
-  button.disabled = true;
+  button.disabled =
+    true;
 
-  result.classList.add("hidden");
+  result.classList.add(
+    "hidden"
+  );
 
-  status.className = "";
+  status.className =
+    "";
 
   status.textContent =
     "جاري جمع البيانات وتحليل المباراة...";
@@ -514,7 +559,9 @@ async function analyzeMatch(){
       await fetch(
         "/api/analyze",
         {
-          method:"POST",
+
+          method:
+            "POST",
 
           headers:{
             "Content-Type":
@@ -523,8 +570,9 @@ async function analyzeMatch(){
 
           body:
             JSON.stringify({
-              match:match
+              match
             })
+
         }
       );
 
@@ -580,26 +628,33 @@ async function analyzeMatch(){
       const prediction =
         predictions[i] ||
         {
-          label:"غير متاح",
-          probability:"غير متاح",
-          explanation:""
+          label:
+            "غير متاح",
+
+          probability:
+            "غير متاح",
+
+          explanation:
+            ""
         };
 
 
-      const n = i + 1;
-
-
-      const medals = [
-        "🥇 ",
-        "🥈 ",
-        "🥉 "
-      ];
+      const n =
+        i + 1;
 
 
       document.getElementById(
         "prediction" + n
       ).textContent =
-        medals[i] +
+
+        [
+          "🥇 ",
+          "🥈 ",
+          "🥉 "
+        ][i]
+
+        +
+
         (
           prediction.label ||
           "غير متاح"
@@ -630,16 +685,12 @@ async function analyzeMatch(){
 
     const recommended =
       Boolean(
-        data.recommendation &&
-        data.recommendation.recommended
+        data.recommendation?.recommended
       );
 
 
     recommendation.textContent =
-      (
-        data.recommendation &&
-        data.recommendation.message
-      ) ||
+      data.recommendation?.message ||
       "لا توجد توصية.";
 
 
@@ -656,104 +707,81 @@ async function analyzeMatch(){
 
     setValue(
       "homeGames",
-      analysis.home &&
-      analysis.home.games
+      analysis.home?.games
     );
-
 
     setValue(
       "awayGames",
-      analysis.away &&
-      analysis.away.games
+      analysis.away?.games
     );
-
 
     setValue(
       "homeGF",
       fixed(
-        analysis.home &&
-        analysis.home.goalsForAvg
+        analysis.home?.goalsForAvg
       )
     );
-
 
     setValue(
       "awayGF",
       fixed(
-        analysis.away &&
-        analysis.away.goalsForAvg
+        analysis.away?.goalsForAvg
       )
     );
-
 
     setValue(
       "homeGA",
       fixed(
-        analysis.home &&
-        analysis.home.goalsAgainstAvg
+        analysis.home?.goalsAgainstAvg
       )
     );
-
 
     setValue(
       "awayGA",
       fixed(
-        analysis.away &&
-        analysis.away.goalsAgainstAvg
+        analysis.away?.goalsAgainstAvg
       )
     );
-
 
     setValue(
       "homeXg",
       fixed(
-        analysis.model &&
-        analysis.model.homeXg
+        analysis.model?.homeXg
       )
     );
-
 
     setValue(
       "awayXg",
       fixed(
-        analysis.model &&
-        analysis.model.awayXg
+        analysis.model?.awayXg
       )
     );
-
 
     setValue(
       "homeWin",
       percent(
-        analysis.model &&
-        analysis.model.homeWin
+        analysis.model?.homeWin
       )
     );
-
 
     setValue(
       "draw",
       percent(
-        analysis.model &&
-        analysis.model.draw
+        analysis.model?.draw
       )
     );
-
 
     setValue(
       "awayWin",
       percent(
-        analysis.model &&
-        analysis.model.awayWin
+        analysis.model?.awayWin
       )
     );
-
 
     setValue(
       "btts",
       percent(
-        analysis.model &&
-        analysis.model.bttsYes
+        analysis.model?.bttsYes
       )
     );
 
@@ -768,17 +796,15 @@ async function analyzeMatch(){
           data.predictedScore +
           " | جودة البيانات: " +
           (
-            data.dataQuality == null
-              ? "-"
-              : data.dataQuality
+            data.dataQuality ??
+            "-"
           ) +
           "/100"
 
         : "جودة البيانات: " +
           (
-            data.dataQuality == null
-              ? "-"
-              : data.dataQuality
+            data.dataQuality ??
+            "-"
           ) +
           "/100";
 
@@ -796,47 +822,44 @@ async function analyzeMatch(){
     ).innerHTML =
 
       providers.map(
-        function(item){
+        item =>
 
-          return (
+          (
+            item.success
+              ? "✓"
+              : "✗"
+          )
 
-            (
-              item.success
-                ? "✓"
-                : "✗"
-            )
+          +
 
-            +
+          " " +
 
-            " " +
+          escapeHtml(
+            item.provider
+          )
 
-            escapeHtml(
-              item.provider
-            )
+          +
 
-            +
+          " — " +
 
-            " — " +
+          escapeHtml(
+            item.status
+          )
 
-            escapeHtml(
-              item.status
-            )
+          +
 
-            +
+          (
+            item.message
+              ? " — " +
+                escapeHtml(
+                  item.message
+                )
+              : ""
+          )
 
-            (
-              item.message
-                ? " — " +
-                  escapeHtml(
-                    item.message
-                  )
-                : ""
-            )
-
-          );
-
-        }
-      ).join("<br>");
+      ).join(
+        "<br>"
+      );
 
 
     result.classList.remove(
@@ -863,10 +886,7 @@ async function analyzeMatch(){
       "error";
 
     status.textContent =
-      (
-        error &&
-        error.message
-      ) ||
+      error?.message ||
       "حدث خطأ غير معروف.";
 
   }finally{
@@ -931,20 +951,28 @@ function escapeHtml(
 ){
 
   return String(
-    value || ""
+    value ||
+    ""
   ).replace(
     /[&<>"']/g,
-    function(character){
+    character =>
+      ({
+        "&":
+          "&amp;",
 
-      return {
-        "&":"&amp;",
-        "<":"&lt;",
-        ">":"&gt;",
-        '"':"&quot;",
-        "'":"&#39;"
-      }[character];
+        "<":
+          "&lt;",
 
-    }
+        ">":
+          "&gt;",
+
+        '"':
+          "&quot;",
+
+        "'":
+          "&#39;"
+
+      }[character])
   );
 
 }
@@ -956,11 +984,9 @@ function escapeHtml(
 </html>`;
 
 
-/*
-==========================================================
-WORKER
-==========================================================
-*/
+// ==========================================================
+// WORKER
+// ==========================================================
 
 export default {
 
@@ -975,29 +1001,22 @@ export default {
       );
 
 
-    /*
-    ------------------------------------------------------
-    OPTIONS / CORS
-    ------------------------------------------------------
-    */
-
     if(
       request.method ===
       "OPTIONS"
     ){
 
       return json({
-        success:true
+        success:
+          true
       });
 
     }
 
 
-    /*
-    ------------------------------------------------------
-    HEALTH
-    ------------------------------------------------------
-    */
+    // ======================================================
+    // HEALTH
+    // ======================================================
 
     if(
       url.pathname ===
@@ -1006,16 +1025,20 @@ export default {
 
       return json({
 
-        success:true,
+        success:
+          true,
 
-        status:"ok",
+        status:
+          "ok",
 
-        app:"Y.C.B",
+        app:
+          "Y.C.B",
 
         engine:
           "Y.C.B Prediction Engine",
 
-        version:VERSION,
+        version:
+          VERSION,
 
         architecture:
           "Multi Provider Architecture",
@@ -1028,11 +1051,9 @@ export default {
     }
 
 
-    /*
-    ------------------------------------------------------
-    PROVIDERS
-    ------------------------------------------------------
-    */
+    // ======================================================
+    // PROVIDERS
+    // ======================================================
 
     if(
       url.pathname ===
@@ -1041,7 +1062,8 @@ export default {
 
       return json({
 
-        success:true,
+        success:
+          true,
 
         providers:
           getProviders()
@@ -1051,11 +1073,9 @@ export default {
     }
 
 
-    /*
-    ------------------------------------------------------
-    ANALYZE
-    ------------------------------------------------------
-    */
+    // ======================================================
+    // ANALYZE
+    // ======================================================
 
     if(
       url.pathname ===
@@ -1069,8 +1089,11 @@ export default {
 
         return json(
           {
-            success:false,
-            error:"POST method required"
+            success:
+              false,
+
+            error:
+              "POST method required"
           },
           405
         );
@@ -1087,8 +1110,7 @@ export default {
         const parsed =
           parseMatch(
             String(
-              body &&
-              body.match ||
+              body?.match ||
               ""
             )
           );
@@ -1098,10 +1120,13 @@ export default {
 
           return json(
             {
-              success:false,
+
+              success:
+                false,
 
               error:
                 "اكتب المباراة بهذا الشكل: Arsenal vs Coventry City"
+
             },
             400
           );
@@ -1109,18 +1134,16 @@ export default {
         }
 
 
-        const home =
-          parsed.home;
+        const {
+          home,
+          away
+        } =
+          parsed;
 
-        const away =
-          parsed.away;
 
-
-        /*
-        --------------------------------------------------
-        جمع البيانات من جميع المصادر
-        --------------------------------------------------
-        */
+        // ==================================================
+        // COLLECT FROM ALL PROVIDERS
+        // ==================================================
 
         const providerResults =
           await getAllMatchData(
@@ -1130,25 +1153,22 @@ export default {
           );
 
 
+        // ==================================================
+        // ONLY SUCCESSFUL PROVIDERS WITH DATA
+        // ==================================================
+
         const usable =
           providerResults.filter(
-            function(item){
-
-              return (
-                item &&
-                item.success &&
-                item.data
-              );
-
-            }
+            item =>
+              item &&
+              item.success &&
+              item.data
           );
 
 
-        /*
-        --------------------------------------------------
-        دمج البيانات
-        --------------------------------------------------
-        */
+        // ==================================================
+        // MERGE
+        // ==================================================
 
         const merged =
           mergeProviderData(
@@ -1156,11 +1176,9 @@ export default {
           );
 
 
-        /*
-        --------------------------------------------------
-        لم يتم العثور على المباراة
-        --------------------------------------------------
-        */
+        // ==================================================
+        // MATCH NOT VERIFIED
+        // ==================================================
 
         if(
           !merged.fixture
@@ -1169,12 +1187,14 @@ export default {
           return json(
 
             baseResponse(
+
               home,
               away,
               providerResults,
               usable,
               "insufficient_data",
               "لم يتم التحقق من المباراة المطلوبة في أي مصدر متاح."
+
             )
 
           );
@@ -1182,11 +1202,9 @@ export default {
         }
 
 
-        /*
-        --------------------------------------------------
-        تحليل الفريقين
-        --------------------------------------------------
-        */
+        // ==================================================
+        // TEAM ANALYSIS
+        // ==================================================
 
         const analysis =
           buildTeamAnalysis(
@@ -1196,11 +1214,9 @@ export default {
           );
 
 
-        /*
-        --------------------------------------------------
-        جودة البيانات
-        --------------------------------------------------
-        */
+        // ==================================================
+        // DATA QUALITY
+        // ==================================================
 
         const dataQuality =
           calculateDataQuality(
@@ -1210,11 +1226,9 @@ export default {
           );
 
 
-        /*
-        --------------------------------------------------
-        الحد الأدنى للتاريخ
-        --------------------------------------------------
-        */
+        // ==================================================
+        // HISTORY CHECK
+        // ==================================================
 
         if(
           analysis.home.games < 3 ||
@@ -1224,28 +1238,28 @@ export default {
           return json({
 
             ...baseResponse(
+
               home,
               away,
               providerResults,
               usable,
               "insufficient_data",
               "تم العثور على المباراة، لكن البيانات التاريخية المتاحة غير كافية لإصدار توقع موثوق."
+
             ),
 
-            analysis:analysis,
+            analysis,
 
-            dataQuality:dataQuality
+            dataQuality
 
           });
 
         }
 
 
-        /*
-        --------------------------------------------------
-        التوقعات
-        --------------------------------------------------
-        */
+        // ==================================================
+        // BUILD PREDICTIONS
+        // ==================================================
 
         const result =
           buildPredictions(
@@ -1257,54 +1271,123 @@ export default {
           result.predictions[0];
 
 
-        /*
-        --------------------------------------------------
-        RECOMMENDATION
-        --------------------------------------------------
-        */
+        // ==================================================
+        // IMPORTANT:
+        // Minimum two independent successful providers
+        // ==================================================
+
+        const multiProviderReady =
+          usable.length >= 2;
+
 
         const recommended =
           Boolean(
+
+            multiProviderReady &&
+
             top &&
-            top.probabilityValue >= 0.60 &&
-            dataQuality >= 60
+
+            top.probabilityValue >=
+              0.60 &&
+
+            dataQuality >=
+              60
+
           );
 
 
+        // ==================================================
+        // ANALYSIS STATUS
+        // ==================================================
+
+        const analysisStatus =
+          multiProviderReady
+            ? "ready"
+            : "limited_data";
+
+
+        const message =
+          multiProviderReady
+
+            ? "اكتمل تحليل المباراة بنجاح بعد التحقق من أكثر من مصدر."
+
+            : "تم تحليل المباراة، لكن مصدر بيانات واحد فقط نجح حاليًا؛ لذلك تم خفض جودة البيانات ولن يصدر Y.C.B رهانًا موصى به.";
+
+
+        // ==================================================
+        // RECOMMENDATION MESSAGE
+        // ==================================================
+
+        let recommendationMessage;
+
+
+        if(
+          recommended
+        ){
+
+          recommendationMessage =
+            `التوقع الأقوى حاليًا: ${top.label} بنسبة ${top.probability}.`;
+
+        }
+
+        else if(
+          !multiProviderReady
+        ){
+
+          recommendationMessage =
+            "لا يوجد رهان موصى به: يجب التحقق من البيانات عبر مصدرين ناجحين على الأقل.";
+
+        }
+
+        else{
+
+          recommendationMessage =
+            "لا يوجد رهان موصى به: الثقة أو جودة البيانات أقل من الحد المطلوب.";
+
+        }
+
+
+        // ==================================================
+        // FINAL RESPONSE
+        // ==================================================
+
         return json({
 
-          success:true,
+          success:
+            true,
 
-          app:"Y.C.B",
+          app:
+            "Y.C.B",
 
           engine:
             "Y.C.B Prediction Engine",
 
-          version:VERSION,
+          version:
+            VERSION,
 
           architecture:
             "Multi Provider Architecture",
 
-          match:{
-            home:home,
-            away:away
+          match: {
+
+            home,
+
+            away
+
           },
 
-          analysisStatus:
-            "ready",
+          analysisStatus,
 
-          message:
-            "اكتمل تحليل المباراة بنجاح.",
+          message,
 
-          analysis:analysis,
+          analysis,
 
           predictions:
             result.predictions,
 
-          recommendation:{
+          recommendation: {
 
-            recommended:
-              recommended,
+            recommended,
 
             market:
               recommended
@@ -1317,26 +1400,14 @@ export default {
                 : null,
 
             message:
-
-              recommended
-
-                ? (
-                    "التوقع الأقوى حاليًا: " +
-                    top.label +
-                    " بنسبة " +
-                    top.probability +
-                    "."
-                  )
-
-                : "لا يوجد رهان موصى به: الثقة أو جودة البيانات أقل من الحد المطلوب."
+              recommendationMessage
 
           },
 
           predictedScore:
             result.predictedScore,
 
-          dataQuality:
-            dataQuality,
+          dataQuality,
 
           providers:
             providerResults,
@@ -1345,7 +1416,25 @@ export default {
             providerResults.length,
 
           successfulProviderCount:
-            usable.length
+            usable.length,
+
+          validation: {
+
+            fixtureVerified:
+              Boolean(
+                merged.fixture
+              ),
+
+            minimumProvidersRequired:
+              2,
+
+            successfulProviders:
+              usable.length,
+
+            multiProviderVerified:
+              multiProviderReady
+
+          }
 
         });
 
@@ -1360,14 +1449,14 @@ export default {
         return json(
 
           {
-            success:false,
+
+            success:
+              false,
 
             error:
-              (
-                error &&
-                error.message
-              ) ||
+              error?.message ||
               String(error)
+
           },
 
           500
@@ -1379,11 +1468,9 @@ export default {
     }
 
 
-    /*
-    ------------------------------------------------------
-    MAIN APP
-    ------------------------------------------------------
-    */
+    // ======================================================
+    // MAIN HTML
+    // ======================================================
 
     return new Response(
 
@@ -1391,9 +1478,10 @@ export default {
 
       {
 
-        status:200,
+        status:
+          200,
 
-        headers:{
+        headers: {
 
           "Content-Type":
             "text/html;charset=UTF-8",
@@ -1412,11 +1500,9 @@ export default {
 };
 
 
-/*
-==========================================================
-MATCH PARSER
-==========================================================
-*/
+// ==========================================================
+// MATCH PARSER
+// ==========================================================
 
 function parseMatch(
   value
@@ -1431,7 +1517,8 @@ function parseMatch(
 
 
   if(
-    parts.length !== 2
+    parts.length !==
+    2
   ){
 
     return null;
@@ -1448,37 +1535,48 @@ function parseMatch(
 
 
   return (
+
     home &&
     away
+
   )
+
     ? {
-        home:home,
-        away:away
+
+        home,
+
+        away
+
       }
+
     : null;
 
 }
 
 
-/*
-==========================================================
-MERGE PROVIDERS
-==========================================================
-*/
+// ==========================================================
+// MERGE PROVIDER DATA
+// ==========================================================
 
 function mergeProviderData(
   results
 ){
 
-  let fixture = null;
+  let fixture =
+    null;
 
-  const homeMatches = [];
 
-  const awayMatches = [];
+  const homeMatches =
+    [];
+
+
+  const awayMatches =
+    [];
 
 
   for(
-    const item of results
+    const item
+    of results
   ){
 
     const data =
@@ -1499,8 +1597,7 @@ function mergeProviderData(
 
     if(
       Array.isArray(
-        data.recentMatches &&
-        data.recentMatches.home
+        data.recentMatches?.home
       )
     ){
 
@@ -1513,8 +1610,7 @@ function mergeProviderData(
 
     if(
       Array.isArray(
-        data.recentMatches &&
-        data.recentMatches.away
+        data.recentMatches?.away
       )
     ){
 
@@ -1529,7 +1625,7 @@ function mergeProviderData(
 
   return {
 
-    fixture:fixture,
+    fixture,
 
     homeMatches:
       dedupeMatches(
@@ -1546,11 +1642,9 @@ function mergeProviderData(
 }
 
 
-/*
-==========================================================
-DEDUPE
-==========================================================
-*/
+// ==========================================================
+// DEDUPE MATCHES
+// ==========================================================
 
 function dedupeMatches(
   matches
@@ -1563,7 +1657,7 @@ function dedupeMatches(
   return matches
 
     .filter(
-      function(match){
+      match => {
 
         const key =
           String(
@@ -1572,17 +1666,17 @@ function dedupeMatches(
 
             [
               match.utcDate,
-              match.homeTeam &&
-              match.homeTeam.name,
-              match.awayTeam &&
-              match.awayTeam.name
+              match.homeTeam?.name,
+              match.awayTeam?.name
             ].join("|")
 
           );
 
 
         if(
-          seen.has(key)
+          seen.has(
+            key
+          )
         ){
 
           return false;
@@ -1590,7 +1684,10 @@ function dedupeMatches(
         }
 
 
-        seen.add(key);
+        seen.add(
+          key
+        );
+
 
         return true;
 
@@ -1598,19 +1695,16 @@ function dedupeMatches(
     )
 
     .sort(
-      function(a,b){
+      (a,b) =>
+        new Date(
+          b.utcDate ||
+          0
+        ) -
 
-        return (
-          new Date(
-            b.utcDate || 0
-          ) -
-
-          new Date(
-            a.utcDate || 0
-          )
-        );
-
-      }
+        new Date(
+          a.utcDate ||
+          0
+        )
     )
 
     .slice(
@@ -1621,11 +1715,9 @@ function dedupeMatches(
 }
 
 
-/*
-==========================================================
-TEAM ANALYSIS
-==========================================================
-*/
+// ==========================================================
+// TEAM ANALYSIS
+// ==========================================================
 
 function buildTeamAnalysis(
   homeName,
@@ -1651,11 +1743,19 @@ function buildTeamAnalysis(
     clamp(
 
       (
-        home.goalsForAvg * 0.55 +
+        home.goalsForAvg *
+        0.55
 
-        away.goalsAgainstAvg * 0.45
+        +
 
-      ) * 1.08,
+        away.goalsAgainstAvg *
+        0.45
+
+      )
+
+      *
+
+      1.08,
 
       0.15,
 
@@ -1668,11 +1768,19 @@ function buildTeamAnalysis(
     clamp(
 
       (
-        away.goalsForAvg * 0.55 +
+        away.goalsForAvg *
+        0.55
 
-        home.goalsAgainstAvg * 0.45
+        +
 
-      ) * 0.92,
+        home.goalsAgainstAvg *
+        0.45
+
+      )
+
+      *
+
+      0.92,
 
       0.10,
 
@@ -1690,22 +1798,20 @@ function buildTeamAnalysis(
 
   return {
 
-    home:home,
+    home,
 
-    away:away,
+    away,
 
-    model:model
+    model
 
   };
 
 }
 
 
-/*
-==========================================================
-TEAM STATS
-==========================================================
-*/
+// ==========================================================
+// TEAM STATS
+// ==========================================================
 
 function calculateTeamStats(
   teamName,
@@ -1722,35 +1828,39 @@ function calculateTeamStats(
     matches
 
       .map(
-        function(match){
+        match => {
 
           const home =
             normalizeName(
-              match.homeTeam &&
-              match.homeTeam.name
+              match
+                .homeTeam
+                ?.name
             );
 
 
           const away =
             normalizeName(
-              match.awayTeam &&
-              match.awayTeam.name
+              match
+                .awayTeam
+                ?.name
             );
 
 
           const homeGoals =
             Number(
-              match.score &&
-              match.score.fullTime &&
-              match.score.fullTime.home
+              match
+                .score
+                ?.fullTime
+                ?.home
             );
 
 
           const awayGoals =
             Number(
-              match.score &&
-              match.score.fullTime &&
-              match.score.fullTime.away
+              match
+                .score
+                ?.fullTime
+                ?.away
             );
 
 
@@ -1769,8 +1879,19 @@ function calculateTeamStats(
             ||
 
             (
-              !namesMatch(home,team) &&
-              !namesMatch(away,team)
+
+              !namesMatch(
+                home,
+                team
+              )
+
+              &&
+
+              !namesMatch(
+                away,
+                team
+              )
+
             )
 
           ){
@@ -1801,14 +1922,15 @@ function calculateTeamStats(
 
           return {
 
-            gf:gf,
+            gf,
 
-            ga:ga,
+            ga,
 
             result:
 
               gf > ga
                 ? "W"
+
                 : gf < ga
                   ? "L"
                   : "D"
@@ -1818,7 +1940,9 @@ function calculateTeamStats(
         }
       )
 
-      .filter(Boolean);
+      .filter(
+        Boolean
+      );
 
 
   const last5 =
@@ -1835,28 +1959,30 @@ function calculateTeamStats(
     );
 
 
-  function average(
-    items,
-    key
-  ){
+  const average =
+    (
+      items,
+      key
+    ) =>
 
-    return items.length
+      items.length
 
-      ? items.reduce(
-          function(sum,item){
-
-            return (
+        ? items.reduce(
+            (
+              sum,
+              item
+            ) =>
               sum +
-              item[key]
-            );
+              item[key],
 
-          },
-          0
-        ) / items.length
+            0
+          )
 
-      : 0;
+          /
 
-  }
+          items.length
+
+        : 0;
 
 
   const gf5 =
@@ -1889,21 +2015,17 @@ function calculateTeamStats(
 
   const wins =
     usable.filter(
-      function(item){
-
-        return item.result === "W";
-
-      }
+      item =>
+        item.result ===
+        "W"
     ).length;
 
 
   const draws =
     usable.filter(
-      function(item){
-
-        return item.result === "D";
-
-      }
+      item =>
+        item.result ===
+        "D"
     ).length;
 
 
@@ -1914,32 +2036,32 @@ function calculateTeamStats(
 
   return {
 
-    team:teamName,
+    team:
+      teamName,
 
     games:
       usable.length,
 
-    wins:wins,
+    wins,
 
-    draws:draws,
+    draws,
 
     losses:
       usable.length -
       wins -
       draws,
 
-    formPoints:formPoints,
+    formPoints,
 
     formRate:
       round(
 
         usable.length
-
           ? formPoints /
             (
-              usable.length * 3
+              usable.length *
+              3
             )
-
           : 0
 
       ),
@@ -1949,10 +2071,8 @@ function calculateTeamStats(
 
         last5.length
 
-          ? (
-              gf5 * 0.60 +
-              gf10 * 0.40
-            )
+          ? gf5 * 0.60 +
+            gf10 * 0.40
 
           : gf10
 
@@ -1963,10 +2083,8 @@ function calculateTeamStats(
 
         last5.length
 
-          ? (
-              ga5 * 0.60 +
-              ga10 * 0.40
-            )
+          ? ga5 * 0.60 +
+            ga10 * 0.40
 
           : ga10
 
@@ -1977,11 +2095,9 @@ function calculateTeamStats(
 }
 
 
-/*
-==========================================================
-POISSON MODEL
-==========================================================
-*/
+// ==========================================================
+// POISSON MODEL
+// ==========================================================
 
 function buildModel(
   homeXg,
@@ -1996,22 +2112,38 @@ function buildModel(
     );
 
 
-  let homeWin = 0;
-  let draw = 0;
-  let awayWin = 0;
-  let over25 = 0;
-  let under25 = 0;
-  let bttsYes = 0;
-  let bttsNo = 0;
+  let homeWin =
+    0;
+
+  let draw =
+    0;
+
+  let awayWin =
+    0;
+
+  let over25 =
+    0;
+
+  let under25 =
+    0;
+
+  let bttsYes =
+    0;
+
+  let bttsNo =
+    0;
 
 
   let best = {
 
-    probability:-1,
+    probability:
+      -1,
 
-    home:0,
+    home:
+      0,
 
-    away:0
+    away:
+      0
 
   };
 
@@ -2039,55 +2171,77 @@ function buildModel(
 
         best = {
 
-          probability:p,
+          probability:
+            p,
 
-          home:h,
+          home:
+            h,
 
-          away:a
+          away:
+            a
 
         };
 
       }
 
 
-      if(h>a){
+      if(
+        h > a
+      ){
 
-        homeWin += p;
+        homeWin +=
+          p;
 
-      }else if(h===a){
+      }
 
-        draw += p;
+      else if(
+        h === a
+      ){
 
-      }else{
+        draw +=
+          p;
 
-        awayWin += p;
+      }
+
+      else{
+
+        awayWin +=
+          p;
 
       }
 
 
       if(
-        h+a>=3
+        h + a >= 3
       ){
 
-        over25 += p;
+        over25 +=
+          p;
 
-      }else{
+      }
 
-        under25 += p;
+      else{
+
+        under25 +=
+          p;
 
       }
 
 
       if(
-        h>=1 &&
-        a>=1
+        h >= 1 &&
+        a >= 1
       ){
 
-        bttsYes += p;
+        bttsYes +=
+          p;
 
-      }else{
+      }
 
-        bttsNo += p;
+      else{
+
+        bttsNo +=
+          p;
 
       }
 
@@ -2099,37 +2253,40 @@ function buildModel(
   return {
 
     homeXg:
-      round(homeXg),
+      round(
+        homeXg
+      ),
 
     awayXg:
-      round(awayXg),
+      round(
+        awayXg
+      ),
 
-    homeWin:homeWin,
+    homeWin,
 
-    draw:draw,
+    draw,
 
-    awayWin:awayWin,
+    awayWin,
 
-    over25:over25,
+    over25,
 
-    under25:under25,
+    under25,
 
-    bttsYes:bttsYes,
+    bttsYes,
 
-    bttsNo:bttsNo,
+    bttsNo,
 
-    bestScore:best
+    bestScore:
+      best
 
   };
 
 }
 
 
-/*
-==========================================================
-BET SELECTION ENGINE
-==========================================================
-*/
+// ==========================================================
+// Y.C.B BET SELECTION ENGINE
+// ==========================================================
 
 function buildPredictions(
   analysis
@@ -2147,19 +2304,19 @@ function buildPredictions(
     analysis.away;
 
 
-  /*
-  1X2
-  */
+  // --------------------------------------------------------
+  // 1X2
+  // --------------------------------------------------------
 
   const oneXtwo = [
 
     {
 
-      outcome:"homeWin",
+      outcome:
+        "homeWin",
 
       label:
-        "فوز " +
-        home.team,
+        `فوز ${home.team}`,
 
       probabilityValue:
         model.homeWin,
@@ -2171,9 +2328,11 @@ function buildPredictions(
 
     {
 
-      outcome:"draw",
+      outcome:
+        "draw",
 
-      label:"التعادل",
+      label:
+        "التعادل",
 
       probabilityValue:
         model.draw,
@@ -2185,11 +2344,11 @@ function buildPredictions(
 
     {
 
-      outcome:"awayWin",
+      outcome:
+        "awayWin",
 
       label:
-        "فوز " +
-        away.team,
+        `فوز ${away.team}`,
 
       probabilityValue:
         model.awayWin,
@@ -2202,17 +2361,19 @@ function buildPredictions(
   ];
 
 
-  /*
-  Goals
-  */
+  // --------------------------------------------------------
+  // GOALS
+  // --------------------------------------------------------
 
   const goalsMarket = [
 
     {
 
-      outcome:"over25",
+      outcome:
+        "over25",
 
-      label:"أكثر من 2.5 هدف",
+      label:
+        "أكثر من 2.5 هدف",
 
       probabilityValue:
         model.over25,
@@ -2224,9 +2385,11 @@ function buildPredictions(
 
     {
 
-      outcome:"under25",
+      outcome:
+        "under25",
 
-      label:"أقل من 2.5 هدف",
+      label:
+        "أقل من 2.5 هدف",
 
       probabilityValue:
         model.under25,
@@ -2239,15 +2402,16 @@ function buildPredictions(
   ];
 
 
-  /*
-  BTTS
-  */
+  // --------------------------------------------------------
+  // BTTS
+  // --------------------------------------------------------
 
   const bttsMarket = [
 
     {
 
-      outcome:"bttsYes",
+      outcome:
+        "bttsYes",
 
       label:
         "كلا الفريقين يسجلان",
@@ -2262,7 +2426,8 @@ function buildPredictions(
 
     {
 
-      outcome:"bttsNo",
+      outcome:
+        "bttsNo",
 
       label:
         "ليس كلا الفريقين يسجلان",
@@ -2277,6 +2442,10 @@ function buildPredictions(
 
   ];
 
+
+  // --------------------------------------------------------
+  // BEST OPTION PER MARKET
+  // --------------------------------------------------------
 
   const bestOneXtwo =
     getBestMarketOption(
@@ -2296,6 +2465,10 @@ function buildPredictions(
     );
 
 
+  // --------------------------------------------------------
+  // THREE DIFFERENT MARKETS
+  // --------------------------------------------------------
+
   const selected = [
 
     bestOneXtwo,
@@ -2304,86 +2477,84 @@ function buildPredictions(
 
     bestBtts
 
-  ].filter(Boolean);
-
-
-  selected.sort(
-    function(a,b){
-
-      return (
-        b.probabilityValue -
-        a.probabilityValue
-      );
-
-    }
+  ].filter(
+    Boolean
   );
 
 
+  // --------------------------------------------------------
+  // SORT
+  // --------------------------------------------------------
+
+  selected.sort(
+    (a,b) =>
+      b.probabilityValue -
+      a.probabilityValue
+  );
+
+
+  // --------------------------------------------------------
+  // OUTPUT
+  // --------------------------------------------------------
+
   const predictions =
     selected
-      .slice(0,3)
+
+      .slice(
+        0,
+        3
+      )
+
       .map(
-        function(item){
+        item => ({
 
-          return {
+          outcome:
+            item.outcome,
 
-            outcome:
-              item.outcome,
+          label:
+            item.label,
 
-            label:
-              item.label,
+          probabilityValue:
+            item.probabilityValue,
 
-            probabilityValue:
-              item.probabilityValue,
+          probability:
+            `${round(
+              item.probabilityValue *
+              100
+            )}%`,
 
-            probability:
-              round(
-                item.probabilityValue *
-                100
-              ) + "%",
+          explanation:
+            item.explanation
 
-            explanation:
-              item.explanation
-
-          };
-
-        }
+        })
       );
 
 
   return {
 
-    predictions:predictions,
+    predictions,
 
     predictedScore:
 
-      String(
-        model.bestScore.home
-      ) +
-
-      " - " +
-
-      String(
-        model.bestScore.away
-      )
+      `${model.bestScore.home} - ${model.bestScore.away}`
 
   };
 
 }
 
 
-/*
-==========================================================
-BEST MARKET OPTION
-==========================================================
-*/
+// ==========================================================
+// BEST MARKET OPTION
+// ==========================================================
 
 function getBestMarketOption(
   candidates
 ){
 
   if(
-    !Array.isArray(candidates) ||
+    !Array.isArray(
+      candidates
+    ) ||
     !candidates.length
   ){
 
@@ -2393,28 +2564,30 @@ function getBestMarketOption(
 
 
   return candidates.reduce(
-    function(best,current){
+    (
+      best,
+      current
+    ) =>
 
-      return (
-        !best ||
-        current.probabilityValue >
-        best.probabilityValue
-      )
+      !best ||
+
+      current.probabilityValue >
+      best.probabilityValue
+
         ? current
-        : best;
 
-    },
+        : best,
+
     null
+
   );
 
 }
 
 
-/*
-==========================================================
-POISSON MATRIX
-==========================================================
-*/
+// ==========================================================
+// POISSON MATRIX
+// ==========================================================
 
 function poissonMatrix(
   lambdaHome,
@@ -2436,7 +2609,8 @@ function poissonMatrix(
     );
 
 
-  const matrix = [];
+  const matrix =
+    [];
 
 
   for(
@@ -2445,7 +2619,8 @@ function poissonMatrix(
     h++
   ){
 
-    matrix[h] = [];
+    matrix[h] =
+      [];
 
 
     for(
@@ -2467,44 +2642,40 @@ function poissonMatrix(
     matrix
       .flat()
       .reduce(
-        function(sum,value){
+        (
+          sum,
+          value
+        ) =>
+          sum +
+          value,
 
-          return sum + value;
-
-        },
         0
       );
 
 
   return matrix.map(
-    function(row){
-
-      return row.map(
-        function(value){
-
-          return value / total;
-
-        }
-      );
-
-    }
+    row =>
+      row.map(
+        value =>
+          value /
+          total
+      )
   );
 
 }
 
 
-/*
-==========================================================
-POISSON SERIES
-==========================================================
-*/
+// ==========================================================
+// POISSON SERIES
+// ==========================================================
 
 function poissonSeries(
   lambda,
   max
 ){
 
-  const result = [];
+  const result =
+    [];
 
 
   for(
@@ -2528,7 +2699,9 @@ function poissonSeries(
 
       /
 
-      factorial(k)
+      factorial(
+        k
+      )
 
     );
 
@@ -2540,17 +2713,16 @@ function poissonSeries(
 }
 
 
-/*
-==========================================================
-FACTORIAL
-==========================================================
-*/
+// ==========================================================
+// FACTORIAL
+// ==========================================================
 
 function factorial(
   n
 ){
 
-  let result = 1;
+  let result =
+    1;
 
 
   for(
@@ -2559,7 +2731,8 @@ function factorial(
     i++
   ){
 
-    result *= i;
+    result *=
+      i;
 
   }
 
@@ -2569,11 +2742,25 @@ function factorial(
 }
 
 
-/*
-==========================================================
-DATA QUALITY
-==========================================================
-*/
+// ==========================================================
+// DATA QUALITY 2.2.2
+// ==========================================================
+//
+// الجديد:
+//
+// التاريخ = 60 نقطة
+// تعدد المصادر = 30 نقطة
+// التحقق من المباراة = 10 نقاط
+//
+// ثم يوجد سقف حسب عدد المصادر:
+//
+// مصدر واحد  => حد أقصى 55
+// مصدران     => حد أقصى 75
+// 3 مصادر    => حد أقصى 90
+// 4+ مصادر   => 100
+//
+// لذلك لا يمكن لمصدر واحد أن يعطي 100/100.
+// ==========================================================
 
 function calculateDataQuality(
   analysis,
@@ -2588,21 +2775,34 @@ function calculateDataQuality(
     );
 
 
+  // --------------------------------------------------------
+  // التاريخ: 60 نقطة كحد أقصى
+  // --------------------------------------------------------
+
   const history =
     (
       Math.min(
         games,
         10
-      ) / 10
-    ) * 80;
+      ) /
+      10
+    ) * 60;
 
 
-  const providers =
+  // --------------------------------------------------------
+  // تعدد المصادر: 30 نقطة كحد أقصى
+  // --------------------------------------------------------
+
+  const providerScore =
     Math.min(
       providerCount,
-      2
-    ) * 10;
+      4
+    ) * 7.5;
 
+
+  // --------------------------------------------------------
+  // التحقق من المباراة: 10 نقاط
+  // --------------------------------------------------------
 
   const fixtureScore =
     fixture
@@ -2610,13 +2810,73 @@ function calculateDataQuality(
       : 0;
 
 
+  const raw =
+    history +
+    providerScore +
+    fixtureScore;
+
+
+  // --------------------------------------------------------
+  // HARD CAPS BY PROVIDER COUNT
+  // --------------------------------------------------------
+
+  let providerCap;
+
+
+  if(
+    providerCount <= 0
+  ){
+
+    providerCap =
+      0;
+
+  }
+
+  else if(
+    providerCount === 1
+  ){
+
+    providerCap =
+      55;
+
+  }
+
+  else if(
+    providerCount === 2
+  ){
+
+    providerCap =
+      75;
+
+  }
+
+  else if(
+    providerCount === 3
+  ){
+
+    providerCap =
+      90;
+
+  }
+
+  else{
+
+    providerCap =
+      100;
+
+  }
+
+
   return Math.round(
 
     clamp(
-      history +
-      providers +
-      fixtureScore,
+      Math.min(
+        raw,
+        providerCap
+      ),
+
       0,
+
       100
     )
 
@@ -2625,11 +2885,9 @@ function calculateDataQuality(
 }
 
 
-/*
-==========================================================
-BASE RESPONSE
-==========================================================
-*/
+// ==========================================================
+// BASE RESPONSE
+// ==========================================================
 
 function baseResponse(
   home,
@@ -2642,27 +2900,33 @@ function baseResponse(
 
   return {
 
-    success:true,
+    success:
+      true,
 
-    app:"Y.C.B",
+    app:
+      "Y.C.B",
 
     engine:
       "Y.C.B Prediction Engine",
 
-    version:VERSION,
+    version:
+      VERSION,
 
     architecture:
       "Multi Provider Architecture",
 
-    match:{
-      home:home,
-      away:away
+    match: {
+
+      home,
+
+      away
+
     },
 
     analysisStatus:
       status,
 
-    message:message,
+    message,
 
     predictions:
       fallbackPredictions(
@@ -2670,16 +2934,17 @@ function baseResponse(
         away
       ),
 
-    recommendation:{
+    recommendation: {
 
-      recommended:false,
+      recommended:
+        false,
 
       message:
-        "لا يوجد رهان موصى به: البيانات غير كافية أو لم يتم التحقق من المباراة."
+        "لا يوجد رهان موصى به: البيانات غير كافية أو لم يتم التحقق من المباراة عبر مصادر متعددة."
 
     },
 
-    providers:providers,
+    providers,
 
     providerCount:
       providers.length,
@@ -2687,18 +2952,30 @@ function baseResponse(
     successfulProviderCount:
       usable.length,
 
-    dataQuality:0
+    dataQuality:
+      0,
+
+    validation: {
+
+      minimumProvidersRequired:
+        2,
+
+      successfulProviders:
+        usable.length,
+
+      multiProviderVerified:
+        usable.length >= 2
+
+    }
 
   };
 
 }
 
 
-/*
-==========================================================
-FALLBACK
-==========================================================
-*/
+// ==========================================================
+// FALLBACK
+// ==========================================================
 
 function fallbackPredictions(
   home,
@@ -2709,16 +2986,17 @@ function fallbackPredictions(
 
     {
 
-      outcome:"unavailable",
+      outcome:
+        "unavailable",
 
       label:
-        "فوز " +
-        home,
+        `فوز ${home}`,
 
       probability:
         "غير متاح",
 
-      probabilityValue:0,
+      probabilityValue:
+        0,
 
       explanation:
         "لا توجد بيانات كافية."
@@ -2727,14 +3005,17 @@ function fallbackPredictions(
 
     {
 
-      outcome:"unavailable",
+      outcome:
+        "unavailable",
 
-      label:"التعادل",
+      label:
+        "التعادل",
 
       probability:
         "غير متاح",
 
-      probabilityValue:0,
+      probabilityValue:
+        0,
 
       explanation:
         "لا توجد بيانات كافية."
@@ -2743,16 +3024,17 @@ function fallbackPredictions(
 
     {
 
-      outcome:"unavailable",
+      outcome:
+        "unavailable",
 
       label:
-        "فوز " +
-        away,
+        `فوز ${away}`,
 
       probability:
         "غير متاح",
 
-      probabilityValue:0,
+      probabilityValue:
+        0,
 
       explanation:
         "لا توجد بيانات كافية."
@@ -2764,18 +3046,17 @@ function fallbackPredictions(
 }
 
 
-/*
-==========================================================
-NAME NORMALIZATION
-==========================================================
-*/
+// ==========================================================
+// NORMALIZE TEAM NAME
+// ==========================================================
 
 function normalizeName(
   value
 ){
 
   return String(
-    value || ""
+    value ||
+    ""
   )
 
     .toLowerCase()
@@ -2816,11 +3097,9 @@ function normalizeName(
 }
 
 
-/*
-==========================================================
-NAME MATCH
-==========================================================
-*/
+// ==========================================================
+// TEAM NAME MATCH
+// ==========================================================
 
 function namesMatch(
   first,
@@ -2854,11 +3133,8 @@ function namesMatch(
       first
         .split(" ")
         .filter(
-          function(item){
-
-            return item.length >= 3;
-
-          }
+          item =>
+            item.length >= 3
         )
 
     );
@@ -2867,24 +3143,19 @@ function namesMatch(
   return second
     .split(" ")
     .some(
-      function(item){
-
-        return (
-          item.length >= 3 &&
-          tokens.has(item)
-        );
-
-      }
+      item =>
+        item.length >= 3 &&
+        tokens.has(
+          item
+        )
     );
 
 }
 
 
-/*
-==========================================================
-CLAMP
-==========================================================
-*/
+// ==========================================================
+// CLAMP
+// ==========================================================
 
 function clamp(
   value,
@@ -2906,28 +3177,25 @@ function clamp(
 }
 
 
-/*
-==========================================================
-ROUND
-==========================================================
-*/
+// ==========================================================
+// ROUND
+// ==========================================================
 
 function round(
   value
 ){
 
   return Math.round(
-    Number(value) * 100
+    Number(value) *
+    100
   ) / 100;
 
 }
 
 
-/*
-==========================================================
-JSON RESPONSE
-==========================================================
-*/
+// ==========================================================
+// JSON RESPONSE
+// ==========================================================
 
 function json(
   data,
@@ -2944,9 +3212,9 @@ function json(
 
     {
 
-      status:status,
+      status,
 
-      headers:{
+      headers: {
 
         "Content-Type":
           "application/json;charset=UTF-8",
