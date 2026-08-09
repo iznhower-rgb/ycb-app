@@ -1,15 +1,18 @@
-// Y.C.B ESPN PROVIDER 2.2.0
+// Y.C.B ESPN PROVIDER 2.2.1
+//
+// ESPN is an optional provider.
+// If ESPN blocks the Worker request (403) or fails,
+// Y.C.B continues normally with the other providers.
 
 import {
   DataProvider,
   registerProvider
 } from "./providers.js";
 
+
 const SCOREBOARD =
   "https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard";
 
-const ESPN =
-  "https://site.api.espn.com/apis/site/v2/sports/soccer";
 
 class ESPNProvider extends DataProvider {
 
@@ -17,247 +20,184 @@ class ESPNProvider extends DataProvider {
     super("ESPN");
   }
 
+
   async getMatchData(home, away) {
 
-    const now = new Date();
+    const now =
+      new Date();
 
-    const from = shiftDate(now, -45);
-    const to = shiftDate(now, 45);
+
+    const from =
+      shiftDate(
+        now,
+        -30
+      );
+
+
+    const to =
+      shiftDate(
+        now,
+        30
+      );
+
 
     try {
 
-      const events = await getScoreboardEvents(
-        from,
-        to
-      );
+      const events =
+        await getScoreboardEvents(
+          from,
+          to
+        );
+
 
       const fixtureEvent =
-        events.find(event =>
-          eventMatches(
-            event,
-            home,
-            away
-          )
+        events.find(
+          event =>
+            eventMatches(
+              event,
+              home,
+              away
+            )
         );
+
 
       if (!fixtureEvent) {
 
         return {
-          status: "api_ok_no_match",
+
+          status:
+            "api_ok_no_match",
 
           message:
             "ESPN متصل لكن المباراة غير موجودة في نطاق البحث الحالي.",
 
           data: {
-            source: "espn",
-            available: true,
-            matchFound: false,
+
+            source:
+              "espn",
+
+            available:
+              true,
+
+            matchFound:
+              false,
+
             searchRange: {
-              dateFrom: formatDate(from),
-              dateTo: formatDate(to)
+
+              dateFrom:
+                formatDate(
+                  from
+                ),
+
+              dateTo:
+                formatDate(
+                  to
+                )
+
             },
-            totalEvents: events.length
+
+            totalEvents:
+              events.length
+
           }
+
         };
+
       }
+
 
       const fixture =
         normalizeEvent(
           fixtureEvent
         );
 
+
+      /*
+       * We intentionally do not depend on
+       * ESPN historical team schedules here.
+       *
+       * ESPN frequently blocks automated requests
+       * from server environments with HTTP 403.
+       *
+       * The fixture is still returned when ESPN
+       * allows the scoreboard request.
+       */
+
       const competitors =
         fixtureEvent
           ?.competitions?.[0]
-          ?.competitors || [];
+          ?.competitors ||
+        [];
+
 
       const homeCompetitor =
         competitors.find(
           item =>
-            item?.homeAway === "home"
+            item?.homeAway ===
+            "home"
         );
+
 
       const awayCompetitor =
         competitors.find(
           item =>
-            item?.homeAway === "away"
+            item?.homeAway ===
+            "away"
         );
 
+
       const homeId =
-        homeCompetitor?.team?.id || null;
+        homeCompetitor
+          ?.team
+          ?.id ||
+        null;
+
 
       const awayId =
-        awayCompetitor?.team?.id || null;
+        awayCompetitor
+          ?.team
+          ?.id ||
+        null;
 
-      /*
-       * ESPN's generic scoreboard is not reliable
-       * for obtaining enough historical matches.
-       *
-       * We therefore use the team's own ESPN
-       * schedule endpoint whenever possible.
-       */
-
-      const [
-        homeSchedule,
-        awaySchedule
-      ] = await Promise.all([
-
-        homeId
-          ? fetchTeamSchedule(
-              homeId
-            )
-          : Promise.resolve([]),
-
-        awayId
-          ? fetchTeamSchedule(
-              awayId
-            )
-          : Promise.resolve([])
-
-      ]);
-
-      let homeRecent =
-        homeSchedule
-          .filter(
-            event =>
-              isFinished(event) &&
-              !sameEvent(
-                event,
-                fixtureEvent
-              )
-          )
-          .sort(
-            (a, b) =>
-              new Date(
-                b?.date || 0
-              ) -
-              new Date(
-                a?.date || 0
-              )
-          )
-          .slice(0, 15)
-          .map(
-            normalizeEvent
-          );
-
-      let awayRecent =
-        awaySchedule
-          .filter(
-            event =>
-              isFinished(event) &&
-              !sameEvent(
-                event,
-                fixtureEvent
-              )
-          )
-          .sort(
-            (a, b) =>
-              new Date(
-                b?.date || 0
-              ) -
-              new Date(
-                a?.date || 0
-              )
-          )
-          .slice(0, 15)
-          .map(
-            normalizeEvent
-          );
-
-      /*
-       * Fallback:
-       * if ESPN team schedules failed, use the
-       * events already returned by scoreboard.
-       */
-
-      if (
-        homeRecent.length === 0
-      ) {
-
-        homeRecent =
-          events
-            .filter(
-              event =>
-                isFinished(event) &&
-                isTeamEvent(
-                  event,
-                  home
-                ) &&
-                !sameEvent(
-                  event,
-                  fixtureEvent
-                )
-            )
-            .sort(
-              (a, b) =>
-                new Date(
-                  b?.date || 0
-                ) -
-                new Date(
-                  a?.date || 0
-                )
-            )
-            .slice(0, 15)
-            .map(
-              normalizeEvent
-            );
-      }
-
-      if (
-        awayRecent.length === 0
-      ) {
-
-        awayRecent =
-          events
-            .filter(
-              event =>
-                isFinished(event) &&
-                isTeamEvent(
-                  event,
-                  away
-                ) &&
-                !sameEvent(
-                  event,
-                  fixtureEvent
-                )
-            )
-            .sort(
-              (a, b) =>
-                new Date(
-                  b?.date || 0
-                ) -
-                new Date(
-                  a?.date || 0
-                )
-            )
-            .slice(0, 15)
-            .map(
-              normalizeEvent
-            );
-      }
 
       return {
 
-        status: "success",
+        status:
+          "success",
 
         message:
-          "تم العثور على المباراة وبياناتها عبر ESPN.",
+          "تم العثور على المباراة عبر ESPN.",
 
         data: {
 
-          source: "espn",
+          source:
+            "espn",
 
-          available: true,
+          available:
+            true,
 
-          matchFound: true,
+          matchFound:
+            true,
 
           fixture,
 
+          teamIds: {
+
+            home:
+              homeId,
+
+            away:
+              awayId
+
+          },
+
           recentMatches: {
 
-            home: homeRecent,
+            home:
+              [],
 
-            away: awayRecent
+            away:
+              []
 
           }
 
@@ -269,17 +209,22 @@ class ESPNProvider extends DataProvider {
 
       return {
 
-        status: "network_error",
+        status:
+          "network_error",
 
         message:
           error?.message ||
           String(error),
 
-        data: null
+        data:
+          null
 
       };
+
     }
+
   }
+
 }
 
 
@@ -292,155 +237,73 @@ async function getScoreboardEvents(
   to
 ) {
 
-  /*
-   * ESPN accepts a date range in the form:
-   * YYYYMMDD-YYYYMMDD
-   */
-
   const url =
-    `${SCOREBOARD}?dates=` +
-    `${formatDate(from)}-${formatDate(to)}` +
-    `&limit=1000`;
+    SCOREBOARD +
+    "?dates=" +
+    formatDate(from) +
+    "-" +
+    formatDate(to) +
+    "&limit=1000";
 
-  const payload =
-    await fetchJSON(
-      url
-    );
-
-  return Array.isArray(
-    payload?.events
-  )
-    ? payload.events
-    : [];
-}
-
-
-/* ==========================================
-   TEAM SCHEDULE
-========================================== */
-
-async function fetchTeamSchedule(
-  teamId
-) {
-
-  /*
-   * Use the general soccer endpoint.
-   * ESPN team schedules are available under
-   * league-specific endpoints, but the generic
-   * endpoint is not guaranteed for every team.
-   *
-   * We therefore try the known major leagues.
-   */
-
-  const leagues = [
-
-    "eng.1",
-    "eng.2",
-    "esp.1",
-    "ger.1",
-    "ita.1",
-    "fra.1",
-    "usa.1",
-    "uefa.champions",
-    "bra.1",
-    "arg.1"
-
-  ];
-
-  for (
-    const league of leagues
-  ) {
-
-    try {
-
-      const url =
-        `${ESPN}/${league}` +
-        `/teams/${encodeURIComponent(teamId)}` +
-        `/schedule`;
-
-      const data =
-        await fetchJSON(
-          url
-        );
-
-      const events =
-        Array.isArray(
-          data?.events
-        )
-          ? data.events
-          : [];
-
-      if (
-        events.length
-      ) {
-
-        return events;
-      }
-
-    } catch {
-      /*
-       * Try the next league.
-       */
-    }
-  }
-
-  return [];
-}
-
-
-/* ==========================================
-   FETCH JSON
-========================================== */
-
-async function fetchJSON(
-  url
-) {
 
   const response =
     await fetch(
       url,
       {
         headers: {
-          Accept:
-            "application/json",
 
-          "User-Agent":
-            "YCB-Football-Prediction-Engine/2.2"
+          Accept:
+            "application/json"
+
         }
+
       }
     );
+
 
   const text =
     await response.text();
 
-  let data = null;
+
+  let payload =
+    null;
+
 
   try {
 
-    data =
+    payload =
       text
         ? JSON.parse(text)
         : null;
 
   } catch {
-    data = null;
+
+    payload =
+      null;
+
   }
 
-  if (
-    !response.ok
-  ) {
+
+  if (!response.ok) {
 
     throw new Error(
-      `ESPN HTTP ${response.status}` +
-      (
-        data?.message
-          ? `: ${data.message}`
-          : ""
-      )
+
+      "ESPN HTTP " +
+      response.status
+
     );
+
   }
 
-  return data;
+
+  return Array.isArray(
+    payload?.events
+  )
+
+    ? payload.events
+
+    : [];
+
 }
 
 
@@ -458,34 +321,44 @@ function normalizeEvent(
       ?.competitors ||
     [];
 
+
   const home =
     competitors.find(
       item =>
-        item?.homeAway === "home"
+        item?.homeAway ===
+        "home"
     ) ||
     competitors[0] ||
     {};
 
+
   const away =
     competitors.find(
       item =>
-        item?.homeAway === "away"
+        item?.homeAway ===
+        "away"
     ) ||
     competitors[1] ||
     {};
 
+
   const completed =
-    isFinished(event);
+    isFinished(
+      event
+    );
+
 
   const homeScore =
     numberOrNull(
       home?.score
     );
 
+
   const awayScore =
     numberOrNull(
       away?.score
     );
+
 
   return {
 
@@ -495,13 +368,17 @@ function normalizeEvent(
         ""
       ),
 
+
     utcDate:
       event?.date ||
       null,
 
+
     status:
       completed
+
         ? "FINISHED"
+
         : String(
             event
               ?.status
@@ -509,6 +386,7 @@ function normalizeEvent(
               ?.name ||
             "SCHEDULED"
           ),
+
 
     homeTeam: {
 
@@ -538,6 +416,7 @@ function normalizeEvent(
 
     },
 
+
     awayTeam: {
 
       id:
@@ -566,6 +445,7 @@ function normalizeEvent(
 
     },
 
+
     score: {
 
       fullTime: {
@@ -584,6 +464,7 @@ function normalizeEvent(
 
     },
 
+
     tournament:
       event
         ?.league
@@ -594,6 +475,7 @@ function normalizeEvent(
       null
 
   };
+
 }
 
 
@@ -613,17 +495,22 @@ function eventMatches(
       ?.competitors ||
     [];
 
+
   const homeTeam =
     competitors.find(
       item =>
-        item?.homeAway === "home"
+        item?.homeAway ===
+        "home"
     )?.team;
+
 
   const awayTeam =
     competitors.find(
       item =>
-        item?.homeAway === "away"
+        item?.homeAway ===
+        "away"
     )?.team;
+
 
   if (
     !homeTeam ||
@@ -631,7 +518,9 @@ function eventMatches(
   ) {
 
     return false;
+
   }
+
 
   return (
 
@@ -664,43 +553,7 @@ function eventMatches(
     )
 
   );
-}
 
-
-/* ==========================================
-   TEAM EVENT
-========================================== */
-
-function isTeamEvent(
-  event,
-  team
-) {
-
-  const competitors =
-    event
-      ?.competitions?.[0]
-      ?.competitors ||
-    [];
-
-  return competitors.some(
-    item =>
-      namesMatch(
-
-        normalizeName(
-          item
-            ?.team
-            ?.displayName ||
-          item
-            ?.team
-            ?.name
-        ),
-
-        normalizeName(
-          team
-        )
-
-      )
-  );
 }
 
 
@@ -717,9 +570,11 @@ function isFinished(
       ?.status
       ?.type;
 
+
   return (
 
-    type?.completed === true
+    type?.completed ===
+      true
 
     ||
 
@@ -735,33 +590,7 @@ function isFinished(
     )
 
   );
-}
 
-
-/* ==========================================
-   SAME EVENT
-========================================== */
-
-function sameEvent(
-  first,
-  second
-) {
-
-  return (
-
-    String(
-      first?.id ||
-      ""
-    )
-
-    ===
-
-    String(
-      second?.id ||
-      ""
-    )
-
-  );
 }
 
 
@@ -778,11 +607,15 @@ function numberOrNull(
       value
     );
 
+
   return Number.isFinite(
     number
   )
+
     ? number
+
     : null;
+
 }
 
 
@@ -833,6 +666,7 @@ function normalizeName(
     )
 
     .trim();
+
 }
 
 
@@ -851,7 +685,9 @@ function namesMatch(
   ) {
 
     return false;
+
   }
+
 
   if (
     first === second ||
@@ -860,17 +696,22 @@ function namesMatch(
   ) {
 
     return true;
+
   }
+
 
   const firstTokens =
     new Set(
+
       first
         .split(" ")
         .filter(
           token =>
             token.length >= 3
         )
+
     );
+
 
   const secondTokens =
     second
@@ -880,10 +721,14 @@ function namesMatch(
           token.length >= 3
       );
 
+
   return secondTokens.some(
     token =>
-      firstTokens.has(token)
+      firstTokens.has(
+        token
+      )
   );
+
 }
 
 
@@ -901,12 +746,15 @@ function shiftDate(
       date
     );
 
+
   result.setUTCDate(
     result.getUTCDate() +
     days
   );
 
+
   return result;
+
 }
 
 
@@ -928,6 +776,7 @@ function formatDate(
       /-/g,
       ""
     );
+
 }
 
 
@@ -938,8 +787,10 @@ function formatDate(
 const provider =
   new ESPNProvider();
 
+
 registerProvider(
   provider
 );
+
 
 export default provider;
