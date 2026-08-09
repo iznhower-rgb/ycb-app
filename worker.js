@@ -1,4 +1,8 @@
 // Y.C.B FINAL WORKER 2.2.1
+//
+// IMPORTANT:
+// Only the prediction-selection logic was improved.
+// Providers, UI, data collection and Poisson model remain unchanged.
 
 import {
   getProviders,
@@ -2119,6 +2123,43 @@ function buildModel(
 }
 
 
+/*
+========================================================
+Y.C.B DECISION LOGIC
+========================================================
+
+The old logic simply sorted all markets together.
+
+That created bad selections such as:
+
+- Over 2.5
+- Under 2.5
+
+at the same time.
+
+Or:
+
+- BTTS Yes
+- BTTS No
+
+at the same time.
+
+The new logic separates the markets into 3 independent
+families:
+
+1. Match Result (1X2)
+2. Total Goals (Over/Under 2.5)
+3. BTTS (Yes/No)
+
+Exactly one strongest option is selected from each family.
+
+Then the three selected options are ranked by probability.
+
+This keeps the three predictions diverse and avoids
+contradictory bets.
+========================================================
+*/
+
 function buildPredictions(
   analysis
 ){
@@ -2126,145 +2167,242 @@ function buildPredictions(
   const model =
     analysis.model;
 
-
   const home =
     analysis.home;
-
 
   const away =
     analysis.away;
 
 
-  const candidates = [
+  /*
+  --------------------------------------------------------
+  MARKET 1: MATCH RESULT
+  --------------------------------------------------------
+  Only ONE of these can be selected.
+  --------------------------------------------------------
+  */
 
-    [
+  const resultCandidates = [
 
-      "homeWin",
+    {
+      outcome:
+        "homeWin",
 
-      `فوز ${home.team}`,
+      label:
+        `فوز ${home.team}`,
 
-      model.homeWin,
+      probabilityValue:
+        model.homeWin,
 
-      "قوة الهجوم والدفاع والنتائج الأخيرة."
+      explanation:
+        "أقوى خيار في سوق نتيجة المباراة وفق نموذج 1X2."
+    },
 
-    ],
+    {
+      outcome:
+        "draw",
 
-    [
+      label:
+        "التعادل",
 
-      "draw",
+      probabilityValue:
+        model.draw,
 
-      "التعادل",
+      explanation:
+        "أقوى خيار في سوق نتيجة المباراة وفق نموذج 1X2."
+    },
 
-      model.draw,
+    {
+      outcome:
+        "awayWin",
 
-      "احتمال التعادل وفق توزيع أهداف بواسون."
+      label:
+        `فوز ${away.team}`,
 
-    ],
+      probabilityValue:
+        model.awayWin,
 
-    [
-
-      "awayWin",
-
-      `فوز ${away.team}`,
-
-      model.awayWin,
-
-      "قوة الهجوم والدفاع والنتائج الأخيرة."
-
-    ],
-
-    [
-
-      "over25",
-
-      "أكثر من 2.5 هدف",
-
-      model.over25,
-
-      "احتمال تسجيل ثلاثة أهداف أو أكثر."
-
-    ],
-
-    [
-
-      "under25",
-
-      "أقل من 2.5 هدف",
-
-      model.under25,
-
-      "احتمال تسجيل صفر إلى هدفين."
-
-    ],
-
-    [
-
-      "bttsYes",
-
-      "كلا الفريقين يسجلان",
-
-      model.bttsYes,
-
-      "احتمال تسجيل الفريقين هدفًا واحدًا على الأقل."
-
-    ],
-
-    [
-
-      "bttsNo",
-
-      "ليس كلا الفريقين يسجلان",
-
-      model.bttsNo,
-
-      "احتمال عدم تسجيل أحد الفريقين على الأقل."
-
-    ]
+      explanation:
+        "أقوى خيار في سوق نتيجة المباراة وفق نموذج 1X2."
+    }
 
   ];
 
 
-  candidates.sort(
+  resultCandidates.sort(
     (a,b) =>
-      b[2] -
-      a[2]
+      b.probabilityValue -
+      a.probabilityValue
   );
+
+
+  const bestResult =
+    resultCandidates[0];
+
+
+  /*
+  --------------------------------------------------------
+  MARKET 2: TOTAL GOALS
+  --------------------------------------------------------
+  Only ONE of Over/Under can be selected.
+  --------------------------------------------------------
+  */
+
+  const goalsCandidates = [
+
+    {
+      outcome:
+        "over25",
+
+      label:
+        "أكثر من 2.5 هدف",
+
+      probabilityValue:
+        model.over25,
+
+      explanation:
+        "أقوى خيار في سوق إجمالي الأهداف وفق توزيع بواسون."
+    },
+
+    {
+      outcome:
+        "under25",
+
+      label:
+        "أقل من 2.5 هدف",
+
+      probabilityValue:
+        model.under25,
+
+      explanation:
+        "أقوى خيار في سوق إجمالي الأهداف وفق توزيع بواسون."
+    }
+
+  ];
+
+
+  goalsCandidates.sort(
+    (a,b) =>
+      b.probabilityValue -
+      a.probabilityValue
+  );
+
+
+  const bestGoals =
+    goalsCandidates[0];
+
+
+  /*
+  --------------------------------------------------------
+  MARKET 3: BTTS
+  --------------------------------------------------------
+  Only ONE of Yes/No can be selected.
+  --------------------------------------------------------
+  */
+
+  const bttsCandidates = [
+
+    {
+      outcome:
+        "bttsYes",
+
+      label:
+        "كلا الفريقين يسجلان",
+
+      probabilityValue:
+        model.bttsYes,
+
+      explanation:
+        "أقوى خيار في سوق تسجيل الفريقين وفق نموذج بواسون."
+    },
+
+    {
+      outcome:
+        "bttsNo",
+
+      label:
+        "ليس كلا الفريقين يسجلان",
+
+      probabilityValue:
+        model.bttsNo,
+
+      explanation:
+        "أقوى خيار في سوق BTTS وفق نموذج بواسون."
+    }
+
+  ];
+
+
+  bttsCandidates.sort(
+    (a,b) =>
+      b.probabilityValue -
+      a.probabilityValue
+  );
+
+
+  const bestBtts =
+    bttsCandidates[0];
+
+
+  /*
+  --------------------------------------------------------
+  FINAL THREE
+  --------------------------------------------------------
+  Exactly one prediction from every market family.
+  --------------------------------------------------------
+  */
+
+  const selected = [
+
+    bestResult,
+
+    bestGoals,
+
+    bestBtts
+
+  ];
+
+
+  /*
+  Rank the three selected markets by probability.
+  */
+
+  selected.sort(
+    (a,b) =>
+      b.probabilityValue -
+      a.probabilityValue
+  );
+
+
+  const predictions =
+    selected.map(
+      item => ({
+
+        outcome:
+          item.outcome,
+
+        label:
+          item.label,
+
+        probabilityValue:
+          item.probabilityValue,
+
+        probability:
+          `${round(
+            item.probabilityValue *
+            100
+          )}%`,
+
+        explanation:
+          item.explanation
+
+      })
+    );
 
 
   return {
 
-    predictions:
-
-      candidates
-
-        .slice(
-          0,
-          3
-        )
-
-        .map(
-          item => ({
-
-            outcome:
-              item[0],
-
-            label:
-              item[1],
-
-            probabilityValue:
-              item[2],
-
-            probability:
-              `${round(
-                item[2] *
-                100
-              )}%`,
-
-            explanation:
-              item[3]
-
-          })
-        ),
+    predictions,
 
     predictedScore:
 
