@@ -1,8 +1,4 @@
 // Y.C.B FINAL WORKER 2.2.1
-//
-// IMPORTANT:
-// Only the prediction-selection logic was improved.
-// Providers, UI, data collection and Poisson model remain unchanged.
 
 import {
   getProviders,
@@ -2124,40 +2120,20 @@ function buildModel(
 
 
 /*
-========================================================
-Y.C.B DECISION LOGIC
-========================================================
+==========================================================
+Y.C.B BET SELECTION ENGINE
+==========================================================
 
-The old logic simply sorted all markets together.
+الهدف:
 
-That created bad selections such as:
-
-- Over 2.5
-- Under 2.5
-
-at the same time.
-
-Or:
-
-- BTTS Yes
-- BTTS No
-
-at the same time.
-
-The new logic separates the markets into 3 independent
-families:
-
-1. Match Result (1X2)
-2. Total Goals (Over/Under 2.5)
-3. BTTS (Yes/No)
-
-Exactly one strongest option is selected from each family.
-
-Then the three selected options are ranked by probability.
-
-This keeps the three predictions diverse and avoids
-contradictory bets.
-========================================================
+1. اختيار أفضل خيار واحد فقط من سوق 1X2.
+2. اختيار أفضل خيار واحد فقط من سوق الأهداف.
+3. اختيار أفضل خيار واحد فقط من سوق BTTS.
+4. عدم السماح بتناقض الأسواق.
+5. بعد اختيار أفضل خيار من كل سوق،
+   يتم ترتيب الأسواق الثلاثة حسب قوة التوقع.
+6. لا يتم تغيير نموذج Poisson أو البيانات.
+==========================================================
 */
 
 function buildPredictions(
@@ -2167,24 +2143,28 @@ function buildPredictions(
   const model =
     analysis.model;
 
+
   const home =
     analysis.home;
+
 
   const away =
     analysis.away;
 
 
   /*
-  --------------------------------------------------------
-  MARKET 1: MATCH RESULT
-  --------------------------------------------------------
-  Only ONE of these can be selected.
-  --------------------------------------------------------
+  ----------------------------------------------------------
+  السوق الأول: 1X2
+  ----------------------------------------------------------
+  نأخذ فقط أقوى نتيجة من:
+  فوز المضيف / التعادل / فوز الضيف
+  ----------------------------------------------------------
   */
 
-  const resultCandidates = [
+  const oneXtwo = [
 
     {
+
       outcome:
         "homeWin",
 
@@ -2195,10 +2175,12 @@ function buildPredictions(
         model.homeWin,
 
       explanation:
-        "أقوى خيار في سوق نتيجة المباراة وفق نموذج 1X2."
+        "أقوى خيار في سوق 1X2 وفق نموذج بواسون."
+
     },
 
     {
+
       outcome:
         "draw",
 
@@ -2209,10 +2191,12 @@ function buildPredictions(
         model.draw,
 
       explanation:
-        "أقوى خيار في سوق نتيجة المباراة وفق نموذج 1X2."
+        "أقوى خيار في سوق 1X2 وفق نموذج بواسون."
+
     },
 
     {
+
       outcome:
         "awayWin",
 
@@ -2223,34 +2207,25 @@ function buildPredictions(
         model.awayWin,
 
       explanation:
-        "أقوى خيار في سوق نتيجة المباراة وفق نموذج 1X2."
+        "أقوى خيار في سوق 1X2 وفق نموذج بواسون."
+
     }
 
   ];
 
 
-  resultCandidates.sort(
-    (a,b) =>
-      b.probabilityValue -
-      a.probabilityValue
-  );
-
-
-  const bestResult =
-    resultCandidates[0];
-
-
   /*
-  --------------------------------------------------------
-  MARKET 2: TOTAL GOALS
-  --------------------------------------------------------
-  Only ONE of Over/Under can be selected.
-  --------------------------------------------------------
+  ----------------------------------------------------------
+  السوق الثاني: مجموع الأهداف
+  ----------------------------------------------------------
+  نأخذ Over أو Under فقط.
+  ----------------------------------------------------------
   */
 
-  const goalsCandidates = [
+  const goalsMarket = [
 
     {
+
       outcome:
         "over25",
 
@@ -2262,9 +2237,11 @@ function buildPredictions(
 
       explanation:
         "أقوى خيار في سوق إجمالي الأهداف وفق توزيع بواسون."
+
     },
 
     {
+
       outcome:
         "under25",
 
@@ -2276,33 +2253,24 @@ function buildPredictions(
 
       explanation:
         "أقوى خيار في سوق إجمالي الأهداف وفق توزيع بواسون."
+
     }
 
   ];
 
 
-  goalsCandidates.sort(
-    (a,b) =>
-      b.probabilityValue -
-      a.probabilityValue
-  );
-
-
-  const bestGoals =
-    goalsCandidates[0];
-
-
   /*
-  --------------------------------------------------------
-  MARKET 3: BTTS
-  --------------------------------------------------------
-  Only ONE of Yes/No can be selected.
-  --------------------------------------------------------
+  ----------------------------------------------------------
+  السوق الثالث: BTTS
+  ----------------------------------------------------------
+  نأخذ Yes أو No فقط.
+  ----------------------------------------------------------
   */
 
-  const bttsCandidates = [
+  const bttsMarket = [
 
     {
+
       outcome:
         "bttsYes",
 
@@ -2314,9 +2282,11 @@ function buildPredictions(
 
       explanation:
         "أقوى خيار في سوق تسجيل الفريقين وفق نموذج بواسون."
+
     },
 
     {
+
       outcome:
         "bttsNo",
 
@@ -2327,44 +2297,66 @@ function buildPredictions(
         model.bttsNo,
 
       explanation:
-        "أقوى خيار في سوق BTTS وفق نموذج بواسون."
+        "أقوى خيار في سوق تسجيل الفريقين وفق نموذج بواسون."
+
     }
 
   ];
 
 
-  bttsCandidates.sort(
-    (a,b) =>
-      b.probabilityValue -
-      a.probabilityValue
-  );
+  /*
+  ----------------------------------------------------------
+  اختيار أفضل عنصر داخل كل سوق
+  ----------------------------------------------------------
+  */
+
+  const bestOneXtwo =
+    getBestMarketOption(
+      oneXtwo
+    );
+
+
+  const bestGoals =
+    getBestMarketOption(
+      goalsMarket
+    );
 
 
   const bestBtts =
-    bttsCandidates[0];
+    getBestMarketOption(
+      bttsMarket
+    );
 
 
   /*
-  --------------------------------------------------------
-  FINAL THREE
-  --------------------------------------------------------
-  Exactly one prediction from every market family.
-  --------------------------------------------------------
+  ----------------------------------------------------------
+  الآن أصبح لدينا 3 أسواق مختلفة فقط:
+  
+  1X2
+  Goals
+  BTTS
+  
+  وهذا يمنع التناقضات.
+  ----------------------------------------------------------
   */
 
   const selected = [
 
-    bestResult,
+    bestOneXtwo,
 
     bestGoals,
 
     bestBtts
 
-  ];
+  ].filter(
+    Boolean
+  );
 
 
   /*
-  Rank the three selected markets by probability.
+  ----------------------------------------------------------
+  ترتيب الأسواق الثلاثة حسب قوة التوقع.
+  ----------------------------------------------------------
   */
 
   selected.sort(
@@ -2374,30 +2366,43 @@ function buildPredictions(
   );
 
 
+  /*
+  ----------------------------------------------------------
+  إخراج أفضل 3 رهانات.
+  ----------------------------------------------------------
+  */
+
   const predictions =
-    selected.map(
-      item => ({
+    selected
 
-        outcome:
-          item.outcome,
+      .slice(
+        0,
+        3
+      )
 
-        label:
-          item.label,
+      .map(
+        item => ({
 
-        probabilityValue:
-          item.probabilityValue,
+          outcome:
+            item.outcome,
 
-        probability:
-          `${round(
-            item.probabilityValue *
-            100
-          )}%`,
+          label:
+            item.label,
 
-        explanation:
-          item.explanation
+          probabilityValue:
+            item.probabilityValue,
 
-      })
-    );
+          probability:
+            `${round(
+              item.probabilityValue *
+              100
+            )}%`,
+
+          explanation:
+            item.explanation
+
+        })
+      );
 
 
   return {
@@ -2409,6 +2414,50 @@ function buildPredictions(
       `${model.bestScore.home} - ${model.bestScore.away}`
 
   };
+
+}
+
+
+/*
+==========================================================
+إرجاع أقوى خيار داخل سوق واحد.
+==========================================================
+*/
+
+function getBestMarketOption(
+  candidates
+){
+
+  if(
+    !Array.isArray(
+      candidates
+    ) ||
+    !candidates.length
+  ){
+
+    return null;
+
+  }
+
+
+  return candidates.reduce(
+    (
+      best,
+      current
+    ) =>
+
+      !best ||
+
+      current.probabilityValue >
+      best.probabilityValue
+
+        ? current
+
+        : best,
+
+    null
+
+  );
 
 }
 
