@@ -1,78 +1,123 @@
 // Y.C.B - FOOTBALL-DATA.ORG PROVIDER
-// Safe provider: never breaks the complete Y.C.B analysis.
+// Version 2.3
+// Safe browser provider
+// Never breaks the complete Y.C.B analysis
 
 import {
   DataProvider,
   registerProvider
 } from "./providers.js";
 
+
 const BASE =
   "https://api.football-data.org/v4";
+
 
 const PROVIDER_NAME =
   "Football-Data.org";
 
+
 const DEFAULT_DAYS_BACK =
   30;
 
+
 const DEFAULT_DAYS_FORWARD =
   30;
+
 
 const MAX_RECENT_MATCHES =
   15;
 
 
+const REQUEST_TIMEOUT =
+  12000;
+
+
 /* =========================================================
    PROVIDER
-   ========================================================= */
+========================================================= */
 
-class FootballDataProvider extends DataProvider {
+class FootballDataProvider
+  extends DataProvider {
 
   constructor() {
-    super(PROVIDER_NAME);
+
+    super(
+      PROVIDER_NAME
+    );
+
   }
 
 
-  async getMatchData(home, away, env) {
+  async getMatchData(
+    home,
+    away,
+    env = {}
+  ) {
 
     const token =
       String(
-        env?.FOOTBALL_DATA_TOKEN || ""
+        env?.FOOTBALL_DATA_TOKEN ||
+        ""
       ).trim();
 
-
-    /*
-     * No token:
-     * This is NOT an error.
-     * The provider is simply disabled.
-     */
 
     if (!token) {
 
       return {
-        status: "disabled",
+
+        status:
+          "disabled",
+
         message:
           "Football-Data.org غير مفعل: FOOTBALL_DATA_TOKEN غير موجود.",
-        data: null
+
+        data: {
+
+          source:
+            "football-data.org",
+
+          available:
+            false,
+
+          matchFound:
+            false
+
+        }
+
       };
 
     }
 
 
     const homeName =
-      normalizeName(home);
+      normalizeName(
+        home
+      );
+
 
     const awayName =
-      normalizeName(away);
+      normalizeName(
+        away
+      );
 
 
-    if (!homeName || !awayName) {
+    if (
+      !homeName ||
+      !awayName
+    ) {
 
       return {
-        status: "invalid_request",
+
+        status:
+          "invalid_request",
+
         message:
           "اسم الفريقين غير صالح.",
-        data: null
+
+        data:
+          null
+
       };
 
     }
@@ -118,10 +163,6 @@ class FootballDataProvider extends DataProvider {
     );
 
 
-    /*
-     * Use the documented status values.
-     */
-
     url.searchParams.set(
       "status",
       [
@@ -137,10 +178,6 @@ class FootballDataProvider extends DataProvider {
     );
 
 
-    /*
-     * Limit the response.
-     */
-
     url.searchParams.set(
       "limit",
       "100"
@@ -149,112 +186,11 @@ class FootballDataProvider extends DataProvider {
 
     try {
 
-      const response =
-        await fetch(
-          url.toString(),
-          {
-            method: "GET",
-
-            headers: {
-              "X-Auth-Token": token,
-              "Accept": "application/json"
-            }
-          }
-        );
-
-
-      const text =
-        await response.text();
-
-
       const payload =
-        safeJsonParse(text);
-
-
-      /*
-       * Authentication / API errors
-       */
-
-      if (!response.ok) {
-
-        const message =
-          String(
-            payload?.message ||
-            payload?.error ||
-            text ||
-            `HTTP ${response.status}`
-          );
-
-
-        /*
-         * Invalid token:
-         * disable this provider instead of poisoning
-         * the complete analysis.
-         */
-
-        if (
-          response.status === 400 ||
-          response.status === 401 ||
-          response.status === 403
-        ) {
-
-          return {
-            status: "disabled_invalid_token",
-
-            message:
-              "Football-Data.org غير متاح حاليًا: التوكن غير صالح أو غير مقبول. سيتم تجاهل المصدر.",
-
-            data: {
-              source: "football-data.org",
-              available: false,
-              matchFound: false,
-              httpStatus: response.status
-            }
-          };
-
-        }
-
-
-        /*
-         * Rate limit
-         */
-
-        if (
-          response.status === 429
-        ) {
-
-          return {
-            status: "rate_limited",
-
-            message:
-              "Football-Data.org وصل إلى حد الطلبات. سيتم تجاهل المصدر مؤقتًا.",
-
-            data: {
-              source: "football-data.org",
-              available: false,
-              matchFound: false,
-              httpStatus: 429
-            }
-          };
-
-        }
-
-
-        return {
-          status: "api_error",
-
-          message:
-            `Football-Data.org HTTP ${response.status}: ${message}`,
-
-          data: {
-            source: "football-data.org",
-            available: false,
-            matchFound: false,
-            httpStatus: response.status
-          }
-        };
-
-      }
+        await fetchFootballData(
+          url.toString(),
+          token
+        );
 
 
       const matches =
@@ -265,10 +201,6 @@ class FootballDataProvider extends DataProvider {
           : [];
 
 
-      /*
-       * Find requested fixture.
-       */
-
       const requested =
         findRequestedMatch(
           matches,
@@ -277,16 +209,9 @@ class FootballDataProvider extends DataProvider {
         );
 
 
-      /*
-       * Match not found is NOT an API error.
-       */
-
-      if (!requested) {
-
-        /*
-         * We can still return useful historical
-         * matches if the API returned them.
-         */
+      if (
+        !requested
+      ) {
 
         const homeRecent =
           getRecentMatches(
@@ -358,19 +283,11 @@ class FootballDataProvider extends DataProvider {
       }
 
 
-      /*
-       * Normalize fixture.
-       */
-
       const fixture =
         normalizeMatch(
           requested
         );
 
-
-      /*
-       * Historical matches for both teams.
-       */
 
       const homeRecent =
         getRecentMatches(
@@ -426,23 +343,25 @@ class FootballDataProvider extends DataProvider {
 
       };
 
-    } catch (error) {
+    } catch (
+      error
+    ) {
 
-      /*
-       * Network / Worker fetch failure.
-       * Never throw out of the provider.
-       */
+      const status =
+        classifyError(
+          error
+        );
+
 
       return {
 
-        status:
-          "network_error",
+        status,
 
         message:
-          `Football-Data.org network error: ${
-            error?.message ||
-            String(error)
-          }`,
+          getErrorMessage(
+            status,
+            error
+          ),
 
         data: {
 
@@ -453,7 +372,11 @@ class FootballDataProvider extends DataProvider {
             false,
 
           matchFound:
-            false
+            false,
+
+          error:
+            error?.message ||
+            String(error)
 
         }
 
@@ -467,8 +390,131 @@ class FootballDataProvider extends DataProvider {
 
 
 /* =========================================================
+   FETCH
+========================================================= */
+
+async function fetchFootballData(
+  url,
+  token
+) {
+
+  const controller =
+    new AbortController();
+
+
+  const timeout =
+    setTimeout(
+      () =>
+        controller.abort(),
+      REQUEST_TIMEOUT
+    );
+
+
+  try {
+
+    const response =
+      await fetch(
+        url,
+        {
+
+          method:
+            "GET",
+
+          headers: {
+
+            "X-Auth-Token":
+              token,
+
+            "Accept":
+              "application/json"
+
+          },
+
+          signal:
+            controller.signal
+
+        }
+      );
+
+
+    const text =
+      await response.text();
+
+
+    const payload =
+      safeJsonParse(
+        text
+      );
+
+
+    if (
+      !response.ok
+    ) {
+
+      const message =
+        String(
+          payload?.message ||
+          payload?.error ||
+          text ||
+          `HTTP ${response.status}`
+        );
+
+
+      throw new Error(
+        `Football-Data.org HTTP ${response.status}: ${message}`
+      );
+
+    }
+
+
+    return payload;
+
+  } catch (
+    error
+  ) {
+
+    if (
+      error?.name ===
+      "AbortError"
+    ) {
+
+      throw new Error(
+        "Football-Data.org request timeout"
+      );
+
+    }
+
+
+    if (
+      error instanceof TypeError
+    ) {
+
+      throw new Error(
+        `Football-Data.org access blocked or CORS failure: ${
+          error?.message ||
+          "Failed to fetch"
+        }`
+      );
+
+    }
+
+
+    throw error;
+
+  } finally {
+
+    clearTimeout(
+      timeout
+    );
+
+  }
+
+}
+
+
+/* =========================================================
    FIND MATCH
-   ========================================================= */
+========================================================= */
 
 function findRequestedMatch(
   matches,
@@ -477,16 +523,16 @@ function findRequestedMatch(
 ) {
 
   const homeName =
-    normalizeName(home);
+    normalizeName(
+      home
+    );
+
 
   const awayName =
-    normalizeName(away);
+    normalizeName(
+      away
+    );
 
-
-  /*
-   * First pass:
-   * exact / strong home-away matching.
-   */
 
   let result =
     matches.find(
@@ -496,6 +542,7 @@ function findRequestedMatch(
           normalizeName(
             match?.homeTeam?.name
           );
+
 
         const matchAway =
           normalizeName(
@@ -519,16 +566,14 @@ function findRequestedMatch(
     );
 
 
-  if (result) {
+  if (
+    result
+  ) {
+
     return result;
+
   }
 
-
-  /*
-   * Second pass:
-   * allow the provider to return a match even
-   * when team naming differs slightly.
-   */
 
   result =
     matches.find(
@@ -539,43 +584,44 @@ function findRequestedMatch(
             match?.homeTeam?.name
           );
 
+
         const matchAway =
           normalizeName(
             match?.awayTeam?.name
           );
 
 
-        const homeScore =
+        return (
+
           nameSimilarity(
             matchHome,
             homeName
-          );
+          ) >= 0.70
 
+          &&
 
-        const awayScore =
           nameSimilarity(
             matchAway,
             awayName
-          );
+          ) >= 0.70
 
-
-        return (
-          homeScore >= 0.70 &&
-          awayScore >= 0.70
         );
 
       }
     );
 
 
-  return result || null;
+  return (
+    result ||
+    null
+  );
 
 }
 
 
 /* =========================================================
    RECENT MATCHES
-   ========================================================= */
+========================================================= */
 
 function getRecentMatches(
   matches,
@@ -584,11 +630,17 @@ function getRecentMatches(
 ) {
 
   const teamName =
-    normalizeName(team);
+    normalizeName(
+      team
+    );
 
 
-  if (!teamName) {
+  if (
+    !teamName
+  ) {
+
     return [];
+
   }
 
 
@@ -609,8 +661,13 @@ function getRecentMatches(
 
         if (
           excludeId &&
-          String(match?.id || "") ===
-          String(excludeId)
+          String(
+            match?.id ||
+            ""
+          ) ===
+          String(
+            excludeId
+          )
         ) {
 
           return false;
@@ -622,6 +679,7 @@ function getRecentMatches(
           normalizeName(
             match?.homeTeam?.name
           );
+
 
         const away =
           normalizeName(
@@ -644,22 +702,23 @@ function getRecentMatches(
       }
     )
 
-    /*
-     * API results are normally chronological,
-     * but sorting explicitly is safer.
-     */
-
     .sort(
-      (a, b) => {
+      (
+        a,
+        b
+      ) => {
 
         const dateA =
           Date.parse(
-            a?.utcDate || ""
+            a?.utcDate ||
+            ""
           );
+
 
         const dateB =
           Date.parse(
-            b?.utcDate || ""
+            b?.utcDate ||
+            ""
           );
 
 
@@ -681,8 +740,8 @@ function getRecentMatches(
 
 
 /* =========================================================
-   NORMALIZE MATCH
-   ========================================================= */
+   NORMALIZE
+========================================================= */
 
 function normalizeMatch(
   match
@@ -722,11 +781,9 @@ function normalizeMatch(
         match
           ?.homeTeam
           ?.shortName ||
-
         match
           ?.homeTeam
           ?.tla ||
-
         null
 
     },
@@ -749,11 +806,9 @@ function normalizeMatch(
         match
           ?.awayTeam
           ?.shortName ||
-
         match
           ?.awayTeam
           ?.tla ||
-
         null
 
     },
@@ -794,15 +849,164 @@ function normalizeMatch(
 
 
 /* =========================================================
+   ERROR CLASSIFICATION
+========================================================= */
+
+function classifyError(
+  error
+) {
+
+  const message =
+    String(
+      error?.message ||
+      error ||
+      ""
+    ).toLowerCase();
+
+
+  if (
+    message.includes(
+      "http 400"
+    ) ||
+    message.includes(
+      "http 401"
+    ) ||
+    message.includes(
+      "http 403"
+    ) ||
+    message.includes(
+      "invalid token"
+    ) ||
+    message.includes(
+      "unauthorized"
+    )
+  ) {
+
+    return "disabled_invalid_token";
+
+  }
+
+
+  if (
+    message.includes(
+      "http 429"
+    )
+  ) {
+
+    return "rate_limited";
+
+  }
+
+
+  if (
+    message.includes(
+      "access blocked"
+    ) ||
+    message.includes(
+      "cors"
+    )
+  ) {
+
+    return "access_blocked";
+
+  }
+
+
+  if (
+    message.includes(
+      "timeout"
+    )
+  ) {
+
+    return "timeout";
+
+  }
+
+
+  return "network_error";
+
+}
+
+
+/* =========================================================
+   ERROR MESSAGE
+========================================================= */
+
+function getErrorMessage(
+  status,
+  error
+) {
+
+  if (
+    status ===
+    "disabled_invalid_token"
+  ) {
+
+    return (
+      "Football-Data.org غير متاح: التوكن غير صالح أو مرفوض. تم تجاهل المصدر."
+    );
+
+  }
+
+
+  if (
+    status ===
+    "rate_limited"
+  ) {
+
+    return (
+      "Football-Data.org وصل إلى حد الطلبات. تم تجاهل المصدر مؤقتًا."
+    );
+
+  }
+
+
+  if (
+    status ===
+    "access_blocked"
+  ) {
+
+    return (
+      "Football-Data.org محجوب أو غير مسموح به من بيئة المتصفح."
+    );
+
+  }
+
+
+  if (
+    status ===
+    "timeout"
+  ) {
+
+    return (
+      "Football-Data.org لم يستجب خلال المهلة."
+    );
+
+  }
+
+
+  return (
+    error?.message ||
+    "Football-Data.org request failed."
+  );
+
+}
+
+
+/* =========================================================
    SAFE JSON
-   ========================================================= */
+========================================================= */
 
 function safeJsonParse(
   text
 ) {
 
-  if (!text) {
+  if (
+    !text
+  ) {
+
     return null;
+
   }
 
 
@@ -823,7 +1027,7 @@ function safeJsonParse(
 
 /* =========================================================
    NUMBER
-   ========================================================= */
+========================================================= */
 
 function finiteOrNull(
   value
@@ -841,7 +1045,9 @@ function finiteOrNull(
 
 
   const number =
-    Number(value);
+    Number(
+      value
+    );
 
 
   return Number.isFinite(
@@ -855,7 +1061,7 @@ function finiteOrNull(
 
 /* =========================================================
    DATE
-   ========================================================= */
+========================================================= */
 
 function shiftDate(
   date,
@@ -863,7 +1069,9 @@ function shiftDate(
 ) {
 
   const result =
-    new Date(date);
+    new Date(
+      date
+    );
 
 
   result.setUTCDate(
@@ -893,23 +1101,20 @@ function formatDate(
 
 /* =========================================================
    NAME NORMALIZATION
-   ========================================================= */
+========================================================= */
 
 function normalizeName(
   value
 ) {
 
   return String(
-    value || ""
+    value ||
+    ""
   )
 
     .toLowerCase()
 
     .trim()
-
-    /*
-     * Remove accents.
-     */
 
     .normalize(
       "NFD"
@@ -919,10 +1124,6 @@ function normalizeName(
       /[\u0300-\u036f]/g,
       ""
     )
-
-    /*
-     * Common separators.
-     */
 
     .replace(
       /&/g,
@@ -934,18 +1135,10 @@ function normalizeName(
       " "
     )
 
-    /*
-     * Remove common club suffixes.
-     */
-
     .replace(
       /\b(fc|cf|afc|sc|ac|fk|club|women|woman|f)\b/g,
       " "
     )
-
-    /*
-     * Keep Arabic + Latin + numbers.
-     */
 
     .replace(
       /[^a-z0-9\u0600-\u06ff\s]/gi,
@@ -964,7 +1157,7 @@ function normalizeName(
 
 /* =========================================================
    NAME MATCH
-   ========================================================= */
+========================================================= */
 
 function namesMatch(
   first,
@@ -991,8 +1184,12 @@ function namesMatch(
 
 
   if (
-    first.includes(second) ||
-    second.includes(first)
+    first.includes(
+      second
+    ) ||
+    second.includes(
+      first
+    )
   ) {
 
     return true;
@@ -1017,7 +1214,7 @@ function namesMatch(
       .filter(
         token =>
           token.length >= 3
-      );
+        );
 
 
   if (
@@ -1066,7 +1263,7 @@ function namesMatch(
 
 /* =========================================================
    NAME SIMILARITY
-   ========================================================= */
+========================================================= */
 
 function nameSimilarity(
   first,
@@ -1107,8 +1304,8 @@ function nameSimilarity(
       first
         .split(" ")
         .filter(
-          x =>
-            x.length >= 3
+          token =>
+            token.length >= 3
         )
     );
 
@@ -1118,15 +1315,15 @@ function nameSimilarity(
       second
         .split(" ")
         .filter(
-          x =>
-            x.length >= 3
+          token =>
+            token.length >= 3
         )
     );
 
 
   if (
-    a.size === 0 ||
-    b.size === 0
+    !a.size ||
+    !b.size
   ) {
 
     return 0;
@@ -1144,7 +1341,9 @@ function nameSimilarity(
   ) {
 
     if (
-      b.has(token)
+      b.has(
+        token
+      )
     ) {
 
       intersection++;
@@ -1161,26 +1360,16 @@ function nameSimilarity(
     ]).size;
 
 
-  if (
-    union === 0
-  ) {
-
-    return 0;
-
-  }
-
-
-  return (
-    intersection /
-    union
-  );
+  return union
+    ? intersection / union
+    : 0;
 
 }
 
 
 /* =========================================================
    REGISTER
-   ========================================================= */
+========================================================= */
 
 const provider =
   new FootballDataProvider();
