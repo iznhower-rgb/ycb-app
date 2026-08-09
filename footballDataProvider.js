@@ -17,12 +17,19 @@ const API_BASE =
 
 
 // ==========================================
-// COMPETITION
+// COMPETITIONS
 // ==========================================
 
-// Premier League
-const COMPETITION_CODE =
-  "PL";
+const COMPETITIONS = [
+  "PL",
+  "PD",
+  "SA",
+  "BL1",
+  "FL1",
+  "PPL",
+  "DED",
+  "CL"
+];
 
 
 // ==========================================
@@ -32,13 +39,8 @@ const COMPETITION_CODE =
 class FootballDataProvider
   extends DataProvider {
 
-
   constructor() {
-
-    super(
-      "Football-Data.org"
-    );
-
+    super("Football-Data.org");
   }
 
 
@@ -52,22 +54,16 @@ class FootballDataProvider
     env
   ) {
 
-    // ======================================
-    // VALIDATE ENVIRONMENT
-    // ======================================
+    // --------------------------------------
+    // ENV CHECK
+    // --------------------------------------
 
     if (!env) {
 
       return {
 
-        provider:
-          this.name,
-
         status:
           "environment_missing",
-
-        home,
-        away,
 
         data:
           null,
@@ -80,9 +76,9 @@ class FootballDataProvider
     }
 
 
-    // ======================================
-    // GET API TOKEN
-    // ======================================
+    // --------------------------------------
+    // TOKEN
+    // --------------------------------------
 
     const token =
       String(
@@ -94,20 +90,11 @@ class FootballDataProvider
 
       return {
 
-        provider:
-          this.name,
-
         status:
           "not_configured",
 
-        home,
-        away,
-
         data:
           null,
-
-        dataSource:
-          "Football-Data.org",
 
         message:
           "FOOTBALL_DATA_TOKEN is missing"
@@ -117,9 +104,82 @@ class FootballDataProvider
     }
 
 
-    // ======================================
-    // DATE RANGE
-    // ======================================
+    // --------------------------------------
+    // SEARCH ALL SUPPORTED COMPETITIONS
+    // --------------------------------------
+
+    for (
+      const competitionCode
+      of COMPETITIONS
+    ) {
+
+      try {
+
+        const result =
+          await this.searchCompetition(
+            competitionCode,
+            home,
+            away,
+            token
+          );
+
+
+        if (
+          result &&
+          result.status === "success"
+        ) {
+
+          return result;
+
+        }
+
+      } catch (error) {
+
+        // Continue with next competition.
+
+      }
+
+    }
+
+
+    // --------------------------------------
+    // NOTHING FOUND
+    // --------------------------------------
+
+    return {
+
+      status:
+        "api_ok_no_match",
+
+      data: {
+
+        home: home,
+
+        away: away,
+
+        competitionsChecked:
+          COMPETITIONS
+
+      },
+
+      message:
+        "Football-Data.org connection works, but the requested match was not found in the searched competitions"
+
+    };
+
+  }
+
+
+  // ========================================
+  // SEARCH COMPETITION
+  // ========================================
+
+  async searchCompetition(
+    competitionCode,
+    home,
+    away,
+    token
+  ) {
 
     const today =
       new Date();
@@ -143,43 +203,23 @@ class FootballDataProvider
     );
 
 
-    const dateFrom =
-      formatDate(
-        startDate
-      );
-
-
-    const dateTo =
-      formatDate(
-        endDate
-      );
-
-
-    // ======================================
-    // BUILD API URL
-    // ======================================
-
     const apiUrl =
       new URL(
-        `${API_BASE}/competitions/${COMPETITION_CODE}/matches`
+        `${API_BASE}/competitions/${competitionCode}/matches`
       );
 
 
     apiUrl.searchParams.set(
       "dateFrom",
-      dateFrom
+      formatDate(startDate)
     );
 
 
     apiUrl.searchParams.set(
       "dateTo",
-      dateTo
+      formatDate(endDate)
     );
 
-
-    // ======================================
-    // API REQUEST
-    // ======================================
 
     let response;
 
@@ -211,14 +251,8 @@ class FootballDataProvider
 
       return {
 
-        provider:
-          this.name,
-
         status:
           "network_error",
-
-        home,
-        away,
 
         data:
           null,
@@ -232,17 +266,9 @@ class FootballDataProvider
     }
 
 
-    // ======================================
-    // READ RESPONSE
-    // ======================================
-
     const responseText =
       await response.text();
 
-
-    // ======================================
-    // HTTP ERROR
-    // ======================================
 
     if (!response.ok) {
 
@@ -268,60 +294,22 @@ class FootballDataProvider
 
         }
 
-      } catch (_) {
-
-        // Keep raw response
-
-      }
-
-
-      let status =
-        "api_error";
-
-
-      if (
-        response.status === 401
-      ) {
-
-        status =
-          "unauthorized";
-
-      }
-
-
-      if (
-        response.status === 403
-      ) {
-
-        status =
-          "forbidden";
-
-      }
-
-
-      if (
-        response.status === 429
-      ) {
-
-        status =
-          "rate_limited";
-
-      }
+      } catch (_) {}
 
 
       return {
 
-        provider:
-          this.name,
-
         status:
-          status,
+          response.status === 401
+            ? "unauthorized"
+            : response.status === 403
+              ? "forbidden"
+              : response.status === 429
+                ? "rate_limited"
+                : "api_error",
 
         httpStatus:
           response.status,
-
-        home,
-        away,
 
         data:
           null,
@@ -334,10 +322,6 @@ class FootballDataProvider
     }
 
 
-    // ======================================
-    // PARSE JSON
-    // ======================================
-
     let result;
 
 
@@ -348,21 +332,12 @@ class FootballDataProvider
           responseText
         );
 
-    } catch (error) {
+    } catch (_) {
 
       return {
 
-        provider:
-          this.name,
-
         status:
           "invalid_json",
-
-        httpStatus:
-          response.status,
-
-        home,
-        away,
 
         data:
           null,
@@ -375,10 +350,6 @@ class FootballDataProvider
     }
 
 
-    // ======================================
-    // EXTRACT MATCHES
-    // ======================================
-
     const matches =
       Array.isArray(
         result?.matches
@@ -387,25 +358,13 @@ class FootballDataProvider
         : [];
 
 
-    // ======================================
-    // NORMALIZE SEARCH NAMES
-    // ======================================
-
     const homeSearch =
-      normalizeName(
-        home
-      );
+      normalizeName(home);
 
 
     const awaySearch =
-      normalizeName(
-        away
-      );
+      normalizeName(away);
 
-
-    // ======================================
-    // FIND MATCH
-    // ======================================
 
     const match =
       matches.find(
@@ -428,91 +387,46 @@ class FootballDataProvider
 
 
           return (
-
             namesMatch(
               apiHome,
               homeSearch
             )
-
             &&
-
             namesMatch(
               apiAway,
               awaySearch
             )
-
           );
 
         }
       );
 
 
-    // ======================================
-    // MATCH NOT FOUND
-    // ======================================
-
     if (!match) {
 
       return {
 
-        provider:
-          this.name,
-
         status:
-          "api_ok_no_match",
+          "not_found",
 
-        httpStatus:
-          response.status,
-
-        home,
-        away,
-
-        data: {
-
-          matchesChecked:
-            matches.length,
-
-          dateFrom:
-            dateFrom,
-
-          dateTo:
-            dateTo,
-
-          competition:
-            result?.competition?.name ||
-            "Premier League",
-
-          competitionCode:
-            result?.competition?.code ||
-            COMPETITION_CODE
-
-        },
+        data:
+          null,
 
         message:
-          "Football-Data.org connection works, but the requested match was not found"
+          `Match not found in ${competitionCode}`
 
       };
 
     }
 
 
-    // ======================================
-    // MATCH FOUND
-    // ======================================
-
     return {
-
-      provider:
-        this.name,
 
       status:
         "success",
 
       httpStatus:
         response.status,
-
-      home,
-      away,
 
       data: {
 
@@ -548,7 +462,7 @@ class FootballDataProvider
 
           code:
             match.competition?.code ||
-            null
+            competitionCode
 
         },
 
@@ -637,28 +551,17 @@ function formatDate(date) {
   const year =
     date.getUTCFullYear();
 
-
   const month =
     String(
       date.getUTCMonth() + 1
-    ).padStart(
-      2,
-      "0"
-    );
-
+    ).padStart(2, "0");
 
   const day =
     String(
       date.getUTCDate()
-    ).padStart(
-      2,
-      "0"
-    );
+    ).padStart(2, "0");
 
-
-  return (
-    `${year}-${month}-${day}`
-  );
+  return `${year}-${month}-${day}`;
 
 }
 
@@ -669,9 +572,7 @@ function formatDate(date) {
 
 function normalizeName(name) {
 
-  return String(
-    name || ""
-  )
+  return String(name || "")
 
     .toLowerCase()
 
@@ -733,9 +634,7 @@ function namesMatch(
 
 
   if (
-    apiName.includes(
-      searchName
-    )
+    apiName.includes(searchName)
   ) {
 
     return true;
@@ -744,9 +643,7 @@ function namesMatch(
 
 
   if (
-    searchName.includes(
-      apiName
-    )
+    searchName.includes(apiName)
   ) {
 
     return true;
