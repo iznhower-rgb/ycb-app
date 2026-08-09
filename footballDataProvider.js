@@ -1,7 +1,8 @@
-// Y.C.B - FOOTBALL-DATA.ORG PROVIDER
-// Version 2.3
-// Safe browser provider
-// Never breaks the complete Y.C.B analysis
+// Y.C.B - FOOTBALL-DATA.ORG PROVIDER 2.4.0
+// Safe provider
+// Browser-safe error handling
+// Never breaks complete Y.C.B analysis
+
 
 import {
   DataProvider,
@@ -30,7 +31,7 @@ const MAX_RECENT_MATCHES =
 
 
 const REQUEST_TIMEOUT =
-  12000;
+  15000;
 
 
 /* =========================================================
@@ -62,7 +63,9 @@ class FootballDataProvider
       ).trim();
 
 
-    if (!token) {
+    if (
+      !token
+    ) {
 
       return {
 
@@ -187,7 +190,7 @@ class FootballDataProvider
     try {
 
       const payload =
-        await fetchFootballData(
+        await fetchJSON(
           url.toString(),
           token
         );
@@ -347,7 +350,7 @@ class FootballDataProvider
       error
     ) {
 
-      const status =
+      const classified =
         classifyError(
           error
         );
@@ -355,13 +358,11 @@ class FootballDataProvider
 
       return {
 
-        status,
+        status:
+          classified.status,
 
         message:
-          getErrorMessage(
-            status,
-            error
-          ),
+          classified.message,
 
         data: {
 
@@ -376,7 +377,9 @@ class FootballDataProvider
 
           error:
             error?.message ||
-            String(error)
+            String(
+              error
+            )
 
         }
 
@@ -393,21 +396,36 @@ class FootballDataProvider
    FETCH
 ========================================================= */
 
-async function fetchFootballData(
+async function fetchJSON(
   url,
   token
 ) {
 
   const controller =
-    new AbortController();
+    typeof AbortController !==
+    "undefined"
+
+      ? new AbortController()
+
+      : null;
 
 
-  const timeout =
-    setTimeout(
-      () =>
-        controller.abort(),
-      REQUEST_TIMEOUT
-    );
+  let timeoutId =
+    null;
+
+
+  if (
+    controller
+  ) {
+
+    timeoutId =
+      setTimeout(
+        () =>
+          controller.abort(),
+        REQUEST_TIMEOUT
+      );
+
+  }
 
 
   try {
@@ -431,7 +449,7 @@ async function fetchFootballData(
           },
 
           signal:
-            controller.signal
+            controller?.signal
 
         }
       );
@@ -451,18 +469,21 @@ async function fetchFootballData(
       !response.ok
     ) {
 
-      const message =
-        String(
-          payload?.message ||
-          payload?.error ||
-          text ||
-          `HTTP ${response.status}`
+      const error =
+        new Error(
+          `Football-Data.org HTTP ${response.status}`
         );
 
 
-      throw new Error(
-        `Football-Data.org HTTP ${response.status}: ${message}`
-      );
+      error.httpStatus =
+        response.status;
+
+
+      error.responseData =
+        payload;
+
+
+      throw error;
 
     }
 
@@ -474,27 +495,10 @@ async function fetchFootballData(
   ) {
 
     if (
-      error?.name ===
-      "AbortError"
+      error?.httpStatus
     ) {
 
-      throw new Error(
-        "Football-Data.org request timeout"
-      );
-
-    }
-
-
-    if (
-      error instanceof TypeError
-    ) {
-
-      throw new Error(
-        `Football-Data.org access blocked or CORS failure: ${
-          error?.message ||
-          "Failed to fetch"
-        }`
-      );
+      throw error;
 
     }
 
@@ -503,11 +507,145 @@ async function fetchFootballData(
 
   } finally {
 
-    clearTimeout(
-      timeout
-    );
+    if (
+      timeoutId !== null
+    ) {
+
+      clearTimeout(
+        timeoutId
+      );
+
+    }
 
   }
+
+}
+
+
+/* =========================================================
+   ERROR
+========================================================= */
+
+function classifyError(
+  error
+) {
+
+  const httpStatus =
+    Number(
+      error?.httpStatus
+    );
+
+
+  if (
+    httpStatus === 400 ||
+    httpStatus === 401 ||
+    httpStatus === 403
+  ) {
+
+    return {
+
+      status:
+        "disabled_invalid_token",
+
+      message:
+        "Football-Data.org غير متاح: التوكن غير صالح أو الوصول مرفوض."
+
+    };
+
+  }
+
+
+  if (
+    httpStatus === 429
+  ) {
+
+    return {
+
+      status:
+        "rate_limited",
+
+      message:
+        "Football-Data.org وصل إلى حد الطلبات."
+
+    };
+
+  }
+
+
+  if (
+    httpStatus === 404
+  ) {
+
+    return {
+
+      status:
+        "endpoint_not_found",
+
+      message:
+        "Football-Data.org endpoint غير موجود."
+
+    };
+
+  }
+
+
+  if (
+    error?.name ===
+      "AbortError"
+  ) {
+
+    return {
+
+      status:
+        "timeout",
+
+      message:
+        "Football-Data.org لم يستجب خلال المهلة المحددة."
+
+    };
+
+  }
+
+
+  const message =
+    String(
+      error?.message ||
+      error ||
+      ""
+    );
+
+
+  if (
+    message
+      .toLowerCase()
+      .includes(
+        "failed to fetch"
+      )
+  ) {
+
+    return {
+
+      status:
+        "access_blocked",
+
+      message:
+        "Football-Data.org لم يسمح للمتصفح بالوصول إلى المصدر أو حدث حجب CORS."
+
+    };
+
+  }
+
+
+  return {
+
+    status:
+      "network_error",
+
+    message:
+      message ||
+      "Football-Data.org network error."
+
+  };
 
 }
 
@@ -551,15 +689,19 @@ function findRequestedMatch(
 
 
         return (
+
           namesMatch(
             matchHome,
             homeName
           )
+
           &&
+
           namesMatch(
             matchAway,
             awayName
           )
+
         );
 
       }
@@ -611,16 +753,14 @@ function findRequestedMatch(
     );
 
 
-  return (
-    result ||
-    null
-  );
+  return result ||
+    null;
 
 }
 
 
 /* =========================================================
-   RECENT MATCHES
+   RECENT
 ========================================================= */
 
 function getRecentMatches(
@@ -688,25 +828,26 @@ function getRecentMatches(
 
 
         return (
+
           namesMatch(
             home,
             teamName
           )
+
           ||
+
           namesMatch(
             away,
             teamName
           )
+
         );
 
       }
     )
 
     .sort(
-      (
-        a,
-        b
-      ) => {
+      (a, b) => {
 
         const dateA =
           Date.parse(
@@ -722,7 +863,8 @@ function getRecentMatches(
           );
 
 
-        return dateB - dateA;
+        return dateB -
+          dateA;
 
       }
     )
@@ -755,13 +897,16 @@ function normalizeMatch(
         ""
       ),
 
+
     utcDate:
       match?.utcDate ||
       null,
 
+
     status:
       match?.status ||
       null,
+
 
     homeTeam: {
 
@@ -771,22 +916,27 @@ function normalizeMatch(
           ?.id ??
         null,
 
+
       name:
         match
           ?.homeTeam
           ?.name ??
         null,
 
+
       shortName:
         match
           ?.homeTeam
           ?.shortName ||
+
         match
           ?.homeTeam
           ?.tla ||
+
         null
 
     },
+
 
     awayTeam: {
 
@@ -796,22 +946,27 @@ function normalizeMatch(
           ?.id ??
         null,
 
+
       name:
         match
           ?.awayTeam
           ?.name ??
         null,
 
+
       shortName:
         match
           ?.awayTeam
           ?.shortName ||
+
         match
           ?.awayTeam
           ?.tla ||
+
         null
 
     },
+
 
     score: {
 
@@ -825,6 +980,7 @@ function normalizeMatch(
               ?.home
           ),
 
+
         away:
           finiteOrNull(
             match
@@ -837,158 +993,15 @@ function normalizeMatch(
 
     },
 
+
     tournament:
       match
         ?.competition
         ?.name ||
+
       null
 
   };
-
-}
-
-
-/* =========================================================
-   ERROR CLASSIFICATION
-========================================================= */
-
-function classifyError(
-  error
-) {
-
-  const message =
-    String(
-      error?.message ||
-      error ||
-      ""
-    ).toLowerCase();
-
-
-  if (
-    message.includes(
-      "http 400"
-    ) ||
-    message.includes(
-      "http 401"
-    ) ||
-    message.includes(
-      "http 403"
-    ) ||
-    message.includes(
-      "invalid token"
-    ) ||
-    message.includes(
-      "unauthorized"
-    )
-  ) {
-
-    return "disabled_invalid_token";
-
-  }
-
-
-  if (
-    message.includes(
-      "http 429"
-    )
-  ) {
-
-    return "rate_limited";
-
-  }
-
-
-  if (
-    message.includes(
-      "access blocked"
-    ) ||
-    message.includes(
-      "cors"
-    )
-  ) {
-
-    return "access_blocked";
-
-  }
-
-
-  if (
-    message.includes(
-      "timeout"
-    )
-  ) {
-
-    return "timeout";
-
-  }
-
-
-  return "network_error";
-
-}
-
-
-/* =========================================================
-   ERROR MESSAGE
-========================================================= */
-
-function getErrorMessage(
-  status,
-  error
-) {
-
-  if (
-    status ===
-    "disabled_invalid_token"
-  ) {
-
-    return (
-      "Football-Data.org غير متاح: التوكن غير صالح أو مرفوض. تم تجاهل المصدر."
-    );
-
-  }
-
-
-  if (
-    status ===
-    "rate_limited"
-  ) {
-
-    return (
-      "Football-Data.org وصل إلى حد الطلبات. تم تجاهل المصدر مؤقتًا."
-    );
-
-  }
-
-
-  if (
-    status ===
-    "access_blocked"
-  ) {
-
-    return (
-      "Football-Data.org محجوب أو غير مسموح به من بيئة المتصفح."
-    );
-
-  }
-
-
-  if (
-    status ===
-    "timeout"
-  ) {
-
-    return (
-      "Football-Data.org لم يستجب خلال المهلة."
-    );
-
-  }
-
-
-  return (
-    error?.message ||
-    "Football-Data.org request failed."
-  );
 
 }
 
@@ -1164,9 +1177,21 @@ function namesMatch(
   second
 ) {
 
+  const a =
+    normalizeName(
+      first
+    );
+
+
+  const b =
+    normalizeName(
+      second
+    );
+
+
   if (
-    !first ||
-    !second
+    !a ||
+    !b
   ) {
 
     return false;
@@ -1175,7 +1200,7 @@ function namesMatch(
 
 
   if (
-    first === second
+    a === b
   ) {
 
     return true;
@@ -1184,12 +1209,8 @@ function namesMatch(
 
 
   if (
-    first.includes(
-      second
-    ) ||
-    second.includes(
-      first
-    )
+    a.includes(b) ||
+    b.includes(a)
   ) {
 
     return true;
@@ -1199,7 +1220,7 @@ function namesMatch(
 
   const firstTokens =
     new Set(
-      first
+      a
         .split(" ")
         .filter(
           token =>
@@ -1209,12 +1230,12 @@ function namesMatch(
 
 
   const secondTokens =
-    second
+    b
       .split(" ")
       .filter(
         token =>
           token.length >= 3
-        );
+      );
 
 
   if (
@@ -1253,7 +1274,8 @@ function namesMatch(
     Math.max(
       1,
       Math.ceil(
-        secondTokens.length * 0.5
+        secondTokens.length *
+        0.5
       )
     )
   );
@@ -1262,7 +1284,7 @@ function namesMatch(
 
 
 /* =========================================================
-   NAME SIMILARITY
+   SIMILARITY
 ========================================================= */
 
 function nameSimilarity(
@@ -1270,9 +1292,21 @@ function nameSimilarity(
   second
 ) {
 
+  const a =
+    normalizeName(
+      first
+    );
+
+
+  const b =
+    normalizeName(
+      second
+    );
+
+
   if (
-    !first ||
-    !second
+    !a ||
+    !b
   ) {
 
     return 0;
@@ -1281,7 +1315,7 @@ function nameSimilarity(
 
 
   if (
-    first === second
+    a === b
   ) {
 
     return 1;
@@ -1290,8 +1324,8 @@ function nameSimilarity(
 
 
   if (
-    first.includes(second) ||
-    second.includes(first)
+    a.includes(b) ||
+    b.includes(a)
   ) {
 
     return 0.90;
@@ -1299,9 +1333,9 @@ function nameSimilarity(
   }
 
 
-  const a =
+  const firstTokens =
     new Set(
-      first
+      a
         .split(" ")
         .filter(
           token =>
@@ -1310,9 +1344,9 @@ function nameSimilarity(
     );
 
 
-  const b =
+  const secondTokens =
     new Set(
-      second
+      b
         .split(" ")
         .filter(
           token =>
@@ -1322,8 +1356,8 @@ function nameSimilarity(
 
 
   if (
-    !a.size ||
-    !b.size
+    firstTokens.size === 0 ||
+    secondTokens.size === 0
   ) {
 
     return 0;
@@ -1337,11 +1371,11 @@ function nameSimilarity(
 
   for (
     const token
-    of a
+    of firstTokens
   ) {
 
     if (
-      b.has(
+      secondTokens.has(
         token
       )
     ) {
@@ -1355,12 +1389,12 @@ function nameSimilarity(
 
   const union =
     new Set([
-      ...a,
-      ...b
+      ...firstTokens,
+      ...secondTokens
     ]).size;
 
 
-  return union
+  return union > 0
     ? intersection / union
     : 0;
 
