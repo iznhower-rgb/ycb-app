@@ -1,6 +1,18 @@
 // ==========================================
 // Y.C.B FOOTBALL-DATA.ORG PROVIDER
 // ==========================================
+//
+// الهدف من هذا المزود:
+//
+// 1. الاتصال الحقيقي بـ Football-Data.org
+// 2. عدم افتراض أن المباراة في Premier League
+// 3. البحث في مباريات Football-Data.org المتاحة
+// 4. مطابقة اسم الفريقين بمرونة
+// 5. عدم إنشاء أي توقعات وهمية
+// 6. إرجاع حالة واضحة عند عدم العثور على المباراة
+//
+// ==========================================
+
 
 import {
   DataProvider,
@@ -17,30 +29,15 @@ const API_BASE =
 
 
 // ==========================================
-// COMPETITIONS
-// ==========================================
-
-const COMPETITIONS = [
-  "PL",
-  "PD",
-  "SA",
-  "BL1",
-  "FL1",
-  "PPL",
-  "DED",
-  "CL"
-];
-
-
-// ==========================================
 // FOOTBALL-DATA.ORG PROVIDER
 // ==========================================
 
-class FootballDataProvider
-  extends DataProvider {
+class FootballDataProvider extends DataProvider {
 
   constructor() {
+
     super("Football-Data.org");
+
   }
 
 
@@ -55,15 +52,21 @@ class FootballDataProvider
   ) {
 
     // --------------------------------------
-    // ENV CHECK
+    // Validate environment
     // --------------------------------------
 
     if (!env) {
 
       return {
 
+        provider:
+          this.name,
+
         status:
           "environment_missing",
+
+        home,
+        away,
 
         data:
           null,
@@ -77,7 +80,7 @@ class FootballDataProvider
 
 
     // --------------------------------------
-    // TOKEN
+    // Validate token
     // --------------------------------------
 
     const token =
@@ -90,11 +93,20 @@ class FootballDataProvider
 
       return {
 
+        provider:
+          this.name,
+
         status:
           "not_configured",
 
+        home,
+        away,
+
         data:
           null,
+
+        dataSource:
+          "Football-Data.org",
 
         message:
           "FOOTBALL_DATA_TOKEN is missing"
@@ -104,82 +116,63 @@ class FootballDataProvider
     }
 
 
-    // --------------------------------------
-    // SEARCH ALL SUPPORTED COMPETITIONS
-    // --------------------------------------
+    // ======================================
+    // NORMALIZE SEARCH NAMES
+    // ======================================
 
-    for (
-      const competitionCode
-      of COMPETITIONS
+    const homeSearch =
+      normalizeName(home);
+
+
+    const awaySearch =
+      normalizeName(away);
+
+
+    if (
+      !homeSearch ||
+      !awaySearch
     ) {
 
-      try {
+      return {
 
-        const result =
-          await this.searchCompetition(
-            competitionCode,
-            home,
-            away,
-            token
-          );
+        provider:
+          this.name,
 
+        status:
+          "invalid_team_names",
 
-        if (
-          result &&
-          result.status === "success"
-        ) {
+        home,
+        away,
 
-          return result;
+        data:
+          null,
 
-        }
+        message:
+          "Invalid home or away team name"
 
-      } catch (error) {
-
-        // Continue with next competition.
-
-      }
+      };
 
     }
 
 
-    // --------------------------------------
-    // NOTHING FOUND
-    // --------------------------------------
-
-    return {
-
-      status:
-        "api_ok_no_match",
-
-      data: {
-
-        home: home,
-
-        away: away,
-
-        competitionsChecked:
-          COMPETITIONS
-
-      },
-
-      message:
-        "Football-Data.org connection works, but the requested match was not found in the searched competitions"
-
-    };
-
-  }
-
-
-  // ========================================
-  // SEARCH COMPETITION
-  // ========================================
-
-  async searchCompetition(
-    competitionCode,
-    home,
-    away,
-    token
-  ) {
+    // ======================================
+    // DATE RANGE
+    // ======================================
+    //
+    // نبحث في:
+    //
+    // - آخر 90 يومًا
+    // - الـ 365 يومًا القادمة
+    //
+    // هذا يسمح لنا بالعثور على:
+    //
+    // - مباريات مكتملة
+    // - مباريات حالية
+    // - مباريات مستقبلية
+    //
+    // ولا نقيد البحث ببطولة واحدة.
+    //
+    // ======================================
 
     const today =
       new Date();
@@ -189,8 +182,8 @@ class FootballDataProvider
       new Date(today);
 
 
-    startDate.setDate(
-      today.getDate() - 30
+    startDate.setUTCDate(
+      startDate.getUTCDate() - 90
     );
 
 
@@ -198,28 +191,60 @@ class FootballDataProvider
       new Date(today);
 
 
-    endDate.setDate(
-      today.getDate() + 365
+    endDate.setUTCDate(
+      endDate.getUTCDate() + 365
     );
 
 
+    const dateFrom =
+      formatDate(startDate);
+
+
+    const dateTo =
+      formatDate(endDate);
+
+
+    // ======================================
+    // BUILD MATCH API URL
+    // ======================================
+    //
+    // Football-Data.org v4 يدعم:
+    //
+    // /v4/matches
+    //
+    // مع dateFrom + dateTo.
+    //
+    // ======================================
+
     const apiUrl =
       new URL(
-        `${API_BASE}/competitions/${competitionCode}/matches`
+        `${API_BASE}/matches`
       );
 
 
     apiUrl.searchParams.set(
       "dateFrom",
-      formatDate(startDate)
+      dateFrom
     );
 
 
     apiUrl.searchParams.set(
       "dateTo",
-      formatDate(endDate)
+      dateTo
     );
 
+
+    // نحدد عددًا كبيرًا ولكن آمنًا
+    // ضمن الحد المسموح به للـ API.
+    apiUrl.searchParams.set(
+      "limit",
+      "500"
+    );
+
+
+    // ======================================
+    // API REQUEST
+    // ======================================
 
     let response;
 
@@ -251,8 +276,14 @@ class FootballDataProvider
 
       return {
 
+        provider:
+          this.name,
+
         status:
           "network_error",
+
+        home,
+        away,
 
         data:
           null,
@@ -266,9 +297,17 @@ class FootballDataProvider
     }
 
 
+    // ======================================
+    // READ RESPONSE
+    // ======================================
+
     const responseText =
       await response.text();
 
+
+    // ======================================
+    // HTTP ERROR
+    // ======================================
 
     if (!response.ok) {
 
@@ -294,22 +333,70 @@ class FootballDataProvider
 
         }
 
-      } catch (_) {}
+      } catch (_) {
+
+        // Keep raw response
+
+      }
+
+
+      let status =
+        "api_error";
+
+
+      if (
+        response.status === 401
+      ) {
+
+        status =
+          "unauthorized";
+
+      }
+
+
+      if (
+        response.status === 403
+      ) {
+
+        status =
+          "forbidden";
+
+      }
+
+
+      if (
+        response.status === 404
+      ) {
+
+        status =
+          "not_found";
+
+      }
+
+
+      if (
+        response.status === 429
+      ) {
+
+        status =
+          "rate_limited";
+
+      }
 
 
       return {
 
+        provider:
+          this.name,
+
         status:
-          response.status === 401
-            ? "unauthorized"
-            : response.status === 403
-              ? "forbidden"
-              : response.status === 429
-                ? "rate_limited"
-                : "api_error",
+          status,
 
         httpStatus:
           response.status,
+
+        home,
+        away,
 
         data:
           null,
@@ -322,6 +409,10 @@ class FootballDataProvider
     }
 
 
+    // ======================================
+    // PARSE JSON
+    // ======================================
+
     let result;
 
 
@@ -332,12 +423,21 @@ class FootballDataProvider
           responseText
         );
 
-    } catch (_) {
+    } catch (error) {
 
       return {
 
+        provider:
+          this.name,
+
         status:
           "invalid_json",
+
+        httpStatus:
+          response.status,
+
+        home,
+        away,
 
         data:
           null,
@@ -350,6 +450,10 @@ class FootballDataProvider
     }
 
 
+    // ======================================
+    // EXTRACT MATCHES
+    // ======================================
+
     const matches =
       Array.isArray(
         result?.matches
@@ -358,69 +462,128 @@ class FootballDataProvider
         : [];
 
 
-    const homeSearch =
-      normalizeName(home);
-
-
-    const awaySearch =
-      normalizeName(away);
-
+    // ======================================
+    // FIND MATCH
+    // ======================================
+    //
+    // نبحث عن:
+    //
+    // Home = الفريق الأول
+    // Away = الفريق الثاني
+    //
+    // مع دعم:
+    //
+    // - الاسم الكامل
+    // - الاسم المختصر
+    // - TLA
+    //
+    // ======================================
 
     const match =
       matches.find(
         item => {
 
-          const apiHome =
-            normalizeName(
-              item?.homeTeam?.name ||
-              item?.homeTeam?.shortName ||
-              ""
-            );
+          const apiHomeNames = [
+
+            item?.homeTeam?.name,
+
+            item?.homeTeam?.shortName,
+
+            item?.homeTeam?.tla
+
+          ];
 
 
-          const apiAway =
-            normalizeName(
-              item?.awayTeam?.name ||
-              item?.awayTeam?.shortName ||
-              ""
-            );
+          const apiAwayNames = [
+
+            item?.awayTeam?.name,
+
+            item?.awayTeam?.shortName,
+
+            item?.awayTeam?.tla
+
+          ];
 
 
           return (
-            namesMatch(
-              apiHome,
+
+            teamNamesMatch(
+              apiHomeNames,
               homeSearch
             )
+
             &&
-            namesMatch(
-              apiAway,
+
+            teamNamesMatch(
+              apiAwayNames,
               awaySearch
             )
+
           );
 
         }
       );
 
 
+    // ======================================
+    // MATCH NOT FOUND
+    // ======================================
+
     if (!match) {
 
       return {
 
-        status:
-          "not_found",
+        provider:
+          this.name,
 
-        data:
-          null,
+        status:
+          "api_ok_no_match",
+
+        httpStatus:
+          response.status,
+
+        home,
+        away,
+
+        data: {
+
+          matchesChecked:
+            matches.length,
+
+          dateFrom:
+            dateFrom,
+
+          dateTo:
+            dateTo,
+
+          competitionCount:
+            getCompetitionCount(
+              matches
+            ),
+
+          competitions:
+            getCompetitionCodes(
+              matches
+            )
+
+        },
 
         message:
-          `Match not found in ${competitionCode}`
+          "Football-Data.org connection works, but the requested match was not found in the available match data"
 
       };
 
     }
 
 
+    // ======================================
+    // MATCH FOUND
+    // ======================================
+
     return {
+
+      provider:
+        this.name,
 
       status:
         "success",
@@ -428,109 +591,13 @@ class FootballDataProvider
       httpStatus:
         response.status,
 
-      data: {
+      home,
+      away,
 
-        id:
-          match.id ||
-          null,
-
-        utcDate:
-          match.utcDate ||
-          null,
-
-        status:
-          match.status ||
-          null,
-
-        stage:
-          match.stage ||
-          null,
-
-        group:
-          match.group ||
-          null,
-
-        competition: {
-
-          id:
-            match.competition?.id ||
-            null,
-
-          name:
-            match.competition?.name ||
-            null,
-
-          code:
-            match.competition?.code ||
-            competitionCode
-
-        },
-
-        season: {
-
-          id:
-            match.season?.id ||
-            null,
-
-          startDate:
-            match.season?.startDate ||
-            null,
-
-          endDate:
-            match.season?.endDate ||
-            null
-
-        },
-
-        homeTeam: {
-
-          id:
-            match.homeTeam?.id ||
-            null,
-
-          name:
-            match.homeTeam?.name ||
-            null,
-
-          shortName:
-            match.homeTeam?.shortName ||
-            null,
-
-          tla:
-            match.homeTeam?.tla ||
-            null
-
-        },
-
-        awayTeam: {
-
-          id:
-            match.awayTeam?.id ||
-            null,
-
-          name:
-            match.awayTeam?.name ||
-            null,
-
-          shortName:
-            match.awayTeam?.shortName ||
-            null,
-
-          tla:
-            match.awayTeam?.tla ||
-            null
-
-        },
-
-        score:
-          match.score ||
-          null,
-
-        odds:
-          match.odds ||
-          null
-
-      },
+      data:
+        normalizeMatch(
+          match
+        ),
 
       message:
         "Match data received successfully"
@@ -543,64 +610,189 @@ class FootballDataProvider
 
 
 // ==========================================
-// FORMAT DATE
+// NORMALIZE MATCH
 // ==========================================
 
-function formatDate(date) {
+function normalizeMatch(
+  match
+) {
 
-  const year =
-    date.getUTCFullYear();
+  return {
 
-  const month =
-    String(
-      date.getUTCMonth() + 1
-    ).padStart(2, "0");
+    id:
+      match?.id ||
+      null,
 
-  const day =
-    String(
-      date.getUTCDate()
-    ).padStart(2, "0");
 
-  return `${year}-${month}-${day}`;
+    utcDate:
+      match?.utcDate ||
+      null,
+
+
+    status:
+      match?.status ||
+      null,
+
+
+    minute:
+      match?.minute ||
+      null,
+
+
+    injuryTime:
+      match?.injuryTime ||
+      null,
+
+
+    stage:
+      match?.stage ||
+      null,
+
+
+    group:
+      match?.group ||
+      null,
+
+
+    matchday:
+      match?.matchday ||
+      null,
+
+
+    venue:
+      match?.venue ||
+      null,
+
+
+    competition: {
+
+      id:
+        match?.competition?.id ||
+        null,
+
+      name:
+        match?.competition?.name ||
+        null,
+
+      code:
+        match?.competition?.code ||
+        null,
+
+      type:
+        match?.competition?.type ||
+        null
+
+    },
+
+
+    season: {
+
+      id:
+        match?.season?.id ||
+        null,
+
+      startDate:
+        match?.season?.startDate ||
+        null,
+
+      endDate:
+        match?.season?.endDate ||
+        null
+
+    },
+
+
+    homeTeam: {
+
+      id:
+        match?.homeTeam?.id ||
+        null,
+
+      name:
+        match?.homeTeam?.name ||
+        null,
+
+      shortName:
+        match?.homeTeam?.shortName ||
+        null,
+
+      tla:
+        match?.homeTeam?.tla ||
+        null
+
+    },
+
+
+    awayTeam: {
+
+      id:
+        match?.awayTeam?.id ||
+        null,
+
+      name:
+        match?.awayTeam?.name ||
+        null,
+
+      shortName:
+        match?.awayTeam?.shortName ||
+        null,
+
+      tla:
+        match?.awayTeam?.tla ||
+        null
+
+    },
+
+
+    score:
+      match?.score ||
+      null,
+
+
+    odds:
+      match?.odds ||
+      null
+
+  };
 
 }
 
 
 // ==========================================
-// NORMALIZE TEAM NAME
+// TEAM NAME MATCH
 // ==========================================
 
-function normalizeName(name) {
+function teamNamesMatch(
+  apiNames,
+  searchName
+) {
 
-  return String(name || "")
+  if (
+    !Array.isArray(apiNames) ||
+    !searchName
+  ) {
 
-    .toLowerCase()
+    return false;
 
-    .trim()
+  }
 
-    .normalize("NFD")
 
-    .replace(
-      /[\u0300-\u036f]/g,
-      ""
-    )
+  return apiNames.some(
+    name => {
 
-    .replace(
-      /\b(fc|cf|afc)\b/gi,
-      ""
-    )
+      const normalized =
+        normalizeName(
+          name
+        );
 
-    .replace(
-      /[^a-z0-9\s]/gi,
-      " "
-    )
 
-    .replace(
-      /\s+/g,
-      " "
-    )
+      return namesMatch(
+        normalized,
+        searchName
+      );
 
-    .trim();
+    }
+  );
 
 }
 
@@ -624,6 +816,7 @@ function namesMatch(
   }
 
 
+  // Exact match
   if (
     apiName === searchName
   ) {
@@ -633,8 +826,11 @@ function namesMatch(
   }
 
 
+  // API name contains search
   if (
-    apiName.includes(searchName)
+    apiName.includes(
+      searchName
+    )
   ) {
 
     return true;
@@ -642,8 +838,11 @@ function namesMatch(
   }
 
 
+  // Search contains API name
   if (
-    searchName.includes(apiName)
+    searchName.includes(
+      apiName
+    )
   ) {
 
     return true;
@@ -651,7 +850,204 @@ function namesMatch(
   }
 
 
-  return false;
+  // --------------------------------------
+  // TOKEN MATCH
+  // --------------------------------------
+  //
+  // مثال:
+  //
+  // "arsenal"
+  // مع
+  // "arsenal fc"
+  //
+  // أو:
+  //
+  // "coventry city"
+  // مع
+  // "coventry"
+  //
+  // --------------------------------------
+
+  const apiTokens =
+    apiName
+      .split(" ")
+      .filter(Boolean);
+
+
+  const searchTokens =
+    searchName
+      .split(" ")
+      .filter(Boolean);
+
+
+  if (
+    apiTokens.length === 0 ||
+    searchTokens.length === 0
+  ) {
+
+    return false;
+
+  }
+
+
+  const commonTokens =
+    searchTokens.filter(
+      token =>
+        apiTokens.includes(
+          token
+        )
+    );
+
+
+  // يجب أن يكون هناك تطابق
+  // في كلمة ذات معنى.
+  //
+  // الكلمات القصيرة جدًا لا نعتمد عليها.
+  //
+
+  const meaningfulTokens =
+    commonTokens.filter(
+      token =>
+        token.length >= 3
+    );
+
+
+  return (
+    meaningfulTokens.length >= 1
+  );
+
+}
+
+
+// ==========================================
+// NORMALIZE TEAM NAME
+// ==========================================
+
+function normalizeName(
+  name
+) {
+
+  return String(
+    name || ""
+  )
+
+    .toLowerCase()
+
+    .trim()
+
+    // إزالة العلامات الصوتية
+    // من اللغات التي تستخدم Unicode accents
+    .normalize("NFD")
+
+    .replace(
+      /[\u0300-\u036f]/g,
+      ""
+    )
+
+    // توحيد بعض الرموز
+    .replace(
+      /&/g,
+      " and "
+    )
+
+    // إزالة أسماء الشركات/الاختصارات
+    // الشائعة في أسماء الأندية
+    .replace(
+      /\b(fc|cf|afc|sc|ac|fk|fk\.|club)\b/gi,
+      ""
+    )
+
+    // إزالة علامات الترقيم
+    .replace(
+      /[^a-z0-9\s]/gi,
+      " "
+    )
+
+    // إزالة المسافات المتكررة
+    .replace(
+      /\s+/g,
+      " "
+    )
+
+    .trim();
+
+}
+
+
+// ==========================================
+// FORMAT DATE
+// ==========================================
+
+function formatDate(
+  date
+) {
+
+  const year =
+    date.getUTCFullYear();
+
+
+  const month =
+    String(
+      date.getUTCMonth() + 1
+    ).padStart(
+      2,
+      "0"
+    );
+
+
+  const day =
+    String(
+      date.getUTCDate()
+    ).padStart(
+      2,
+      "0"
+    );
+
+
+  return (
+    `${year}-${month}-${day}`
+  );
+
+}
+
+
+// ==========================================
+// GET COMPETITION CODES
+// ==========================================
+
+function getCompetitionCodes(
+  matches
+) {
+
+  const codes =
+    matches
+      .map(
+        match =>
+          match?.competition?.code
+      )
+      .filter(Boolean);
+
+
+  return [
+    ...new Set(
+      codes
+    )
+  ];
+
+}
+
+
+// ==========================================
+// GET COMPETITION COUNT
+// ==========================================
+
+function getCompetitionCount(
+  matches
+) {
+
+  return getCompetitionCodes(
+    matches
+  ).length;
 
 }
 
