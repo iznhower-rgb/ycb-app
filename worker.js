@@ -1,6 +1,4 @@
-// ==========================================
-// Y.C.B FINAL WORKER
-// ==========================================
+// Y.C.B FINAL WORKER 2.2.0
 
 import {
   getProviders,
@@ -13,14 +11,10 @@ import "./sofaScoreProvider.js";
 
 
 const VERSION =
-  "2.1.0";
+  "2.2.0";
 
 
-// ==========================================
-// FRONTEND
-// ==========================================
-
-const HTML = `<!DOCTYPE html>
+const HTML = `<!doctype html>
 
 <html
   lang="ar"
@@ -33,7 +27,7 @@ const HTML = `<!DOCTYPE html>
 
 <meta
   name="viewport"
-  content="width=device-width,initial-scale=1.0"
+  content="width=device-width,initial-scale=1"
 >
 
 <title>
@@ -43,162 +37,190 @@ Y.C.B Football Prediction Engine
 <style>
 
 *{
-  box-sizing:border-box;
+  box-sizing:border-box
 }
 
 body{
   margin:0;
   font-family:Arial,sans-serif;
   background:#0f172a;
-  color:#fff;
+  color:#fff
 }
 
 .app{
-  max-width:560px;
+  max-width:620px;
   margin:auto;
-  padding:28px 18px 50px;
+  padding:22px 16px 50px
 }
 
 h1{
   font-size:42px;
   text-align:center;
-  margin:10px 0 4px;
+  margin:8px 0 2px
 }
 
 .subtitle{
-  color:#94a3b8;
   text-align:center;
-  margin-bottom:25px;
+  color:#94a3b8;
+  margin-bottom:22px
 }
 
 .card,
 .panel{
   background:#1e293b;
   border-radius:18px;
-  padding:20px;
-  margin-bottom:18px;
+  padding:18px;
+  margin-bottom:16px
 }
 
 input{
   width:100%;
-  padding:15px;
+  padding:14px;
   border:0;
   border-radius:12px;
   font-size:17px;
   text-align:center;
-  margin-bottom:13px;
+  margin-bottom:12px
 }
 
 button{
   width:100%;
-  padding:16px;
+  padding:15px;
   border:0;
   border-radius:12px;
   background:#22c55e;
   color:#fff;
   font-size:18px;
-  font-weight:bold;
+  font-weight:bold
 }
 
 button:disabled{
-  opacity:.55;
+  opacity:.55
 }
 
 #status{
-  margin-top:14px;
   text-align:center;
-  color:#94a3b8;
-  line-height:1.6;
-}
-
-.error{
-  color:#f87171!important;
-}
-
-.warning{
-  color:#fbbf24!important;
+  margin-top:12px;
+  line-height:1.7;
+  color:#94a3b8
 }
 
 .success{
-  color:#4ade80!important;
+  color:#4ade80!important
+}
+
+.error{
+  color:#f87171!important
+}
+
+.warning{
+  color:#fbbf24!important
 }
 
 .hidden{
-  display:none!important;
+  display:none!important
 }
 
 .section-title{
-  margin:5px 0 15px;
   text-align:center;
+  margin:3px 0 14px
 }
 
 .prediction{
   background:#334155;
-  border-radius:16px;
-  padding:17px;
-  margin:12px 0;
+  border-radius:14px;
+  padding:15px;
+  margin:10px 0
 }
 
 .rank{
-  font-size:20px;
-  font-weight:bold;
+  font-size:18px;
+  font-weight:bold
 }
 
 .probability{
   color:#4ade80;
   font-size:20px;
   font-weight:bold;
-  margin-top:7px;
+  margin-top:6px
 }
 
 .meta{
   color:#cbd5e1;
   font-size:13px;
-  margin-top:6px;
   line-height:1.6;
+  margin-top:5px
 }
 
 .warning-box{
   background:#422006;
   color:#fbbf24;
   border-radius:12px;
-  padding:13px;
-  margin-top:14px;
+  padding:12px;
   line-height:1.7;
+  margin-top:12px
 }
 
 .stats{
   display:grid;
   grid-template-columns:1fr 1fr;
-  gap:10px;
+  gap:9px
 }
 
 .stat{
   background:#0f172a;
-  border-radius:12px;
-  padding:12px;
+  border-radius:11px;
+  padding:11px;
   text-align:center;
+  color:#cbd5e1
 }
 
 .stat strong{
   display:block;
-  font-size:19px;
-  margin-top:4px;
+  color:#fff;
+  font-size:18px;
+  margin-top:4px
 }
 
 .providers{
   color:#cbd5e1;
-  font-size:14px;
-  line-height:2;
-  margin-top:15px;
+  font-size:13px;
+  line-height:2
 }
 
 .scoreline{
   text-align:center;
-  font-size:16px;
   color:#cbd5e1;
   line-height:1.8;
-  margin-top:10px;
+  margin-top:12px
+}
+
+.analysis-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:9px
+}
+
+.analysis-item{
+  background:#0f172a;
+  border-radius:11px;
+  padding:11px;
+  text-align:center;
+  color:#cbd5e1
+}
+
+.analysis-item b{
+  display:block;
+  color:#fff;
+  font-size:18px;
+  margin-top:4px
+}
+
+.note{
+  font-size:12px;
+  color:#94a3b8;
+  line-height:1.6;
+  margin-top:12px
 }
 
 </style>
@@ -348,6 +370,49 @@ Football Prediction Engine
 <div class="panel">
 
 <h3 class="section-title">
+ملخص التحليل
+</h3>
+
+<div class="analysis-grid">
+
+<div class="analysis-item">
+xG المضيف
+<b id="homeXg">-</b>
+</div>
+
+<div class="analysis-item">
+xG الضيف
+<b id="awayXg">-</b>
+</div>
+
+<div class="analysis-item">
+فوز المضيف
+<b id="homeWin">-</b>
+</div>
+
+<div class="analysis-item">
+التعادل
+<b id="draw">-</b>
+</div>
+
+<div class="analysis-item">
+فوز الضيف
+<b id="awayWin">-</b>
+</div>
+
+<div class="analysis-item">
+BTTS
+<b id="btts">-</b>
+</div>
+
+</div>
+
+</div>
+
+
+<div class="panel">
+
+<h3 class="section-title">
 ملخص البيانات
 </h3>
 
@@ -383,6 +448,11 @@ Football Prediction Engine
 <strong id="awayGA">-</strong>
 </div>
 
+</div>
+
+<div class="note">
+جودة البيانات لا تعني دقة مضمونة؛
+التوقعات تعتمد فقط على البيانات التي تم التحقق منها من المصادر المتاحة.
 </div>
 
 </div>
@@ -466,7 +536,7 @@ async function analyzeMatch(){
 
 
   status.textContent =
-    "جاري جمع البيانات من المصادر وتحليل المباراة...";
+    "جاري جمع البيانات وتحليل المباراة...";
 
 
   try{
@@ -581,7 +651,8 @@ async function analyzeMatch(){
       document.getElementById(
         "probability" + n
       ).textContent =
-        prediction.probability;
+        prediction.probability ||
+        "-";
 
 
       document.getElementById(
@@ -606,7 +677,7 @@ async function analyzeMatch(){
 
     recommendation.className =
       data.recommendation?.recommended
-        ? "success"
+        ? "warning-box success"
         : "warning-box";
 
 
@@ -615,46 +686,84 @@ async function analyzeMatch(){
       {};
 
 
-    document.getElementById(
-      "homeGames"
-    ).textContent =
-      analysis.home?.games ??
-      "-";
+    set(
+      "homeGames",
+      analysis.home?.games
+    );
 
 
-    document.getElementById(
-      "awayGames"
-    ).textContent =
-      analysis.away?.games ??
-      "-";
+    set(
+      "awayGames",
+      analysis.away?.games
+    );
 
 
-    document.getElementById(
-      "homeGF"
-    ).textContent =
-      analysis.home?.goalsForAvg ??
-      "-";
+    set(
+      "homeGF",
+      analysis.home?.goalsForAvg
+    );
 
 
-    document.getElementById(
-      "awayGF"
-    ).textContent =
-      analysis.away?.goalsForAvg ??
-      "-";
+    set(
+      "awayGF",
+      analysis.away?.goalsForAvg
+    );
 
 
-    document.getElementById(
-      "homeGA"
-    ).textContent =
-      analysis.home?.goalsAgainstAvg ??
-      "-";
+    set(
+      "homeGA",
+      analysis.home?.goalsAgainstAvg
+    );
 
 
-    document.getElementById(
-      "awayGA"
-    ).textContent =
-      analysis.away?.goalsAgainstAvg ??
-      "-";
+    set(
+      "awayGA",
+      analysis.away?.goalsAgainstAvg
+    );
+
+
+    set(
+      "homeXg",
+      analysis.model?.homeXg
+    );
+
+
+    set(
+      "awayXg",
+      analysis.model?.awayXg
+    );
+
+
+    set(
+      "homeWin",
+      pct(
+        analysis.model?.homeWin
+      )
+    );
+
+
+    set(
+      "draw",
+      pct(
+        analysis.model?.draw
+      )
+    );
+
+
+    set(
+      "awayWin",
+      pct(
+        analysis.model?.awayWin
+      )
+    );
+
+
+    set(
+      "btts",
+      pct(
+        analysis.model?.bttsYes
+      )
+    );
 
 
     document.getElementById(
@@ -664,13 +773,20 @@ async function analyzeMatch(){
       data.predictedScore
 
         ? "النتيجة الأكثر ترجيحًا: " +
-          data.predictedScore
+          data.predictedScore +
+          " | جودة البيانات: " +
+          (
+            data.dataQuality ??
+            "-"
+          ) +
+          "/100"
 
         : "جودة البيانات: " +
           (
             data.dataQuality ??
             "-"
-          );
+          ) +
+          "/100";
 
 
     const providers =
@@ -698,13 +814,27 @@ async function analyzeMatch(){
 
           " " +
 
-          item.provider +
+          escapeHtml(
+            item.provider
+          )
+
+          +
 
           " — " +
 
+          escapeHtml(
+            item.status
+          )
+
+          +
+
           (
-            item.status ||
-            "unknown"
+            item.message
+              ? " — " +
+                escapeHtml(
+                  item.message
+                )
+              : ""
           )
 
       ).join(
@@ -718,7 +848,6 @@ async function analyzeMatch(){
 
 
     status.className =
-
       data.analysisStatus ===
       "ready"
 
@@ -750,16 +879,78 @@ async function analyzeMatch(){
 
 }
 
+
+function set(
+  id,
+  value
+){
+
+  document.getElementById(
+    id
+  ).textContent =
+    value == null
+      ? "-"
+      : value;
+
+}
+
+
+function pct(
+  value
+){
+
+  return typeof value ===
+    "number"
+
+    ? (
+        Math.round(
+          value *
+          10000
+        ) / 100
+      ) + "%"
+
+    : "-";
+
+}
+
+
+function escapeHtml(
+  value
+){
+
+  return String(
+    value ||
+    ""
+  ).replace(
+    /[&<>"']/g,
+    character =>
+      ({
+        "&":
+          "&amp;",
+
+        "<":
+          "&lt;",
+
+        ">":
+          "&gt;",
+
+        '"':
+          "&quot;",
+
+        "'":
+          "&#39;"
+
+      }[character])
+  );
+
+}
+
 </script>
 
 </body>
 
 </html>`;
 
-
-// ==========================================
-// WORKER
-// ==========================================
 
 export default {
 
@@ -774,25 +965,18 @@ export default {
       );
 
 
-    // ======================================
-    // OPTIONS
-    // ======================================
-
     if(
       request.method ===
       "OPTIONS"
     ){
 
       return json({
-        success:true
+        success:
+          true
       });
 
     }
 
-
-    // ======================================
-    // HEALTH
-    // ======================================
 
     if(
       url.pathname ===
@@ -801,7 +985,8 @@ export default {
 
       return json({
 
-        success:true,
+        success:
+          true,
 
         status:
           "ok",
@@ -826,10 +1011,6 @@ export default {
     }
 
 
-    // ======================================
-    // PROVIDERS
-    // ======================================
-
     if(
       url.pathname ===
       "/api/providers"
@@ -837,7 +1018,8 @@ export default {
 
       return json({
 
-        success:true,
+        success:
+          true,
 
         providers:
           getProviders()
@@ -846,10 +1028,6 @@ export default {
 
     }
 
-
-    // ======================================
-    // ANALYZE
-    // ======================================
 
     if(
       url.pathname ===
@@ -863,7 +1041,8 @@ export default {
 
         return json(
           {
-            success:false,
+            success:
+              false,
 
             error:
               "POST method required"
@@ -893,10 +1072,13 @@ export default {
 
           return json(
             {
-              success:false,
+
+              success:
+                false,
 
               error:
                 "اكتب المباراة بهذا الشكل: Arsenal vs Coventry City"
+
             },
             400
           );
@@ -910,10 +1092,6 @@ export default {
         } =
           parsed;
 
-
-        // ==================================
-        // PROVIDERS
-        // ==================================
 
         const providerResults =
           await getAllMatchData(
@@ -931,84 +1109,33 @@ export default {
           );
 
 
-        // ==================================
-        // MERGE
-        // ==================================
-
         const merged =
           mergeProviderData(
             usable
           );
 
 
-        // ==================================
-        // FIXTURE NOT FOUND
-        // ==================================
-
         if(
           !merged.fixture
         ){
 
-          return json({
+          return json(
 
-            success:true,
+            baseResponse(
 
-            app:
-              "Y.C.B",
-
-            engine:
-              "Y.C.B Prediction Engine",
-
-            version:
-              VERSION,
-
-            match:{
               home,
-              away
-            },
-
-            analysisStatus:
-              "insufficient_data",
-
-            message:
-              "لم يتم العثور على المباراة المطلوبة في المصادر الحالية.",
-
-            predictions:
-              fallbackPredictions(
-                home,
-                away
-              ),
-
-            recommendation:{
-
-              recommended:
-                false,
-
-              message:
-                "لا يوجد رهان موصى به: لم يتم التحقق من المباراة."
-
-            },
-
-            providers:
+              away,
               providerResults,
+              usable,
+              "insufficient_data",
+              "لم يتم التحقق من المباراة المطلوبة في أي مصدر متاح."
 
-            providerCount:
-              providerResults.length,
+            )
 
-            successfulProviderCount:
-              usable.length,
-
-            dataQuality:
-              0
-
-          });
+          );
 
         }
 
-
-        // ==================================
-        // ANALYSIS
-        // ==================================
 
         const analysis =
           buildTeamAnalysis(
@@ -1018,74 +1145,35 @@ export default {
           );
 
 
-        const enoughData =
-          analysis.home.games >= 3 &&
-          analysis.away.games >= 3;
-
-
         const dataQuality =
           calculateDataQuality(
             analysis,
-            usable.length
+            usable.length,
+            Boolean(
+              merged.fixture
+            )
           );
 
 
-        // ==================================
-        // NOT ENOUGH HISTORY
-        // ==================================
-
-        if(!enoughData){
+        if(
+          analysis.home.games < 3 ||
+          analysis.away.games < 3
+        ){
 
           return json({
 
-            success:true,
+            ...baseResponse(
 
-            app:
-              "Y.C.B",
-
-            engine:
-              "Y.C.B Prediction Engine",
-
-            version:
-              VERSION,
-
-            match:{
               home,
-              away
-            },
-
-            analysisStatus:
+              away,
+              providerResults,
+              usable,
               "insufficient_data",
+              "تم العثور على المباراة، لكن البيانات التاريخية المتاحة غير كافية لإصدار توقع موثوق."
 
-            message:
-              "تم العثور على المباراة، لكن البيانات التاريخية المتاحة غير كافية لإصدار توقع موثوق.",
+            ),
 
             analysis,
-
-            predictions:
-              fallbackPredictions(
-                home,
-                away
-              ),
-
-            recommendation:{
-
-              recommended:
-                false,
-
-              message:
-                "لا يوجد رهان موصى به حتى تتوفر بيانات تاريخية كافية."
-
-            },
-
-            providers:
-              providerResults,
-
-            providerCount:
-              providerResults.length,
-
-            successfulProviderCount:
-              usable.length,
 
             dataQuality
 
@@ -1094,27 +1182,15 @@ export default {
         }
 
 
-        // ==================================
-        // PREDICTION ENGINE
-        // ==================================
-
-        const predictionResult =
+        const result =
           buildPredictions(
             analysis
           );
 
 
-        const predictions =
-          predictionResult.predictions;
-
-
         const top =
-          predictions[0];
+          result.predictions[0];
 
-
-        // ==================================
-        // RECOMMENDATION
-        // ==================================
 
         const recommended =
           Boolean(
@@ -1129,35 +1205,6 @@ export default {
 
           );
 
-
-        const recommendation = {
-
-          recommended,
-
-          market:
-            recommended
-              ? top.label
-              : null,
-
-          probability:
-            recommended
-              ? top.probability
-              : null,
-
-          message:
-
-            recommended
-
-              ? `التوقع الأقوى حاليًا: ${top.label} بنسبة ${top.probability}.`
-
-              : "لا يوجد رهان موصى به: الثقة أو جودة البيانات أقل من الحد المطلوب."
-
-        };
-
-
-        // ==================================
-        // FINAL RESPONSE
-        // ==================================
 
         return json({
 
@@ -1176,9 +1223,12 @@ export default {
           architecture:
             "Multi Provider Architecture",
 
-          match:{
+          match: {
+
             home,
+
             away
+
           },
 
           analysisStatus:
@@ -1189,12 +1239,35 @@ export default {
 
           analysis,
 
-          predictions,
+          predictions:
+            result.predictions,
 
-          recommendation,
+          recommendation: {
+
+            recommended,
+
+            market:
+              recommended
+                ? top.label
+                : null,
+
+            probability:
+              recommended
+                ? top.probability
+                : null,
+
+            message:
+
+              recommended
+
+                ? `التوقع الأقوى حاليًا: ${top.label} بنسبة ${top.probability}.`
+
+                : "لا يوجد رهان موصى به: الثقة أو جودة البيانات أقل من الحد المطلوب."
+
+          },
 
           predictedScore:
-            predictionResult.predictedScore,
+            result.predictedScore,
 
           dataQuality,
 
@@ -1212,7 +1285,7 @@ export default {
       }catch(error){
 
         console.error(
-          "Analyze error:",
+          "Analyze error",
           error
         );
 
@@ -1220,11 +1293,14 @@ export default {
         return json(
 
           {
-            success:false,
+
+            success:
+              false,
 
             error:
               error?.message ||
               String(error)
+
           },
 
           500
@@ -1236,10 +1312,6 @@ export default {
     }
 
 
-    // ======================================
-    // FRONTEND
-    // ======================================
-
     return new Response(
 
       HTML,
@@ -1249,7 +1321,7 @@ export default {
         status:
           200,
 
-        headers:{
+        headers: {
 
           "Content-Type":
             "text/html;charset=UTF-8",
@@ -1268,10 +1340,6 @@ export default {
 };
 
 
-// ==========================================
-// MATCH PARSER
-// ==========================================
-
 function parseMatch(
   value
 ){
@@ -1285,7 +1353,8 @@ function parseMatch(
 
 
   if(
-    parts.length !== 2
+    parts.length !==
+    2
   ){
 
     return null;
@@ -1301,27 +1370,25 @@ function parseMatch(
     parts[1].trim();
 
 
-  if(
-    !home ||
-    !away
-  ){
+  return (
 
-    return null;
-
-  }
-
-
-  return {
-    home,
+    home &&
     away
-  };
+
+  )
+
+    ? {
+
+        home,
+
+        away
+
+      }
+
+    : null;
 
 }
 
-
-// ==========================================
-// MERGE PROVIDERS
-// ==========================================
 
 function mergeProviderData(
   results
@@ -1407,10 +1474,6 @@ function mergeProviderData(
 }
 
 
-// ==========================================
-// DEDUPE
-// ==========================================
-
 function dedupeMatches(
   matches
 ){
@@ -1439,7 +1502,9 @@ function dedupeMatches(
 
 
         if(
-          seen.has(key)
+          seen.has(
+            key
+          )
         ){
 
           return false;
@@ -1458,11 +1523,7 @@ function dedupeMatches(
     )
 
     .sort(
-      (
-        a,
-        b
-      ) =>
-
+      (a,b) =>
         new Date(
           b.utcDate ||
           0
@@ -1472,7 +1533,6 @@ function dedupeMatches(
           a.utcDate ||
           0
         )
-
     )
 
     .slice(
@@ -1483,38 +1543,95 @@ function dedupeMatches(
 }
 
 
-// ==========================================
-// TEAM ANALYSIS
-// ==========================================
-
 function buildTeamAnalysis(
   homeName,
   awayName,
   merged
 ){
 
+  const home =
+    calculateTeamStats(
+      homeName,
+      merged.homeMatches
+    );
+
+
+  const away =
+    calculateTeamStats(
+      awayName,
+      merged.awayMatches
+    );
+
+
+  const homeXg =
+    clamp(
+
+      (
+        home.goalsForAvg *
+        0.55
+
+        +
+
+        away.goalsAgainstAvg *
+        0.45
+
+      )
+
+      *
+
+      1.08,
+
+      0.15,
+
+      4
+
+    );
+
+
+  const awayXg =
+    clamp(
+
+      (
+        away.goalsForAvg *
+        0.55
+
+        +
+
+        home.goalsAgainstAvg *
+        0.45
+
+      )
+
+      *
+
+      0.92,
+
+      0.10,
+
+      3.50
+
+    );
+
+
+  const model =
+    buildModel(
+      homeXg,
+      awayXg
+    );
+
+
   return {
 
-    home:
-      calculateTeamStats(
-        homeName,
-        merged.homeMatches
-      ),
+    home,
 
-    away:
-      calculateTeamStats(
-        awayName,
-        merged.awayMatches
-      )
+    away,
+
+    model
 
   };
 
 }
 
-
-// ==========================================
-// TEAM STATS
-// ==========================================
 
 function calculateTeamStats(
   teamName,
@@ -1535,53 +1652,68 @@ function calculateTeamStats(
 
           const home =
             normalizeName(
-              match.homeTeam?.name
+              match
+                .homeTeam
+                ?.name
             );
 
 
           const away =
             normalizeName(
-              match.awayTeam?.name
+              match
+                .awayTeam
+                ?.name
             );
 
 
           const homeGoals =
             Number(
-              match.score?.fullTime?.home
+              match
+                .score
+                ?.fullTime
+                ?.home
             );
 
 
           const awayGoals =
             Number(
-              match.score?.fullTime?.away
+              match
+                .score
+                ?.fullTime
+                ?.away
             );
 
 
           if(
+
             !Number.isFinite(
               homeGoals
-            ) ||
+            )
+
+            ||
 
             !Number.isFinite(
               awayGoals
             )
-          ){
 
-            return null;
+            ||
 
-          }
+            (
 
+              !namesMatch(
+                home,
+                team
+              )
 
-          if(
-            !namesMatch(
-              home,
-              team
-            ) &&
+              &&
 
-            !namesMatch(
-              away,
-              team
+              !namesMatch(
+                away,
+                team
+              )
+
             )
+
           ){
 
             return null;
@@ -1611,6 +1743,7 @@ function calculateTeamStats(
           return {
 
             gf,
+
             ga,
 
             result:
@@ -1663,7 +1796,9 @@ function calculateTeamStats(
               item[key],
 
             0
-          ) /
+          )
+
+          /
 
           items.length
 
@@ -1714,27 +1849,9 @@ function calculateTeamStats(
     ).length;
 
 
-  const losses =
-    usable.length -
-    wins -
-    draws;
-
-
   const formPoints =
     wins * 3 +
     draws;
-
-
-  const formRate =
-    usable.length
-
-      ? formPoints /
-        (
-          usable.length *
-          3
-        )
-
-      : 0;
 
 
   return {
@@ -1749,37 +1866,45 @@ function calculateTeamStats(
 
     draws,
 
-    losses,
+    losses:
+      usable.length -
+      wins -
+      draws,
 
     formPoints,
 
     formRate:
-
       round(
-        formRate
+
+        usable.length
+          ? formPoints /
+            (
+              usable.length *
+              3
+            )
+          : 0
+
       ),
 
     goalsForAvg:
-
       round(
 
         last5.length
 
-          ? gf5 * 0.6 +
-            gf10 * 0.4
+          ? gf5 * 0.60 +
+            gf10 * 0.40
 
           : gf10
 
       ),
 
     goalsAgainstAvg:
-
       round(
 
         last5.length
 
-          ? ga5 * 0.6 +
-            ga10 * 0.4
+          ? ga5 * 0.60 +
+            ga10 * 0.40
 
           : ga10
 
@@ -1790,73 +1915,10 @@ function calculateTeamStats(
 }
 
 
-// ==========================================
-// PREDICTION ENGINE
-// ==========================================
-
-function buildPredictions(
-  analysis
+function buildModel(
+  homeXg,
+  awayXg
 ){
-
-  const home =
-    analysis.home;
-
-
-  const away =
-    analysis.away;
-
-
-  const homeXg =
-    clamp(
-
-      (
-
-        home.goalsForAvg *
-        0.55
-
-        +
-
-        away.goalsAgainstAvg *
-        0.45
-
-      )
-
-      *
-
-      1.08,
-
-      0.15,
-
-      4.00
-
-    );
-
-
-  const awayXg =
-    clamp(
-
-      (
-
-        away.goalsForAvg *
-        0.55
-
-        +
-
-        home.goalsAgainstAvg *
-        0.45
-
-      )
-
-      *
-
-      0.92,
-
-      0.10,
-
-      3.50
-
-    );
-
 
   const matrix =
     poissonMatrix(
@@ -1869,26 +1931,32 @@ function buildPredictions(
   let homeWin =
     0;
 
+
   let draw =
     0;
+
 
   let awayWin =
     0;
 
+
   let over25 =
     0;
+
 
   let under25 =
     0;
 
+
   let bttsYes =
     0;
+
 
   let bttsNo =
     0;
 
 
-  let bestScore = {
+  let best = {
 
     probability:
       -1,
@@ -1914,18 +1982,19 @@ function buildPredictions(
       a++
     ){
 
-      const probability =
+      const p =
         matrix[h][a];
 
 
       if(
-        probability >
-        bestScore.probability
+        p >
+        best.probability
       ){
 
-        bestScore = {
+        best = {
 
-          probability,
+          probability:
+            p,
 
           home:
             h,
@@ -1943,7 +2012,7 @@ function buildPredictions(
       ){
 
         homeWin +=
-          probability;
+          p;
 
       }
 
@@ -1952,14 +2021,14 @@ function buildPredictions(
       ){
 
         draw +=
-          probability;
+          p;
 
       }
 
       else{
 
         awayWin +=
-          probability;
+          p;
 
       }
 
@@ -1969,14 +2038,14 @@ function buildPredictions(
       ){
 
         over25 +=
-          probability;
+          p;
 
       }
 
       else{
 
         under25 +=
-          probability;
+          p;
 
       }
 
@@ -1987,14 +2056,14 @@ function buildPredictions(
       ){
 
         bttsYes +=
-          probability;
+          p;
 
       }
 
       else{
 
         bttsNo +=
-          probability;
+          p;
 
       }
 
@@ -2003,136 +2072,143 @@ function buildPredictions(
   }
 
 
+  return {
+
+    homeXg,
+
+    awayXg,
+
+    homeWin,
+
+    draw,
+
+    awayWin,
+
+    over25,
+
+    under25,
+
+    bttsYes,
+
+    bttsNo,
+
+    bestScore:
+      best
+
+  };
+
+}
+
+
+function buildPredictions(
+  analysis
+){
+
+  const model =
+    analysis.model;
+
+
+  const home =
+    analysis.home;
+
+
+  const away =
+    analysis.away;
+
+
   const candidates = [
 
-    {
+    [
 
-      key:
-        "homeWin",
+      "homeWin",
 
-      label:
-        `فوز ${home.team}`,
+      `فوز ${home.team}`,
 
-      probabilityValue:
-        homeWin,
+      model.homeWin,
 
-      explanation:
-        "مبني على قوة التسجيل والاستقبال وآخر النتائج."
+      "قوة الهجوم والدفاع والنتائج الأخيرة."
 
-    },
+    ],
 
+    [
 
-    {
+      "draw",
 
-      key:
-        "draw",
+      "التعادل",
 
-      label:
-        "التعادل",
+      model.draw,
 
-      probabilityValue:
-        draw,
+      "احتمال التعادل وفق توزيع أهداف بواسون."
 
-      explanation:
-        "احتمال التعادل وفق توزيع أهداف بواسون."
+    ],
 
-    },
+    [
 
+      "awayWin",
 
-    {
+      `فوز ${away.team}`,
 
-      key:
-        "awayWin",
+      model.awayWin,
 
-      label:
-        `فوز ${away.team}`,
+      "قوة الهجوم والدفاع والنتائج الأخيرة."
 
-      probabilityValue:
-        awayWin,
+    ],
 
-      explanation:
-        "مبني على قوة التسجيل والاستقبال وآخر النتائج."
+    [
 
-    },
+      "over25",
 
+      "أكثر من 2.5 هدف",
 
-    {
+      model.over25,
 
-      key:
-        "over25",
+      "احتمال تسجيل ثلاثة أهداف أو أكثر."
 
-      label:
-        "أكثر من 2.5 هدف",
+    ],
 
-      probabilityValue:
-        over25,
+    [
 
-      explanation:
-        "احتمال تسجيل ثلاثة أهداف أو أكثر."
+      "under25",
 
-    },
+      "أقل من 2.5 هدف",
 
+      model.under25,
 
-    {
+      "احتمال تسجيل صفر إلى هدفين."
 
-      key:
-        "under25",
+    ],
 
-      label:
-        "أقل من 2.5 هدف",
+    [
 
-      probabilityValue:
-        under25,
+      "bttsYes",
 
-      explanation:
-        "احتمال تسجيل صفر إلى هدفين."
+      "كلا الفريقين يسجلان",
 
-    },
+      model.bttsYes,
 
+      "احتمال تسجيل الفريقين هدفًا واحدًا على الأقل."
 
-    {
+    ],
 
-      key:
-        "bttsYes",
+    [
 
-      label:
-        "كلا الفريقين يسجلان",
+      "bttsNo",
 
-      probabilityValue:
-        bttsYes,
+      "ليس كلا الفريقين يسجلان",
 
-      explanation:
-        "احتمال تسجيل الفريقين هدفًا واحدًا على الأقل."
+      model.bttsNo,
 
-    },
+      "احتمال عدم تسجيل أحد الفريقين على الأقل."
 
-
-    {
-
-      key:
-        "bttsNo",
-
-      label:
-        "ليس كلا الفريقين يسجلان",
-
-      probabilityValue:
-        bttsNo,
-
-      explanation:
-        "احتمال عدم تسجيل أحد الفريقين على الأقل."
-
-    }
+    ]
 
   ];
 
 
   candidates.sort(
-    (
-      a,
-      b
-    ) =>
-      b.probabilityValue -
-      a.probabilityValue
+    (a,b) =>
+      b[2] -
+      a[2]
   );
 
 
@@ -2151,39 +2227,34 @@ function buildPredictions(
           item => ({
 
             outcome:
-              item.key,
+              item[0],
 
             label:
-              item.label,
+              item[1],
 
             probabilityValue:
-              item.probabilityValue,
+              item[2],
 
             probability:
               `${round(
-                item.probabilityValue *
+                item[2] *
                 100
               )}%`,
 
             explanation:
-              item.explanation
+              item[3]
 
           })
         ),
 
-
     predictedScore:
 
-      `${bestScore.home} - ${bestScore.away}`
+      `${model.bestScore.home} - ${model.bestScore.away}`
 
   };
 
 }
 
-
-// ==========================================
-// POISSON MATRIX
-// ==========================================
 
 function poissonMatrix(
   lambdaHome,
@@ -2242,7 +2313,8 @@ function poissonMatrix(
           sum,
           value
         ) =>
-          sum + value,
+          sum +
+          value,
 
         0
       );
@@ -2260,16 +2332,12 @@ function poissonMatrix(
 }
 
 
-// ==========================================
-// POISSON SERIES
-// ==========================================
-
 function poissonSeries(
   lambda,
   max
 ){
 
-  const values =
+  const result =
     [];
 
 
@@ -2279,7 +2347,7 @@ function poissonSeries(
     k++
   ){
 
-    values.push(
+    result.push(
 
       Math.exp(
         -lambda
@@ -2303,14 +2371,10 @@ function poissonSeries(
   }
 
 
-  return values;
+  return result;
 
 }
 
-
-// ==========================================
-// FACTORIAL
-// ==========================================
 
 function factorial(
   n
@@ -2337,9 +2401,131 @@ function factorial(
 }
 
 
-// ==========================================
-// FALLBACK
-// ==========================================
+function calculateDataQuality(
+  analysis,
+  providerCount,
+  fixture
+){
+
+  const games =
+    Math.min(
+      analysis.home.games,
+      analysis.away.games
+    );
+
+
+  const history =
+    (
+      Math.min(
+        games,
+        10
+      ) /
+      10
+    ) *
+    80;
+
+
+  const providers =
+    Math.min(
+      providerCount,
+      2
+    ) *
+    10;
+
+
+  const fixtureScore =
+    fixture
+      ? 10
+      : 0;
+
+
+  return Math.round(
+
+    clamp(
+      history +
+      providers +
+      fixtureScore,
+
+      0,
+
+      100
+    )
+
+  );
+
+}
+
+
+function baseResponse(
+  home,
+  away,
+  providers,
+  usable,
+  status,
+  message
+){
+
+  return {
+
+    success:
+      true,
+
+    app:
+      "Y.C.B",
+
+    engine:
+      "Y.C.B Prediction Engine",
+
+    version:
+      VERSION,
+
+    architecture:
+      "Multi Provider Architecture",
+
+    match: {
+
+      home,
+
+      away
+
+    },
+
+    analysisStatus:
+      status,
+
+    message,
+
+    predictions:
+      fallbackPredictions(
+        home,
+        away
+      ),
+
+    recommendation: {
+
+      recommended:
+        false,
+
+      message:
+        "لا يوجد رهان موصى به: البيانات غير كافية أو لم يتم التحقق من المباراة."
+
+    },
+
+    providers,
+
+    providerCount:
+      providers.length,
+
+    successfulProviderCount:
+      usable.length,
+
+    dataQuality:
+      0
+
+  };
+
+}
+
 
 function fallbackPredictions(
   home,
@@ -2367,7 +2553,6 @@ function fallbackPredictions(
 
     },
 
-
     {
 
       outcome:
@@ -2386,7 +2571,6 @@ function fallbackPredictions(
         "لا توجد بيانات كافية."
 
     },
-
 
     {
 
@@ -2412,72 +2596,18 @@ function fallbackPredictions(
 }
 
 
-// ==========================================
-// DATA QUALITY
-// ==========================================
-
-function calculateDataQuality(
-  analysis,
-  providerCount
-){
-
-  const games =
-    Math.min(
-      analysis.home.games,
-      analysis.away.games
-    );
-
-
-  const historyScore =
-    (
-      Math.min(
-        games,
-        10
-      ) /
-      10
-    ) *
-
-    80;
-
-
-  const providerScore =
-    Math.min(
-      providerCount,
-      2
-    ) *
-
-    10;
-
-
-  return Math.round(
-
-    clamp(
-      historyScore +
-      providerScore,
-
-      0,
-
-      100
-    )
-
-  );
-
-}
-
-
-// ==========================================
-// NORMALIZE NAME
-// ==========================================
-
 function normalizeName(
   value
 ){
 
   return String(
-    value || ""
+    value ||
+    ""
   )
 
     .toLowerCase()
+
+    .trim()
 
     .normalize(
       "NFD"
@@ -2513,10 +2643,6 @@ function normalizeName(
 }
 
 
-// ==========================================
-// TEAM NAME MATCH
-// ==========================================
-
 function namesMatch(
   first,
   second
@@ -2549,8 +2675,8 @@ function namesMatch(
       first
         .split(" ")
         .filter(
-          token =>
-            token.length >= 3
+          item =>
+            item.length >= 3
         )
 
     );
@@ -2559,19 +2685,15 @@ function namesMatch(
   return second
     .split(" ")
     .some(
-      token =>
-        token.length >= 3 &&
+      item =>
+        item.length >= 3 &&
         tokens.has(
-          token
+          item
         )
     );
 
 }
 
-
-// ==========================================
-// CLAMP
-// ==========================================
 
 function clamp(
   value,
@@ -2593,10 +2715,6 @@ function clamp(
 }
 
 
-// ==========================================
-// ROUND
-// ==========================================
-
 function round(
   value
 ){
@@ -2608,10 +2726,6 @@ function round(
 
 }
 
-
-// ==========================================
-// JSON
-// ==========================================
 
 function json(
   data,
@@ -2630,7 +2744,7 @@ function json(
 
       status,
 
-      headers:{
+      headers: {
 
         "Content-Type":
           "application/json;charset=UTF-8",
