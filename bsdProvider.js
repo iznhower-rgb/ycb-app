@@ -11,8 +11,7 @@ const API =
   "https://sports.bzzoiro.com";
 
 
-class BSDProvider
-  extends DataProvider {
+class BSDProvider extends DataProvider {
 
   constructor() {
 
@@ -67,6 +66,10 @@ class BSDProvider
         new Date();
 
 
+      /*
+       * نطاق واسع للبحث عن المباراة.
+       */
+
       const from =
         shiftDate(
           now,
@@ -82,43 +85,34 @@ class BSDProvider
 
 
       /*
-       * أولاً نحاول الحصول على IDs دقيقة للفريقين.
-       * استخدام team_id أدق من البحث باسم الفريق.
+       * جلب مباريات الفريق المضيف.
        */
-
-      const homeTeamId =
-        await findTeamId(
-          home,
-          token
-        );
-
-
-      const awayTeamId =
-        await findTeamId(
-          away,
-          token
-        );
-
 
       const homeEvents =
         await getTeamEvents(
           home,
           from,
           to,
-          token,
-          homeTeamId
+          token
         );
 
+
+      /*
+       * جلب مباريات الفريق الضيف.
+       */
 
       const awayEvents =
         await getTeamEvents(
           away,
           from,
           to,
-          token,
-          awayTeamId
+          token
         );
 
+
+      /*
+       * دمج النتائج وإزالة التكرار.
+       */
 
       const allEvents =
         dedupeEvents(
@@ -129,6 +123,10 @@ class BSDProvider
         );
 
 
+      /*
+       * البحث عن المباراة المطلوبة.
+       */
+
       const fixture =
         findMatch(
           allEvents,
@@ -137,19 +135,21 @@ class BSDProvider
         );
 
 
+      /*
+       * آخر مباريات الفريقين.
+       */
+
       const homeRecent =
         await getRecentMatches(
           home,
-          token,
-          homeTeamId
+          token
         );
 
 
       const awayRecent =
         await getRecentMatches(
           away,
-          token,
-          awayTeamId
+          token
         );
 
 
@@ -188,29 +188,17 @@ class BSDProvider
                 )
               : null,
 
-          teamIds: {
-
-            home:
-              homeTeamId,
-
-            away:
-              awayTeamId
-
-          },
-
           recentMatches: {
 
             home:
-              homeRecent
-                .map(
-                  normalizeEvent
-                ),
+              homeRecent.map(
+                normalizeEvent
+              ),
 
             away:
-              awayRecent
-                .map(
-                  normalizeEvent
-                )
+              awayRecent.map(
+                normalizeEvent
+              )
 
           }
 
@@ -250,134 +238,15 @@ class BSDProvider
 }
 
 
-/*
- * البحث عن الفريق في BSD والحصول على team_id.
- *
- * BSD يوفر قائمة الفرق عبر /api/v2/teams/
- * مع دعم البحث بالاسم.
- */
-
-async function findTeamId(
-  team,
-  token
-) {
-
-  if (
-    !team
-  ) {
-
-    return null;
-
-  }
-
-
-  const url =
-    new URL(
-      `${API}/api/v2/teams/`
-    );
-
-
-  url.searchParams.set(
-    "search",
-    team
-  );
-
-
-  url.searchParams.set(
-    "limit",
-    "50"
-  );
-
-
-  url.searchParams.set(
-    "offset",
-    "0"
-  );
-
-
-  const data =
-    await fetchJSON(
-      url.toString(),
-      token
-    );
-
-
-  const results =
-    Array.isArray(
-      data?.results
-    )
-
-      ? data.results
-
-      : Array.isArray(
-          data?.teams
-        )
-
-        ? data.teams
-
-        : [];
-
-
-  if (
-    !results.length
-  ) {
-
-    return null;
-
-  }
-
-
-  const wanted =
-    normalizeName(
-      team
-    );
-
-
-  const exact =
-    results.find(
-      item =>
-        namesMatch(
-          normalizeName(
-            item?.name ||
-            item?.short_name ||
-            item?.shortName ||
-            ""
-          ),
-          wanted
-        )
-    );
-
-
-  if (
-    exact?.id != null
-  ) {
-
-    return exact.id;
-
-  }
-
-
-  return (
-    results[0]?.id ??
-    null
-  );
-
-}
-
-
-/*
- * جلب مباريات الفريق.
- *
- * إذا وجدنا team_id نستخدمه لأنه أدق.
- * إذا لم نجده نستخدم اسم الفريق كـ fallback.
- */
+/* =========================================================
+   GET TEAM EVENTS
+   ========================================================= */
 
 async function getTeamEvents(
   team,
   from,
   to,
-  token,
-  teamId = null
+  token
 ) {
 
   const url =
@@ -386,25 +255,10 @@ async function getTeamEvents(
     );
 
 
-  if (
-    teamId != null
-  ) {
-
-    url.searchParams.set(
-      "team_id",
-      String(
-        teamId
-      )
-    );
-
-  } else {
-
-    url.searchParams.set(
-      "team",
-      team
-    );
-
-  }
+  url.searchParams.set(
+    "team",
+    team
+  );
 
 
   url.searchParams.set(
@@ -429,12 +283,6 @@ async function getTeamEvents(
   );
 
 
-  url.searchParams.set(
-    "offset",
-    "0"
-  );
-
-
   const data =
     await fetchJSON(
       url.toString(),
@@ -442,27 +290,40 @@ async function getTeamEvents(
     );
 
 
-  return Array.isArray(
-    data?.results
-  )
+  if (
+    Array.isArray(
+      data?.results
+    )
+  ) {
 
-    ? data.results
+    return data.results;
 
-    : Array.isArray(
-        data?.events
-      )
+  }
 
-      ? data.events
 
-      : [];
+  if (
+    Array.isArray(
+      data?.events
+    )
+  ) {
+
+    return data.events;
+
+  }
+
+
+  return [];
 
 }
 
 
+/* =========================================================
+   RECENT MATCHES
+   ========================================================= */
+
 async function getRecentMatches(
   team,
-  token,
-  teamId = null
+  token
 ) {
 
   const now =
@@ -481,8 +342,7 @@ async function getRecentMatches(
       team,
       from,
       now,
-      token,
-      teamId
+      token
     );
 
 
@@ -517,6 +377,10 @@ async function getRecentMatches(
 
 }
 
+
+/* =========================================================
+   FETCH JSON
+   ========================================================= */
 
 async function fetchJSON(
   url,
@@ -583,66 +447,52 @@ async function fetchJSON(
 }
 
 
+/* =========================================================
+   FIND MATCH
+   ========================================================= */
+
 function findMatch(
   events,
   home,
   away
 ) {
 
-  const homeName =
+  const wantedHome =
     normalizeName(
       home
     );
 
 
-  const awayName =
+  const wantedAway =
     normalizeName(
       away
     );
+
+
+  if (
+    !wantedHome ||
+    !wantedAway
+  ) {
+
+    return null;
+
+  }
 
 
   return events.find(
     event => {
 
       const eventHome =
-        normalizeName(
-          event
-            ?.home_team
-            ?.name ||
-
-          event
-            ?.homeTeam
-            ?.name ||
-
-          event
-            ?.home
-            ?.name ||
-
-          event
-            ?.home_team_name ||
-
-          ""
+        getEventTeamName(
+          event,
+          "home"
         );
 
 
       const eventAway =
-        normalizeName(
-          event
-            ?.away_team
-            ?.name ||
-
-          event
-            ?.awayTeam
-            ?.name ||
-
-          event
-            ?.away
-            ?.name ||
-
-          event
-            ?.away_team_name ||
-
-          ""
+        getEventTeamName(
+          event,
+          "away"
         );
 
 
@@ -650,89 +500,187 @@ function findMatch(
 
         namesMatch(
           eventHome,
-          homeName
+          wantedHome
         )
 
         &&
 
         namesMatch(
           eventAway,
-          awayName
+          wantedAway
         )
 
       );
 
     }
+  ) || null;
+
+}
+
+
+/* =========================================================
+   EXTRACT TEAM NAME
+   ========================================================= */
+
+function getEventTeamName(
+  event,
+  side
+) {
+
+  if (
+    side === "home"
+  ) {
+
+    return extractTeamName(
+      event?.home_team,
+      event?.homeTeam,
+      event?.home,
+      event?.home_team_name,
+      event?.homeTeamName,
+      event?.home_name
+    );
+
+  }
+
+
+  return extractTeamName(
+    event?.away_team,
+    event?.awayTeam,
+    event?.away,
+    event?.away_team_name,
+    event?.awayTeamName,
+    event?.away_name
   );
 
 }
 
 
+/* =========================================================
+   EXTRACT TEAM NAME FROM ANY FORMAT
+   ========================================================= */
+
+function extractTeamName(
+  ...values
+) {
+
+  for (
+    const value
+    of values
+  ) {
+
+    if (
+      typeof value ===
+      "string"
+    ) {
+
+      if (
+        value.trim()
+      ) {
+
+        return normalizeName(
+          value
+        );
+
+      }
+
+    }
+
+
+    if (
+      value &&
+      typeof value ===
+      "object"
+    ) {
+
+      const name =
+        value.name ||
+
+        value.team_name ||
+
+        value.teamName ||
+
+        value.short_name ||
+
+        value.shortName ||
+
+        value.title;
+
+
+      if (
+        name
+      ) {
+
+        return normalizeName(
+          name
+        );
+
+      }
+
+    }
+
+  }
+
+
+  return "";
+
+}
+
+
+/* =========================================================
+   NORMALIZE EVENT
+   ========================================================= */
+
 function normalizeEvent(
   event
 ) {
 
-  const home =
-    event
-      ?.home_team ||
-
-    event
-      ?.homeTeam ||
-
-    event
-      ?.home ||
-
-    {};
+  const homeName =
+    getEventTeamName(
+      event,
+      "home"
+    );
 
 
-  const away =
-    event
-      ?.away_team ||
+  const awayName =
+    getEventTeamName(
+      event,
+      "away"
+    );
 
-    event
-      ?.awayTeam ||
 
-    event
-      ?.away ||
+  const homeObject =
+    getTeamObject(
+      event,
+      "home"
+    );
 
-    {};
+
+  const awayObject =
+    getTeamObject(
+      event,
+      "away"
+    );
 
 
   const homeScore =
     firstNumber(
-      event
-        ?.home_score,
-
-      event
-        ?.homeScore,
-
-      event
-        ?.score
-        ?.home,
-
-      event
-        ?.score
-        ?.fullTime
-        ?.home
+      event?.home_score,
+      event?.homeScore,
+      event?.score?.home,
+      event?.score?.fullTime?.home,
+      event?.scores?.home,
+      event?.result?.home
     );
 
 
   const awayScore =
     firstNumber(
-      event
-        ?.away_score,
-
-      event
-        ?.awayScore,
-
-      event
-        ?.score
-        ?.away,
-
-      event
-        ?.score
-        ?.fullTime
-        ?.away
+      event?.away_score,
+      event?.awayScore,
+      event?.score?.away,
+      event?.score?.fullTime?.away,
+      event?.scores?.away,
+      event?.result?.away
     );
 
 
@@ -755,43 +703,25 @@ function normalizeEvent(
       )
         ? "FINISHED"
         : String(
-            event
-              ?.status
-              ?.type ||
-
-            event
-              ?.status ||
-
+            event?.status?.type ||
+            event?.status ||
             "SCHEDULED"
           ),
 
     homeTeam: {
 
       id:
-        home
-          ?.id ||
-
-        event
-          ?.home_team_id ||
-
+        homeObject?.id ||
+        event?.home_team_id ||
         null,
 
       name:
-        home
-          ?.name ||
-
-        event
-          ?.home_team_name ||
-
+        homeName ||
         null,
 
       shortName:
-        home
-          ?.short_name ||
-
-        home
-          ?.shortName ||
-
+        homeObject?.short_name ||
+        homeObject?.shortName ||
         null
 
     },
@@ -799,30 +729,17 @@ function normalizeEvent(
     awayTeam: {
 
       id:
-        away
-          ?.id ||
-
-        event
-          ?.away_team_id ||
-
+        awayObject?.id ||
+        event?.away_team_id ||
         null,
 
       name:
-        away
-          ?.name ||
-
-        event
-          ?.away_team_name ||
-
+        awayName ||
         null,
 
       shortName:
-        away
-          ?.short_name ||
-
-        away
-          ?.shortName ||
-
+        awayObject?.short_name ||
+        awayObject?.shortName ||
         null
 
     },
@@ -842,16 +759,13 @@ function normalizeEvent(
     },
 
     tournament:
-      event
-        ?.league
-        ?.name ||
+      event?.league?.name ||
 
-      event
-        ?.tournament
-        ?.name ||
+      event?.tournament?.name ||
 
-      event
-        ?.league_name ||
+      event?.league_name ||
+
+      event?.competition?.name ||
 
       null
 
@@ -860,6 +774,47 @@ function normalizeEvent(
 }
 
 
+/* =========================================================
+   GET TEAM OBJECT
+   ========================================================= */
+
+function getTeamObject(
+  event,
+  side
+) {
+
+  const value =
+    side === "home"
+
+      ? (
+          event?.home_team ||
+          event?.homeTeam ||
+          event?.home
+        )
+
+      : (
+          event?.away_team ||
+          event?.awayTeam ||
+          event?.away
+        );
+
+
+  return (
+    value &&
+    typeof value === "object"
+  )
+
+    ? value
+
+    : {};
+
+}
+
+
+/* =========================================================
+   FINISHED
+   ========================================================= */
+
 function isFinished(
   event
 ) {
@@ -867,12 +822,11 @@ function isFinished(
   const status =
     String(
 
-      event
-        ?.status
-        ?.type ||
+      event?.status?.type ||
 
-      event
-        ?.status ||
+      event?.status?.name ||
+
+      event?.status ||
 
       ""
 
@@ -899,10 +853,19 @@ function isFinished(
     status ===
       "after_penalties"
 
+    ||
+
+    status ===
+      "ft"
+
   );
 
 }
 
+
+/* =========================================================
+   FIRST NUMBER
+   ========================================================= */
 
 function firstNumber(
   ...values
@@ -912,6 +875,22 @@ function firstNumber(
     const value
     of values
   ) {
+
+    if (
+      value ===
+      null ||
+
+      value ===
+      undefined ||
+
+      value ===
+      ""
+    ) {
+
+      continue;
+
+    }
+
 
     const number =
       Number(
@@ -937,19 +916,20 @@ function firstNumber(
 }
 
 
+/* =========================================================
+   DATE
+   ========================================================= */
+
 function toISODate(
   event
 ) {
 
   const timestamp =
-    event
-      ?.start_timestamp ||
+    event?.start_timestamp ||
 
-    event
-      ?.startTimestamp ||
+    event?.startTimestamp ||
 
-    event
-      ?.timestamp;
+    event?.timestamp;
 
 
   if (
@@ -971,14 +951,13 @@ function toISODate(
 
 
   const date =
-    event
-      ?.date ||
+    event?.date ||
 
-    event
-      ?.start_date ||
+    event?.start_date ||
 
-    event
-      ?.utcDate;
+    event?.startDate ||
+
+    event?.utcDate;
 
 
   if (
@@ -1009,6 +988,10 @@ function toISODate(
 }
 
 
+/* =========================================================
+   TIMESTAMP
+   ========================================================= */
+
 function getTimestamp(
   event
 ) {
@@ -1020,6 +1003,7 @@ function getTimestamp(
 
 
   return date
+
     ? new Date(
         date
       ).getTime()
@@ -1028,6 +1012,10 @@ function getTimestamp(
 
 }
 
+
+/* =========================================================
+   DEDUPE
+   ========================================================= */
 
 function dedupeEvents(
   events
@@ -1040,40 +1028,34 @@ function dedupeEvents(
   return events.filter(
     event => {
 
+      const home =
+        getEventTeamName(
+          event,
+          "home"
+        );
+
+
+      const away =
+        getEventTeamName(
+          event,
+          "away"
+        );
+
+
       const key =
         String(
 
           event?.id ||
 
           [
+            event?.start_timestamp ||
+            event?.startTimestamp ||
+            event?.timestamp ||
+            "",
 
-            event
-              ?.start_timestamp,
+            home,
 
-            event
-              ?.startTimestamp,
-
-            event
-              ?.home_team
-              ?.name ||
-
-            event
-              ?.homeTeam
-              ?.name ||
-
-            event
-              ?.home_team_name,
-
-            event
-              ?.away_team
-              ?.name ||
-
-            event
-              ?.awayTeam
-              ?.name ||
-
-            event
-              ?.away_team_name
+            away
 
           ].join("|")
 
@@ -1104,6 +1086,10 @@ function dedupeEvents(
 }
 
 
+/* =========================================================
+   DATE SHIFT
+   ========================================================= */
+
 function shiftDate(
   date,
   days
@@ -1126,6 +1112,10 @@ function shiftDate(
 }
 
 
+/* =========================================================
+   FORMAT DATE
+   ========================================================= */
+
 function formatDate(
   date
 ) {
@@ -1139,6 +1129,10 @@ function formatDate(
 
 }
 
+
+/* =========================================================
+   NORMALIZE NAME
+   ========================================================= */
 
 function normalizeName(
   value
@@ -1187,14 +1181,30 @@ function normalizeName(
 }
 
 
+/* =========================================================
+   NAME MATCH
+   ========================================================= */
+
 function namesMatch(
   first,
   second
 ) {
 
+  const a =
+    normalizeName(
+      first
+    );
+
+
+  const b =
+    normalizeName(
+      second
+    );
+
+
   if (
-    !first ||
-    !second
+    !a ||
+    !b
   ) {
 
     return false;
@@ -1203,14 +1213,21 @@ function namesMatch(
 
 
   if (
-    first === second ||
+    a === b
+  ) {
 
-    first.includes(
-      second
+    return true;
+
+  }
+
+
+  if (
+    a.includes(
+      b
     ) ||
 
-    second.includes(
-      first
+    b.includes(
+      a
     )
   ) {
 
@@ -1219,35 +1236,76 @@ function namesMatch(
   }
 
 
-  const firstTokens =
+  const aTokens =
     new Set(
-      first
-        .split(" ")
+      a
+        .split(
+          " "
+        )
         .filter(
-          item =>
-            item.length >= 3
+          token =>
+            token.length >= 3
         )
     );
 
 
-  const secondTokens =
-    second
-      .split(" ")
+  const bTokens =
+    b
+      .split(
+        " "
+      )
       .filter(
-        item =>
-          item.length >= 3
+        token =>
+          token.length >= 3
       );
 
 
-  return secondTokens.some(
-    item =>
-      firstTokens.has(
-        item
+  if (
+    !aTokens.size ||
+    !bTokens.length
+  ) {
+
+    return false;
+
+  }
+
+
+  /*
+   * إذا كان هناك تطابق لجزء مهم من الاسم.
+   */
+
+  let matches =
+    0;
+
+
+  for (
+    const token
+    of bTokens
+  ) {
+
+    if (
+      aTokens.has(
+        token
       )
+    ) {
+
+      matches++;
+
+    }
+
+  }
+
+
+  return (
+    matches >= 1
   );
 
 }
 
+
+/* =========================================================
+   REGISTER PROVIDER
+   ========================================================= */
 
 const provider =
   new BSDProvider();
