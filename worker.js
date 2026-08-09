@@ -12,10 +12,11 @@ import "./footballDataProvider.js";
 
 
 // ==========================================
-// Y.C.B HTML
+// HTML
 // ==========================================
 
 const HTML = `<!DOCTYPE html>
+
 <html lang="ar" dir="rtl">
 
 <head>
@@ -51,7 +52,7 @@ body{
 
 h1{
   font-size:42px;
-  margin-bottom:5px;
+  margin:10px 0 5px;
 }
 
 .subtitle{
@@ -105,10 +106,6 @@ button:disabled{
   color:#fbbf24 !important;
 }
 
-.success{
-  color:#4ade80 !important;
-}
-
 #result{
   display:none;
   margin-top:35px;
@@ -139,6 +136,7 @@ button:disabled{
   color:#94a3b8;
   font-size:14px;
   line-height:2;
+  text-align:right;
 }
 
 .data-warning{
@@ -148,6 +146,15 @@ button:disabled{
   background:#422006;
   color:#fbbf24;
   line-height:1.7;
+}
+
+.match-data{
+  margin-top:20px;
+  padding:15px;
+  background:#1e293b;
+  border-radius:12px;
+  text-align:right;
+  line-height:1.9;
 }
 
 </style>
@@ -164,17 +171,15 @@ button:disabled{
 Football Prediction Engine
 </div>
 
-
 <div class="card">
 
-<h2>اختبار مباراة حقيقية</h2>
+<h2>اختر مباراة</h2>
 
 <input
   id="match"
   value="Arsenal vs Coventry City"
   placeholder="Arsenal vs Coventry City"
 >
-
 
 <button
   id="analyzeButton"
@@ -183,16 +188,13 @@ Football Prediction Engine
 تحليل المباراة
 </button>
 
-
 <div id="status"></div>
 
 </div>
 
-
 <div id="result">
 
-<h2>حالة البيانات</h2>
-
+<h2>حالة التحليل</h2>
 
 <div class="prediction">
 
@@ -212,7 +214,6 @@ Football Prediction Engine
 
 </div>
 
-
 <div class="prediction">
 
 <div
@@ -230,7 +231,6 @@ Football Prediction Engine
 </div>
 
 </div>
-
 
 <div class="prediction">
 
@@ -250,13 +250,18 @@ Football Prediction Engine
 
 </div>
 
-
 <div
   id="providerInfo"
   class="provider-info"
 >
 </div>
 
+<div
+  id="matchData"
+  class="match-data"
+  style="display:none"
+>
+</div>
 
 <div
   id="dataWarning"
@@ -269,40 +274,30 @@ Football Prediction Engine
 
 </div>
 
-
 <script>
 
 async function analyzeMatch(){
 
   const input =
-    document.getElementById(
-      "match"
-    );
+    document.getElementById("match");
 
   const button =
-    document.getElementById(
-      "analyzeButton"
-    );
+    document.getElementById("analyzeButton");
 
   const status =
-    document.getElementById(
-      "status"
-    );
+    document.getElementById("status");
 
   const result =
-    document.getElementById(
-      "result"
-    );
+    document.getElementById("result");
 
   const providerInfo =
-    document.getElementById(
-      "providerInfo"
-    );
+    document.getElementById("providerInfo");
+
+  const matchData =
+    document.getElementById("matchData");
 
   const dataWarning =
-    document.getElementById(
-      "dataWarning"
-    );
+    document.getElementById("dataWarning");
 
 
   const match =
@@ -313,8 +308,8 @@ async function analyzeMatch(){
 
     status.className="error";
 
-    status.textContent =
-      "أدخل اسم المباراة أولاً.";
+    status.textContent=
+      "أدخل المباراة أولاً.";
 
     return;
 
@@ -327,11 +322,11 @@ async function analyzeMatch(){
 
   dataWarning.style.display="none";
 
-  providerInfo.innerHTML="";
+  matchData.style.display="none";
 
   status.className="";
 
-  status.textContent =
+  status.textContent=
     "جاري الاتصال بمصادر البيانات...";
 
 
@@ -492,16 +487,15 @@ async function analyzeMatch(){
                   ? "✓"
                   : "✗";
 
-              const status =
-                provider.status ||
-                "unknown";
-
               return (
                 icon +
                 " " +
                 provider.provider +
                 " — " +
-                status
+                (
+                  provider.status ||
+                  "unknown"
+                )
               );
 
             }
@@ -511,36 +505,90 @@ async function analyzeMatch(){
     }
 
 
+    if(data.realData){
+
+      const real =
+        data.realData;
+
+
+      const homeTeam =
+        real.homeTeam?.name ||
+        data.match.home;
+
+
+      const awayTeam =
+        real.awayTeam?.name ||
+        data.match.away;
+
+
+      const competition =
+        real.competition?.name ||
+        "-";
+
+
+      const matchStatus =
+        real.status ||
+        "-";
+
+
+      const date =
+        real.utcDate ||
+        "-";
+
+
+      matchData.innerHTML =
+        "<strong>المباراة الموجودة في المصدر</strong><br>" +
+        "🏠 " +
+        homeTeam +
+        "<br>" +
+        "✈️ " +
+        awayTeam +
+        "<br>" +
+        "🏆 " +
+        competition +
+        "<br>" +
+        "📅 " +
+        date +
+        "<br>" +
+        "📌 " +
+        matchStatus;
+
+
+      matchData.style.display=
+        "block";
+
+    }
+
+
     if(
       data.analysisStatus ===
       "insufficient_data"
     ){
 
-      dataWarning.style.display =
+      dataWarning.style.display=
         "block";
 
-      dataWarning.textContent =
+      dataWarning.textContent=
         data.message ||
-        "البيانات الحالية غير كافية.";
+        "البيانات غير كافية لإصدار توقع موثوق.";
 
-      status.className =
+      status.className=
         "warning";
 
-      status.textContent =
-        "تم الاتصال بالمصادر، لكن لا توجد بيانات كافية لبناء توقع موثوق.";
+      status.textContent=
+        "تم الاتصال بالمصادر، لكن لا توجد بيانات كافية للتوقع.";
 
     }else{
 
-      status.className =
-        "success";
+      status.className="";
 
-      status.textContent =
-        "تم العثور على بيانات المباراة.";
+      status.textContent=
+        "تم العثور على بيانات المباراة. مرحلة التوقع لم تُفعّل بعد.";
 
     }
 
 
-    result.style.display =
+    result.style.display=
       "block";
 
 
@@ -548,17 +596,16 @@ async function analyzeMatch(){
 
     console.error(error);
 
-    status.className =
+    status.className=
       "error";
 
-    status.textContent =
+    status.textContent=
       error.message ||
       "حدث خطأ غير معروف.";
 
   }finally{
 
-    button.disabled =
-      false;
+    button.disabled=false;
 
   }
 
@@ -577,15 +624,10 @@ async function analyzeMatch(){
 
 export default {
 
-  async fetch(
-    request,
-    env
-  ){
+  async fetch(request, env){
 
     const url =
-      new URL(
-        request.url
-      );
+      new URL(request.url);
 
 
     // ========================================
@@ -593,8 +635,7 @@ export default {
     // ========================================
 
     if(
-      request.method ===
-      "OPTIONS"
+      request.method === "OPTIONS"
     ){
 
       return json({
@@ -609,25 +650,21 @@ export default {
     // ========================================
 
     if(
-      url.pathname ===
-      "/api/health"
+      url.pathname === "/api/health"
     ){
 
       return json({
 
         success:true,
 
-        status:
-          "ok",
+        status:"ok",
 
-        app:
-          "Y.C.B",
+        app:"Y.C.B",
 
         engine:
           "Y.C.B Prediction Engine",
 
-        version:
-          "1.4.0",
+        version:"1.4.0",
 
         architecture:
           "Multi Provider Architecture"
@@ -642,8 +679,7 @@ export default {
     // ========================================
 
     if(
-      url.pathname ===
-      "/api/providers"
+      url.pathname === "/api/providers"
     ){
 
       return json({
@@ -663,13 +699,11 @@ export default {
     // ========================================
 
     if(
-      url.pathname ===
-      "/api/analyze"
+      url.pathname === "/api/analyze"
     ){
 
       if(
-        request.method !==
-        "POST"
+        request.method !== "POST"
       ){
 
         return json(
@@ -686,10 +720,6 @@ export default {
 
 
       try{
-
-        // ====================================
-        // READ BODY
-        // ====================================
 
         const body =
           await request.json();
@@ -716,9 +746,9 @@ export default {
         }
 
 
-        // ====================================
+        // ==================================
         // PARSE MATCH
-        // ====================================
+        // ==================================
 
         const parts =
           match.split(
@@ -769,9 +799,9 @@ export default {
         }
 
 
-        // ====================================
-        // GET DATA
-        // ====================================
+        // ==================================
+        // DATA PROVIDERS
+        // ==================================
 
         const providerResults =
           await getAllMatchData(
@@ -781,9 +811,9 @@ export default {
           );
 
 
-        // ====================================
-        // FIND FOOTBALL-DATA RESULT
-        // ====================================
+        // ==================================
+        // FIND REAL FOOTBALL DATA
+        // ==================================
 
         const footballDataResult =
           providerResults.find(
@@ -794,36 +824,22 @@ export default {
 
 
         const realMatchData =
-          footballDataResult &&
-          footballDataResult.success
+          footballDataResult?.success
             ? footballDataResult.data
             : null;
 
 
-        // ====================================
-        // IMPORTANT
-        // ====================================
-        //
-        // لا توجد توقعات وهمية.
-        //
-        // في هذه المرحلة نحن نختبر:
-        //
-        // 1. الاتصال بالمزود
-        // 2. العثور على المباراة
-        // 3. استخراج بيانات المباراة
-        //
-        // ولن نصنع probability مزيفة.
-        //
-        // ====================================
-
-
         const hasRealMatch =
           Boolean(
-            realMatchData &&
-            realMatchData.homeTeam &&
-            realMatchData.awayTeam
+            footballDataResult &&
+            footballDataResult.success &&
+            realMatchData
           );
 
+
+        // ==================================
+        // NO FAKE PREDICTIONS
+        // ==================================
 
         const predictions =
           buildDataStatusPredictions(
@@ -833,22 +849,16 @@ export default {
           );
 
 
-        // ====================================
-        // RESPONSE
-        // ====================================
-
         return json({
 
           success:true,
 
-          app:
-            "Y.C.B",
+          app:"Y.C.B",
 
           engine:
             "Y.C.B Prediction Engine",
 
-          version:
-            "1.4.0",
+          version:"1.4.0",
 
           architecture:
             "Multi Provider Architecture",
@@ -856,14 +866,9 @@ export default {
 
           match:{
 
-            requestedHome:
-              home,
+            home:home,
 
-            requestedAway:
-              away,
-
-            found:
-              hasRealMatch
+            away:away
 
           },
 
@@ -896,9 +901,9 @@ export default {
           message:
             hasRealMatch
 
-              ? "تم العثور على المباراة بنجاح. طبقة البيانات الأساسية تعمل."
+              ? "تم العثور على المباراة الحقيقية. لا تزال طبقة التنبؤ غير مفعلة."
 
-              : "الاتصال بالمزود يعمل، لكن المباراة المطلوبة لم يتم العثور عليها.",
+              : "لم يتم العثور على المباراة المطلوبة في مصادر البيانات الحالية.",
 
 
           predictions:
@@ -942,8 +947,7 @@ export default {
 
       {
 
-        status:
-          200,
+        status:200,
 
         headers:{
 
@@ -967,11 +971,6 @@ export default {
 // ==========================================
 // DATA STATUS PREDICTIONS
 // ==========================================
-//
-// ليست توقعات رياضية.
-//
-// فقط تعرض حالة طبقة البيانات.
-// ==========================================
 
 function buildDataStatusPredictions(
   home,
@@ -984,41 +983,33 @@ function buildDataStatusPredictions(
     return [
 
       {
-
-        outcome:
-          "match",
+        outcome:"data",
 
         label:
           "بيانات " + home,
 
         probability:
           "متصلة ✓"
-
       },
 
       {
-
-        outcome:
-          "match",
+        outcome:"data",
 
         label:
           "بيانات " + away,
 
         probability:
           "متصلة ✓"
-
       },
 
       {
-
-        outcome:
-          "model",
+        outcome:"model",
 
         label:
-          "محرك التوقع",
+          "التوقع الرياضي",
 
         probability:
-          "بانتظار الإحصائيات"
+          "بانتظار طبقة الإحصائيات"
 
       }
 
@@ -1030,42 +1021,33 @@ function buildDataStatusPredictions(
   return [
 
     {
-
-      outcome:
-        "homeWin",
+      outcome:"homeWin",
 
       label:
         "فوز " + home,
 
       probability:
         "غير متاح"
-
     },
 
     {
-
-      outcome:
-        "draw",
+      outcome:"draw",
 
       label:
         "التعادل",
 
       probability:
         "غير متاح"
-
     },
 
     {
-
-      outcome:
-        "awayWin",
+      outcome:"awayWin",
 
       label:
         "فوز " + away,
 
       probability:
         "غير متاح"
-
     }
 
   ];
@@ -1079,7 +1061,7 @@ function buildDataStatusPredictions(
 
 function json(
   data,
-  status = 200
+  status=200
 ){
 
   return new Response(
@@ -1092,9 +1074,7 @@ function json(
 
     {
 
-      status:
-
-        status,
+      status:status,
 
       headers:{
 
