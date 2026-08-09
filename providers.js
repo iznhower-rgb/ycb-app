@@ -1,154 +1,459 @@
-// ==========================================
-// Y.C.B DATA PROVIDER SYSTEM
-// ==========================================
+import {
+  DataProvider,
+  registerProvider
+} from "./providers.js";
 
-export class DataProvider {
 
-  constructor(name) {
-    this.name = name;
+// =====================================================
+// Y.C.B FOOTBALL-DATA.ORG PROVIDER
+// =====================================================
+
+class FootballDataProvider extends DataProvider {
+
+  constructor() {
+
+    super("Football-Data.org");
+
+    this.baseUrl =
+      "https://api.football-data.org/v4";
+
   }
 
-  async getMatchData(home, away, env) {
-    throw new Error(
-      `getMatchData() not implemented by ${this.name}`
+
+  // ===================================================
+  // GET MATCH DATA
+  // ===================================================
+
+  async getMatchData(
+    home,
+    away,
+    env
+  ) {
+
+    // -------------------------------------------------
+    // CHECK TOKEN
+    // -------------------------------------------------
+
+    const token =
+      env?.FOOTBALL_DATA_TOKEN;
+
+    if (!token) {
+
+      return {
+
+        provider:
+          this.name,
+
+        status:
+          "configuration_error",
+
+        message:
+          "FOOTBALL_DATA_TOKEN غير موجود في Environment Variables.",
+
+        data:
+          null
+
+      };
+
+    }
+
+
+    // -------------------------------------------------
+    // NORMALIZE TEAM NAMES
+    // -------------------------------------------------
+
+    const normalize =
+      value =>
+
+        String(value || "")
+          .toLowerCase()
+          .replace(
+            /[^a-z0-9\u0600-\u06ff]+/gi,
+            " "
+          )
+          .trim();
+
+
+    const homeNormalized =
+      normalize(home);
+
+
+    const awayNormalized =
+      normalize(away);
+
+
+    // -------------------------------------------------
+    // DATE RANGE
+    // -------------------------------------------------
+    //
+    // نستخدم نطاقًا صغيرًا بدل النطاق الضخم السابق.
+    //
+    // Football-Data.org يدعم dateFrom + dateTo
+    // على /v4/matches.
+    //
+    // -------------------------------------------------
+
+    const now =
+      new Date();
+
+
+    const dateFrom =
+      new Date(now);
+
+
+    dateFrom.setUTCDate(
+      dateFrom.getUTCDate() - 7
     );
-  }
-}
 
 
-// ==========================================
-// PROVIDER REGISTRY
-// ==========================================
-
-export const providers = [];
+    const dateTo =
+      new Date(now);
 
 
-// ==========================================
-// REGISTER PROVIDER
-// ==========================================
-
-export function registerProvider(provider) {
-
-  if (!(provider instanceof DataProvider)) {
-    throw new Error("Invalid data provider");
-  }
-
-  const exists = providers.some(
-    p => p.name === provider.name
-  );
-
-  if (!exists) {
-    providers.push(provider);
-  }
-}
+    dateTo.setUTCDate(
+      dateTo.getUTCDate() + 30
+    );
 
 
-// ==========================================
-// GET PROVIDERS
-// ==========================================
+    const formatDate =
+      date =>
 
-export function getProviders() {
-
-  return providers.map(provider => ({
-    name: provider.name,
-    status: "registered"
-  }));
-
-}
+        date
+          .toISOString()
+          .slice(0, 10);
 
 
-// ==========================================
-// CHECK PROVIDER RESULT
-// ==========================================
-
-function isSuccessfulResult(result) {
-
-  return Boolean(
-    result &&
-    result.status === "success"
-  );
-
-}
+    const from =
+      formatDate(dateFrom);
 
 
-// ==========================================
-// GET MATCH DATA FROM ALL PROVIDERS
-// ==========================================
+    const to =
+      formatDate(dateTo);
 
-export async function getAllMatchData(
-  home,
-  away,
-  env
-) {
 
-  const results = [];
+    // -------------------------------------------------
+    // BUILD URL
+    // -------------------------------------------------
 
-  for (const provider of providers) {
+    const url =
+      new URL(
+        this.baseUrl + "/matches"
+      );
+
+
+    url.searchParams.set(
+      "dateFrom",
+      from
+    );
+
+
+    url.searchParams.set(
+      "dateTo",
+      to
+    );
+
+
+    // -------------------------------------------------
+    // REQUEST
+    // -------------------------------------------------
+
+    let response;
 
     try {
 
-      const result =
-        await provider.getMatchData(
-          home,
-          away,
-          env
+      response =
+        await fetch(
+          url.toString(),
+          {
+
+            method:
+              "GET",
+
+            headers: {
+
+              "X-Auth-Token":
+                token,
+
+              "Accept":
+                "application/json"
+
+            }
+
+          }
         );
-
-      const success =
-        isSuccessfulResult(result);
-
-      results.push({
-
-        provider:
-          provider.name,
-
-        success:
-          success,
-
-        status:
-          result?.status ||
-          "unknown",
-
-        message:
-          result?.message ||
-          null,
-
-        data:
-          result?.data ||
-          null
-
-      });
 
     } catch (error) {
 
-      results.push({
+      return {
 
         provider:
-          provider.name,
-
-        success:
-          false,
+          this.name,
 
         status:
-          "error",
+          "network_error",
 
         message:
           error?.message ||
           String(error),
 
         data:
-          null,
+          null
 
-        error:
-          error?.message ||
-          String(error)
-
-      });
+      };
 
     }
 
+
+    // -------------------------------------------------
+    // READ RESPONSE
+    // -------------------------------------------------
+
+    const responseText =
+      await response.text();
+
+
+    let payload =
+      null;
+
+
+    try {
+
+      payload =
+        responseText
+          ? JSON.parse(
+              responseText
+            )
+          : null;
+
+    } catch {
+
+      payload =
+        null;
+
+    }
+
+
+    // -------------------------------------------------
+    // API ERROR
+    // -------------------------------------------------
+
+    if (!response.ok) {
+
+      const apiMessage =
+        payload?.message ||
+        payload?.error ||
+        responseText ||
+        "Football-Data.org API error";
+
+
+      return {
+
+        provider:
+          this.name,
+
+        status:
+          "api_error",
+
+        message:
+          `HTTP ${response.status}: ${apiMessage}`,
+
+        data:
+          {
+
+            httpStatus:
+              response.status,
+
+            requestUrl:
+              url.toString(),
+
+            apiResponse:
+              payload
+
+          }
+
+      };
+
+    }
+
+
+    // -------------------------------------------------
+    // EXTRACT MATCHES
+    // -------------------------------------------------
+
+    const matches =
+      Array.isArray(
+        payload?.matches
+      )
+        ? payload.matches
+        : [];
+
+
+    // -------------------------------------------------
+    // FIND REQUESTED MATCH
+    // -------------------------------------------------
+
+    const requestedMatch =
+      matches.find(
+        match => {
+
+          const matchHome =
+            normalize(
+              match?.homeTeam?.name
+            );
+
+
+          const matchAway =
+            normalize(
+              match?.awayTeam?.name
+            );
+
+
+          const homeMatches =
+            matchHome ===
+              homeNormalized ||
+            matchHome.includes(
+              homeNormalized
+            ) ||
+            homeNormalized.includes(
+              matchHome
+            );
+
+
+          const awayMatches =
+            matchAway ===
+              awayNormalized ||
+            matchAway.includes(
+              awayNormalized
+            ) ||
+            awayNormalized.includes(
+              matchAway
+            );
+
+
+          return (
+            homeMatches &&
+            awayMatches
+          );
+
+        }
+      );
+
+
+    // -------------------------------------------------
+    // MATCH NOT FOUND
+    // -------------------------------------------------
+
+    if (!requestedMatch) {
+
+      return {
+
+        provider:
+          this.name,
+
+        status:
+          "api_ok_no_match",
+
+        message:
+          "تم الاتصال بـ Football-Data.org بنجاح، لكن المباراة المطلوبة غير موجودة داخل نطاق البحث الحالي.",
+
+        data: {
+
+          source:
+            "football-data.org",
+
+          available:
+            true,
+
+          matchFound:
+            false,
+
+          requested: {
+
+            home:
+              home,
+
+            away:
+              away
+
+          },
+
+          searchRange: {
+
+            dateFrom:
+              from,
+
+            dateTo:
+              to
+
+          },
+
+          totalMatchesReturned:
+            matches.length
+
+        }
+
+      };
+
+    }
+
+
+    // -------------------------------------------------
+    // MATCH FOUND
+    // -------------------------------------------------
+
+    return {
+
+      provider:
+        this.name,
+
+      status:
+        "success",
+
+      message:
+        "تم العثور على المباراة بنجاح.",
+
+      data: {
+
+        source:
+          "football-data.org",
+
+        available:
+          true,
+
+        matchFound:
+          true,
+
+        match:
+          requestedMatch
+
+      }
+
+    };
+
   }
 
-  return results;
-
 }
+
+
+// =====================================================
+// CREATE PROVIDER
+// =====================================================
+
+const footballDataProvider =
+  new FootballDataProvider();
+
+
+// =====================================================
+// REGISTER PROVIDER
+// =====================================================
+
+registerProvider(
+  footballDataProvider
+);
+
+
+// =====================================================
+// EXPORT
+// =====================================================
+
+export default footballDataProvider;
