@@ -15,9 +15,7 @@ import {
 class MockProvider extends DataProvider {
 
   constructor() {
-
     super("Mock Provider");
-
   }
 
 
@@ -25,28 +23,20 @@ class MockProvider extends DataProvider {
 
     return {
 
-      provider:
-        this.name,
-
-      home:
-        home,
-
-      away:
-        away,
-
-      status:
-        "success",
+      status: "success",
 
       data: {
 
+        source: "mock",
+
+        available: true,
+
+        home: home,
+
+        away: away,
+
         message:
-          "Mock provider is working",
-
-        source:
-          "mock",
-
-        available:
-          true
+          "Mock provider is working correctly"
 
       },
 
@@ -69,7 +59,7 @@ const mockProvider =
 
 
 // ==========================================
-// REGISTER PROVIDER
+// REGISTER
 // ==========================================
 
 registerProvider(
