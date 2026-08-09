@@ -1,18 +1,15 @@
-// Y.C.B ESPN PROVIDER 2.2.1
-//
-// ESPN is an optional provider.
-// If ESPN blocks the Worker request (403) or fails,
-// Y.C.B continues normally with the other providers.
+// Y.C.B ESPN PROVIDER 2.3.0
 
 import {
   DataProvider,
   registerProvider
 } from "./providers.js";
 
-
 const SCOREBOARD =
   "https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard";
 
+const ESPN =
+  "https://site.api.espn.com/apis/site/v2/sports/soccer";
 
 class ESPNProvider extends DataProvider {
 
@@ -20,26 +17,12 @@ class ESPNProvider extends DataProvider {
     super("ESPN");
   }
 
-
   async getMatchData(home, away) {
 
-    const now =
-      new Date();
+    const now = new Date();
 
-
-    const from =
-      shiftDate(
-        now,
-        -30
-      );
-
-
-    const to =
-      shiftDate(
-        now,
-        30
-      );
-
+    const from = shiftDate(now, -30);
+    const to = shiftDate(now, 30);
 
     try {
 
@@ -49,50 +32,43 @@ class ESPNProvider extends DataProvider {
           to
         );
 
-
       const fixtureEvent =
-        events.find(
-          event =>
-            eventMatches(
-              event,
-              home,
-              away
-            )
+        events.find(event =>
+          eventMatches(
+            event,
+            home,
+            away
+          )
         );
 
+      /*
+       * ESPN is reachable but the requested
+       * match was not found.
+       */
 
       if (!fixtureEvent) {
 
         return {
-
-          status:
-            "api_ok_no_match",
+          status: "api_ok_no_match",
 
           message:
             "ESPN متصل لكن المباراة غير موجودة في نطاق البحث الحالي.",
 
           data: {
 
-            source:
-              "espn",
+            source: "espn",
 
-            available:
-              true,
+            available: true,
 
-            matchFound:
-              false,
+            matchFound: false,
 
             searchRange: {
 
               dateFrom:
-                formatDate(
-                  from
-                ),
+                formatDate(from),
 
               dateTo:
-                formatDate(
-                  to
-                )
+                formatDate(to)
 
             },
 
@@ -102,26 +78,12 @@ class ESPNProvider extends DataProvider {
           }
 
         };
-
       }
-
 
       const fixture =
         normalizeEvent(
           fixtureEvent
         );
-
-
-      /*
-       * We intentionally do not depend on
-       * ESPN historical team schedules here.
-       *
-       * ESPN frequently blocks automated requests
-       * from server environments with HTTP 403.
-       *
-       * The fixture is still returned when ESPN
-       * allows the scoreboard request.
-       */
 
       const competitors =
         fixtureEvent
@@ -129,22 +91,17 @@ class ESPNProvider extends DataProvider {
           ?.competitors ||
         [];
 
-
       const homeCompetitor =
         competitors.find(
           item =>
-            item?.homeAway ===
-            "home"
+            item?.homeAway === "home"
         );
-
 
       const awayCompetitor =
         competitors.find(
           item =>
-            item?.homeAway ===
-            "away"
+            item?.homeAway === "away"
         );
-
 
       const homeId =
         homeCompetitor
@@ -152,52 +109,112 @@ class ESPNProvider extends DataProvider {
           ?.id ||
         null;
 
-
       const awayId =
         awayCompetitor
           ?.team
           ?.id ||
         null;
 
+      /*
+       * Try to obtain recent matches
+       * from ESPN team schedules.
+       */
+
+      const [
+        homeSchedule,
+        awaySchedule
+      ] = await Promise.all([
+
+        homeId
+          ? fetchTeamSchedule(
+              homeId
+            )
+          : Promise.resolve([]),
+
+        awayId
+          ? fetchTeamSchedule(
+              awayId
+            )
+          : Promise.resolve([])
+
+      ]);
+
+      let homeRecent =
+        normalizeRecentMatches(
+          homeSchedule,
+          fixtureEvent
+        );
+
+      let awayRecent =
+        normalizeRecentMatches(
+          awaySchedule,
+          fixtureEvent
+        );
+
+      /*
+       * Fallback to scoreboard data.
+       */
+
+      if (
+        homeRecent.length === 0
+      ) {
+
+        homeRecent =
+          normalizeRecentMatches(
+            events.filter(
+              event =>
+                isTeamEvent(
+                  event,
+                  home
+                )
+            ),
+            fixtureEvent
+          );
+
+      }
+
+      if (
+        awayRecent.length === 0
+      ) {
+
+        awayRecent =
+          normalizeRecentMatches(
+            events.filter(
+              event =>
+                isTeamEvent(
+                  event,
+                  away
+                )
+            ),
+            fixtureEvent
+          );
+
+      }
 
       return {
 
-        status:
-          "success",
+        status: "success",
 
         message:
-          "تم العثور على المباراة عبر ESPN.",
+          "تم العثور على المباراة وبياناتها عبر ESPN.",
 
         data: {
 
-          source:
-            "espn",
+          source: "espn",
 
-          available:
-            true,
+          available: true,
 
-          matchFound:
-            true,
+          matchFound: true,
 
           fixture,
-
-          teamIds: {
-
-            home:
-              homeId,
-
-            away:
-              awayId
-
-          },
 
           recentMatches: {
 
             home:
-              [],
+              homeRecent,
 
             away:
-              []
+              awayRecent
 
           }
 
@@ -207,17 +224,36 @@ class ESPNProvider extends DataProvider {
 
     } catch (error) {
 
+      /*
+       * Important:
+       * ESPN failure must NOT break Y.C.B.
+       *
+       * The other providers can continue working.
+       */
+
       return {
 
-        status:
-          "network_error",
+        status: classifyESPNError(
+          error
+        ),
 
         message:
           error?.message ||
-          String(error),
+          "ESPN request failed.",
 
-        data:
-          null
+        data: {
+
+          source: "espn",
+
+          available: false,
+
+          matchFound: false,
+
+          error:
+            error?.message ||
+            String(error)
+
+        }
 
       };
 
@@ -238,21 +274,181 @@ async function getScoreboardEvents(
 ) {
 
   const url =
-    SCOREBOARD +
-    "?dates=" +
-    formatDate(from) +
-    "-" +
-    formatDate(to) +
-    "&limit=1000";
+    `${SCOREBOARD}?dates=` +
+    `${formatDate(from)}-${formatDate(to)}` +
+    `&limit=1000`;
 
+  const payload =
+    await fetchJSON(
+      url
+    );
+
+  return Array.isArray(
+    payload?.events
+  )
+    ? payload.events
+    : [];
+
+}
+
+
+/* ==========================================
+   TEAM SCHEDULE
+========================================== */
+
+async function fetchTeamSchedule(
+  teamId
+) {
+
+  const leagues = [
+
+    "eng.1",
+    "eng.2",
+    "eng.3",
+
+    "esp.1",
+
+    "ger.1",
+
+    "ita.1",
+
+    "fra.1",
+
+    "usa.1",
+
+    "bra.1",
+
+    "arg.1",
+
+    "mex.1",
+
+    "ned.1",
+
+    "por.1",
+
+    "bel.1",
+
+    "tur.1",
+
+    "uefa.champions"
+
+  ];
+
+  for (
+    const league of leagues
+  ) {
+
+    try {
+
+      const url =
+        `${ESPN}/${league}` +
+        `/teams/${encodeURIComponent(
+          teamId
+        )}/schedule`;
+
+      const data =
+        await fetchJSON(
+          url
+        );
+
+      const events =
+        Array.isArray(
+          data?.events
+        )
+          ? data.events
+          : [];
+
+      if (
+        events.length > 0
+      ) {
+
+        return events;
+
+      }
+
+    } catch {
+
+      /*
+       * Continue with the
+       * next league.
+       */
+
+    }
+
+  }
+
+  return [];
+
+}
+
+
+/* ==========================================
+   NORMALIZE RECENT MATCHES
+========================================== */
+
+function normalizeRecentMatches(
+  events,
+  fixtureEvent
+) {
+
+  return (
+    Array.isArray(events)
+      ? events
+      : []
+  )
+
+    .filter(
+      event =>
+        isFinished(event)
+    )
+
+    .filter(
+      event =>
+        !sameEvent(
+          event,
+          fixtureEvent
+        )
+    )
+
+    .sort(
+      (a, b) =>
+        new Date(
+          b?.date || 0
+        ) -
+        new Date(
+          a?.date || 0
+        )
+    )
+
+    .slice(
+      0,
+      15
+    )
+
+    .map(
+      normalizeEvent
+    );
+
+}
+
+
+/* ==========================================
+   FETCH JSON
+========================================== */
+
+async function fetchJSON(
+  url
+) {
 
   const response =
     await fetch(
       url,
       {
+        method: "GET",
+
         headers: {
 
-          Accept:
+          "Accept":
             "application/json"
 
         }
@@ -260,49 +456,90 @@ async function getScoreboardEvents(
       }
     );
 
-
   const text =
     await response.text();
 
-
-  let payload =
-    null;
-
+  let data = null;
 
   try {
 
-    payload =
+    data =
       text
         ? JSON.parse(text)
         : null;
 
   } catch {
 
-    payload =
-      null;
+    data = null;
 
   }
 
-
-  if (!response.ok) {
+  if (
+    !response.ok
+  ) {
 
     throw new Error(
-
-      "ESPN HTTP " +
-      response.status
-
+      `ESPN HTTP ${response.status}` +
+      (
+        data?.message
+          ? `: ${data.message}`
+          : ""
+      )
     );
 
   }
 
+  return data;
 
-  return Array.isArray(
-    payload?.events
-  )
+}
 
-    ? payload.events
 
-    : [];
+/* ==========================================
+   ERROR CLASSIFICATION
+========================================== */
+
+function classifyESPNError(
+  error
+) {
+
+  const message =
+    String(
+      error?.message ||
+      error ||
+      ""
+    );
+
+  if (
+    message.includes(
+      "403"
+    )
+  ) {
+
+    return "access_blocked";
+
+  }
+
+  if (
+    message.includes(
+      "404"
+    )
+  ) {
+
+    return "endpoint_not_found";
+
+  }
+
+  if (
+    message.includes(
+      "429"
+    )
+  ) {
+
+    return "rate_limited";
+
+  }
+
+  return "network_error";
 
 }
 
@@ -321,44 +558,36 @@ function normalizeEvent(
       ?.competitors ||
     [];
 
-
   const home =
     competitors.find(
       item =>
-        item?.homeAway ===
-        "home"
+        item?.homeAway === "home"
     ) ||
     competitors[0] ||
     {};
 
-
   const away =
     competitors.find(
       item =>
-        item?.homeAway ===
-        "away"
+        item?.homeAway === "away"
     ) ||
     competitors[1] ||
     {};
-
 
   const completed =
     isFinished(
       event
     );
 
-
   const homeScore =
     numberOrNull(
       home?.score
     );
 
-
   const awayScore =
     numberOrNull(
       away?.score
     );
-
 
   return {
 
@@ -368,17 +597,13 @@ function normalizeEvent(
         ""
       ),
 
-
     utcDate:
       event?.date ||
       null,
 
-
     status:
       completed
-
         ? "FINISHED"
-
         : String(
             event
               ?.status
@@ -386,7 +611,6 @@ function normalizeEvent(
               ?.name ||
             "SCHEDULED"
           ),
-
 
     homeTeam: {
 
@@ -416,7 +640,6 @@ function normalizeEvent(
 
     },
 
-
     awayTeam: {
 
       id:
@@ -445,7 +668,6 @@ function normalizeEvent(
 
     },
 
-
     score: {
 
       fullTime: {
@@ -463,7 +685,6 @@ function normalizeEvent(
       }
 
     },
-
 
     tournament:
       event
@@ -495,22 +716,17 @@ function eventMatches(
       ?.competitors ||
     [];
 
-
   const homeTeam =
     competitors.find(
       item =>
-        item?.homeAway ===
-        "home"
+        item?.homeAway === "home"
     )?.team;
-
 
   const awayTeam =
     competitors.find(
       item =>
-        item?.homeAway ===
-        "away"
+        item?.homeAway === "away"
     )?.team;
-
 
   if (
     !homeTeam ||
@@ -520,7 +736,6 @@ function eventMatches(
     return false;
 
   }
-
 
   return (
 
@@ -558,6 +773,44 @@ function eventMatches(
 
 
 /* ==========================================
+   TEAM EVENT
+========================================== */
+
+function isTeamEvent(
+  event,
+  team
+) {
+
+  const competitors =
+    event
+      ?.competitions?.[0]
+      ?.competitors ||
+    [];
+
+  return competitors.some(
+    item =>
+      namesMatch(
+
+        normalizeName(
+          item
+            ?.team
+            ?.displayName ||
+          item
+            ?.team
+            ?.name
+        ),
+
+        normalizeName(
+          team
+        )
+
+      )
+  );
+
+}
+
+
+/* ==========================================
    FINISHED
 ========================================== */
 
@@ -570,11 +823,9 @@ function isFinished(
       ?.status
       ?.type;
 
-
   return (
 
-    type?.completed ===
-      true
+    type?.completed === true
 
     ||
 
@@ -595,6 +846,34 @@ function isFinished(
 
 
 /* ==========================================
+   SAME EVENT
+========================================== */
+
+function sameEvent(
+  first,
+  second
+) {
+
+  return (
+
+    String(
+      first?.id ||
+      ""
+    )
+
+    ===
+
+    String(
+      second?.id ||
+      ""
+    )
+
+  );
+
+}
+
+
+/* ==========================================
    NUMBER
 ========================================== */
 
@@ -607,13 +886,10 @@ function numberOrNull(
       value
     );
 
-
   return Number.isFinite(
     number
   )
-
     ? number
-
     : null;
 
 }
@@ -688,7 +964,6 @@ function namesMatch(
 
   }
 
-
   if (
     first === second ||
     first.includes(second) ||
@@ -699,19 +974,15 @@ function namesMatch(
 
   }
 
-
   const firstTokens =
     new Set(
-
       first
         .split(" ")
         .filter(
           token =>
             token.length >= 3
         )
-
     );
-
 
   const secondTokens =
     second
@@ -720,7 +991,6 @@ function namesMatch(
         token =>
           token.length >= 3
       );
-
 
   return secondTokens.some(
     token =>
@@ -746,12 +1016,10 @@ function shiftDate(
       date
     );
 
-
   result.setUTCDate(
     result.getUTCDate() +
     days
   );
-
 
   return result;
 
@@ -787,10 +1055,8 @@ function formatDate(
 const provider =
   new ESPNProvider();
 
-
 registerProvider(
   provider
 );
-
 
 export default provider;
