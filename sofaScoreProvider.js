@@ -214,24 +214,28 @@ class SofaScoreProvider
 
 
 async function fetchJSON(
-  url
-) {
+async function fetchJSON(url) {
 
   const response =
     await fetch(
       url,
       {
-
         headers: {
-
-          Accept:
-            "application/json",
+          "Accept":
+            "application/json, text/plain, */*",
 
           "User-Agent":
-            "Mozilla/5.0 (compatible; YCB/2.2)"
+            "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36",
 
+          "Referer":
+            "https://www.sofascore.com/",
+
+          "Origin":
+            "https://www.sofascore.com",
+
+          "X-Requested-With":
+            "XMLHttpRequest"
         }
-
       }
     );
 
@@ -240,20 +244,16 @@ async function fetchJSON(
     await response.text();
 
 
-  let data =
-    null;
+  if (
+    response.status ===
+    403
+  ) {
 
+    throw new Error(
+      "SofaScore HTTP 403 - access blocked"
+    );
 
-  try {
-
-    data =
-      text
-        ? JSON.parse(
-            text
-          )
-        : null;
-
-  } catch {}
+  }
 
 
   if (
@@ -267,7 +267,19 @@ async function fetchJSON(
   }
 
 
-  return data;
+  try {
+
+    return text
+      ? JSON.parse(text)
+      : null;
+
+  } catch {
+
+    throw new Error(
+      "SofaScore returned invalid JSON"
+    );
+
+  }
 
 }
 
