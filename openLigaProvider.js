@@ -1,4 +1,7 @@
-// Y.C.B OPENLIGADB PROVIDER 2.2.1
+// Y.C.B OPENLIGADB PROVIDER 2.3.0
+// Safe provider
+// Browser-safe execution
+
 
 import {
   DataProvider,
@@ -9,6 +12,14 @@ import {
 const API =
   "https://api.openligadb.de";
 
+
+const REQUEST_TIMEOUT =
+  15000;
+
+
+/* ==========================================
+   PROVIDER
+========================================== */
 
 class OpenLigaDBProvider
   extends DataProvider {
@@ -29,55 +40,39 @@ class OpenLigaDBProvider
 
     try {
 
-      /*
-       * 1. Try direct team-vs-team search.
-       *
-       * OpenLigaDB provides an endpoint
-       * for matches between two team IDs.
-       * Since we do not know the IDs yet,
-       * we first search each team.
-       */
-
       const [
         homeTeams,
         awayTeams
       ] = await Promise.all([
 
-        findTeams(home),
+        findTeams(
+          home
+        ),
 
-        findTeams(away)
+        findTeams(
+          away
+        )
 
       ]);
 
 
-      /*
-       * 2. Try to find the requested fixture
-       * from team match histories.
-       */
-
-      let fixture =
-        null;
-
-
-      let homeTeam =
+      const homeTeam =
         selectBestTeam(
           homeTeams,
           home
         );
 
 
-      let awayTeam =
+      const awayTeam =
         selectBestTeam(
           awayTeams,
           away
         );
 
 
-      /*
-       * 3. If both team IDs are available,
-       * ask OpenLigaDB directly for
-       * matches between them.
-       */
+      let fixture =
+        null;
+
 
       if (
         homeTeam?.teamId &&
@@ -95,34 +90,29 @@ class OpenLigaDBProvider
       }
 
 
-      /*
-       * 4. If direct search failed,
-       * search recent/upcoming matches
-       * for each team.
-       */
-
       let homeMatches =
         homeTeam?.teamId
+
           ? await getTeamMatches(
               homeTeam.teamId
             )
+
           : [];
 
 
       let awayMatches =
         awayTeam?.teamId
+
           ? await getTeamMatches(
               awayTeam.teamId
             )
+
           : [];
 
 
-      /*
-       * 5. Try to locate the requested
-       * fixture inside the team matches.
-       */
-
-      if (!fixture) {
+      if (
+        !fixture
+      ) {
 
         fixture =
           findFixtureInMatches(
@@ -134,7 +124,9 @@ class OpenLigaDBProvider
       }
 
 
-      if (!fixture) {
+      if (
+        !fixture
+      ) {
 
         fixture =
           findFixtureInMatches(
@@ -145,11 +137,6 @@ class OpenLigaDBProvider
 
       }
 
-
-      /*
-       * 6. Remove the requested fixture
-       * from historical samples.
-       */
 
       homeMatches =
         homeMatches.filter(
@@ -171,11 +158,6 @@ class OpenLigaDBProvider
         );
 
 
-      /*
-       * 7. Keep only valid finished
-       * historical matches.
-       */
-
       const homeRecent =
         homeMatches
 
@@ -188,13 +170,11 @@ class OpenLigaDBProvider
 
           .sort(
             (a, b) =>
-              new Date(
-                b?.matchDateTime ||
-                0
+              getMatchTimestamp(
+                b
               ) -
-              new Date(
-                a?.matchDateTime ||
-                0
+              getMatchTimestamp(
+                a
               )
           )
 
@@ -220,13 +200,11 @@ class OpenLigaDBProvider
 
           .sort(
             (a, b) =>
-              new Date(
-                b?.matchDateTime ||
-                0
+              getMatchTimestamp(
+                b
               ) -
-              new Date(
-                a?.matchDateTime ||
-                0
+              getMatchTimestamp(
+                a
               )
           )
 
@@ -239,10 +217,6 @@ class OpenLigaDBProvider
             normalizeMatch
           );
 
-
-      /*
-       * 8. No useful data.
-       */
 
       if (
         !fixture &&
@@ -285,8 +259,11 @@ class OpenLigaDBProvider
 
             recentMatches: {
 
-              home: [],
-              away: []
+              home:
+                [],
+
+              away:
+                []
 
             }
 
@@ -297,10 +274,6 @@ class OpenLigaDBProvider
       }
 
 
-      /*
-       * 9. Partial data is still useful.
-       */
-
       return {
 
         status:
@@ -309,6 +282,7 @@ class OpenLigaDBProvider
             : "partial_success",
 
         message:
+
           fixture
 
             ? "تم العثور على المباراة وبياناتها عبر OpenLigaDB."
@@ -353,19 +327,38 @@ class OpenLigaDBProvider
       error
     ) {
 
+      const classified =
+        classifyError(
+          error
+        );
+
+
       return {
 
         status:
-          "network_error",
+          classified.status,
 
         message:
-          error?.message ||
-          String(
-            error
-          ),
+          classified.message,
 
-        data:
-          null
+        data: {
+
+          source:
+            "openligadb",
+
+          available:
+            false,
+
+          matchFound:
+            false,
+
+          error:
+            error?.message ||
+            String(
+              error
+            )
+
+        }
 
       };
 
@@ -383,16 +376,6 @@ class OpenLigaDBProvider
 async function findTeams(
   name
 ) {
-
-  /*
-   * OpenLigaDB's team search is
-   * available through league/season
-   * endpoints rather than a universal
-   * global team-search endpoint.
-   *
-   * We therefore use a small list of
-   * major competitions first.
-   */
 
   const leagues = [
 
@@ -426,7 +409,8 @@ async function findTeams(
   ];
 
 
-  const results = [];
+  const results =
+    [];
 
 
   for (
@@ -471,9 +455,23 @@ async function findTeams(
           )
         ) {
 
-          results.push(
-            team
-          );
+          if (
+            !results.some(
+              item =>
+                String(
+                  item?.teamId
+                ) ===
+                String(
+                  team?.teamId
+                )
+            )
+          ) {
+
+            results.push(
+              team
+            );
+
+          }
 
         }
 
@@ -482,8 +480,7 @@ async function findTeams(
     } catch {
 
       /*
-       * Continue with the next
-       * competition.
+       * Continue.
        */
 
     }
@@ -528,7 +525,8 @@ function selectBestTeam(
       team =>
         normalizeName(
           team?.teamName
-        ) === requested
+        ) ===
+        requested
     );
 
 
@@ -548,7 +546,6 @@ function selectBestTeam(
           normalizeName(
             team?.teamName
           ),
-
           requested
         )
     );
@@ -556,7 +553,6 @@ function selectBestTeam(
 
   return (
     partial ||
-    teams[0] ||
     null
   );
 
@@ -607,6 +603,7 @@ async function findDirectMatch(
             normalizeName(
               match?.team1?.teamName
             ),
+
             normalizeName(
               home
             )
@@ -618,35 +615,9 @@ async function findDirectMatch(
             normalizeName(
               match?.team2?.teamName
             ),
+
             normalizeName(
               away
-            )
-          )
-
-      )
-
-      ||
-
-      matches.find(
-        match =>
-
-          namesMatch(
-            normalizeName(
-              match?.team1?.teamName
-            ),
-            normalizeName(
-              away
-            )
-          )
-
-          &&
-
-          namesMatch(
-            normalizeName(
-              match?.team2?.teamName
-            ),
-            normalizeName(
-              home
             )
           )
 
@@ -677,19 +648,13 @@ async function getTeamMatches(
 
   try {
 
-    /*
-     * Search a reasonable window
-     * around the current date.
-     */
-
     const data =
       await fetchJSON(
 
         `${API}/getmatchesbyteamid/` +
         `${encodeURIComponent(
           teamId
-        )}/` +
-        `20/10`
+        )}/20/10`
 
       );
 
@@ -710,7 +675,7 @@ async function getTeamMatches(
 
 
 /* ==========================================
-   FIND FIXTURE IN MATCHES
+   FIND FIXTURE
 ========================================== */
 
 function findFixtureInMatches(
@@ -808,15 +773,18 @@ function normalizeMatch(
         ""
       ),
 
+
     utcDate:
       match?.matchDateTimeUTC ||
       match?.matchDateTime ||
       null,
 
+
     status:
       finished
         ? "FINISHED"
         : "SCHEDULED",
+
 
     homeTeam: {
 
@@ -834,6 +802,7 @@ function normalizeMatch(
 
     },
 
+
     awayTeam: {
 
       id:
@@ -850,6 +819,7 @@ function normalizeMatch(
 
     },
 
+
     score: {
 
       fullTime: {
@@ -863,6 +833,7 @@ function normalizeMatch(
       }
 
     },
+
 
     tournament:
       match?.leagueName ||
@@ -889,44 +860,36 @@ function getFinalResult(
       : [];
 
 
-  /*
-   * Prefer the normal final result.
-   */
-
   const final =
     results.find(
-      item =>
+      item => {
 
-        String(
-          item?.resultName ||
-          ""
-        ).toLowerCase()
+        const name =
+          String(
+            item?.resultName ||
+            ""
+          ).toLowerCase();
 
-          .includes(
+
+        return (
+          name.includes(
             "end"
-          )
+          ) ||
 
-    )
-
-    ||
-
-    results.find(
-      item =>
-
-        String(
-          item?.resultName ||
-          ""
-        ).toLowerCase()
-
-          .includes(
+          name.includes(
             "final"
           )
 
+        );
+
+      }
     )
 
     ||
 
-    results[results.length - 1];
+    results[
+      results.length - 1
+    ];
 
 
   return {
@@ -1006,6 +969,44 @@ function sameEvent(
 
 
 /* ==========================================
+   TIMESTAMP
+========================================== */
+
+function getMatchTimestamp(
+  match
+) {
+
+  const date =
+    match?.matchDateTimeUTC ||
+    match?.matchDateTime ||
+    null;
+
+
+  if (
+    !date
+  ) {
+
+    return 0;
+
+  }
+
+
+  const timestamp =
+    Date.parse(
+      date
+    );
+
+
+  return Number.isFinite(
+    timestamp
+  )
+    ? timestamp
+    : 0;
+
+}
+
+
+/* ==========================================
    FETCH JSON
 ========================================== */
 
@@ -1013,65 +1014,243 @@ async function fetchJSON(
   url
 ) {
 
-  const response =
-    await fetch(
-      url,
-      {
+  const controller =
+    typeof AbortController !==
+    "undefined"
 
-        method:
-          "GET",
+      ? new AbortController()
 
-        headers: {
-
-          Accept:
-            "application/json"
-
-        }
-
-      }
-
-    );
+      : null;
 
 
-  const text =
-    await response.text();
-
-
-  let data =
+  let timeoutId =
     null;
+
+
+  if (
+    controller
+  ) {
+
+    timeoutId =
+      setTimeout(
+        () =>
+          controller.abort(),
+        REQUEST_TIMEOUT
+      );
+
+  }
 
 
   try {
 
-    data =
+    const response =
+      await fetch(
+        url,
+        {
+
+          method:
+            "GET",
+
+          headers: {
+
+            "Accept":
+              "application/json"
+
+          },
+
+          signal:
+            controller?.signal
+
+        }
+      );
+
+
+    const text =
+      await response.text();
+
+
+    const data =
+      safeJsonParse(
+        text
+      );
+
+
+    if (
+      !response.ok
+    ) {
+
+      const error =
+        new Error(
+          `OpenLigaDB HTTP ${response.status}`
+        );
+
+
+      error.httpStatus =
+        response.status;
+
+
+      throw error;
+
+    }
+
+
+    return data;
+
+  } finally {
+
+    if (
+      timeoutId !== null
+    ) {
+
+      clearTimeout(
+        timeoutId
+      );
+
+    }
+
+  }
+
+}
+
+
+/* ==========================================
+   SAFE JSON
+========================================== */
+
+function safeJsonParse(
+  text
+) {
+
+  if (
+    !text
+  ) {
+
+    return null;
+
+  }
+
+
+  try {
+
+    return JSON.parse(
       text
-        ? JSON.parse(
-            text
-          )
-        : null;
+    );
 
   } catch {
 
-    data =
-      null;
+    return null;
+
+  }
+
+}
+
+
+/* ==========================================
+   ERROR
+========================================== */
+
+function classifyError(
+  error
+) {
+
+  const status =
+    Number(
+      error?.httpStatus
+    );
+
+
+  if (
+    status === 401 ||
+    status === 403
+  ) {
+
+    return {
+
+      status:
+        "access_blocked",
+
+      message:
+        `OpenLigaDB رفض الوصول (HTTP ${status}).`
+
+    };
 
   }
 
 
   if (
-    !response.ok
+    status === 429
   ) {
 
-    throw new Error(
+    return {
 
-      `OpenLigaDB HTTP ${response.status}`
+      status:
+        "rate_limited",
 
-    );
+      message:
+        "OpenLigaDB وصل إلى حد الطلبات."
+
+    };
 
   }
 
 
-  return data;
+  if (
+    error?.name ===
+      "AbortError"
+  ) {
+
+    return {
+
+      status:
+        "timeout",
+
+      message:
+        "OpenLigaDB لم يستجب خلال المهلة المحددة."
+
+    };
+
+  }
+
+
+  const message =
+    String(
+      error?.message ||
+      error ||
+      ""
+    );
+
+
+  if (
+    message
+      .toLowerCase()
+      .includes(
+        "failed to fetch"
+      )
+  ) {
+
+    return {
+
+      status:
+        "access_blocked",
+
+      message:
+        "OpenLigaDB لم يسمح للمتصفح بالوصول إلى المصدر أو حدث حجب CORS."
+
+    };
+
+  }
+
+
+  return {
+
+    status:
+      "network_error",
+
+    message:
+      message ||
+      "OpenLigaDB request failed."
+
+  };
 
 }
 
@@ -1085,11 +1264,6 @@ function currentSeason() {
   const now =
     new Date();
 
-
-  /*
-   * Bundesliga season normally
-   * crosses two calendar years.
-   */
 
   const year =
     now.getUTCFullYear();
@@ -1140,7 +1314,12 @@ function normalizeName(
     )
 
     .replace(
-      /\b(fc|cf|afc|sc|ac|fk|club|1899|1900|1904|1905|1906|1907|1908|1909|1910|1911|1912|1913|1914|1919|1920|1921|1922|1923|1924|1925|1926|1927|1928|1929|1930|1931|1932|1933|1934|1935|1936|1937|1938|1939|1940|1941|1942|1943|1944|1945|1946|1947|1948|1949|1950|1951|1952|1953|1954|1955|1956|1957|1958|1959|1960|1961|1962|1963|1964|1965|1966|1967|1968|1969|1970|1971|1972|1973|1974|1975|1976|1977|1978|1979|1980|1981|1982|1983|1984|1985|1986|1987|1988|1989|1990|1991|1992|1993|1994|1995|1996|1997|1998|1999|2000)\b/g,
+      /[-_./]/g,
+      " "
+    )
+
+    .replace(
+      /\b(fc|cf|afc|sc|ac|fk|club|women|woman|f)\b/g,
       " "
     )
 
@@ -1168,9 +1347,21 @@ function namesMatch(
   second
 ) {
 
+  const a =
+    normalizeName(
+      first
+    );
+
+
+  const b =
+    normalizeName(
+      second
+    );
+
+
   if (
-    !first ||
-    !second
+    !a ||
+    !b
   ) {
 
     return false;
@@ -1179,13 +1370,9 @@ function namesMatch(
 
 
   if (
-    first === second ||
-    first.includes(
-      second
-    ) ||
-    second.includes(
-      first
-    )
+    a === b ||
+    a.includes(b) ||
+    b.includes(a)
   ) {
 
     return true;
@@ -1195,24 +1382,18 @@ function namesMatch(
 
   const firstTokens =
     new Set(
-
-      first
-        .split(
-          " "
-        )
+      a
+        .split(" ")
         .filter(
           token =>
             token.length >= 3
         )
-
     );
 
 
   const secondTokens =
-    second
-      .split(
-        " "
-      )
+    b
+      .split(" ")
       .filter(
         token =>
           token.length >= 3
@@ -1236,6 +1417,17 @@ function namesMatch(
 function finiteOrNull(
   value
 ) {
+
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+
+    return null;
+
+  }
+
 
   const number =
     Number(
