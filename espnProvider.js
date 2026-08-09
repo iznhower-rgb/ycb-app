@@ -1,9 +1,13 @@
-// Y.C.B ESPN PROVIDER 2.3.0
+// Y.C.B ESPN PROVIDER 2.4.0
+// Browser-safe ESPN provider
+// Explicit access_blocked detection
+// Never throws into the main Y.C.B engine
 
 import {
   DataProvider,
   registerProvider
 } from "./providers.js";
+
 
 const SCOREBOARD =
   "https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard";
@@ -11,18 +15,80 @@ const SCOREBOARD =
 const ESPN =
   "https://site.api.espn.com/apis/site/v2/sports/soccer";
 
-class ESPNProvider extends DataProvider {
+
+const REQUEST_TIMEOUT =
+  12000;
+
+
+/* ==========================================
+   PROVIDER
+========================================== */
+
+class ESPNProvider
+  extends DataProvider {
 
   constructor() {
-    super("ESPN");
+
+    super(
+      "ESPN"
+    );
+
   }
 
-  async getMatchData(home, away) {
 
-    const now = new Date();
+  async getMatchData(
+    home,
+    away
+  ) {
 
-    const from = shiftDate(now, -30);
-    const to = shiftDate(now, 30);
+    if (
+      !home ||
+      !away
+    ) {
+
+      return {
+
+        status:
+          "invalid_request",
+
+        message:
+          "ESPN: أسماء الفريقين غير صالحة.",
+
+        data: {
+
+          source:
+            "espn",
+
+          available:
+            false,
+
+          matchFound:
+            false
+
+        }
+
+      };
+
+    }
+
+
+    const now =
+      new Date();
+
+
+    const from =
+      shiftDate(
+        now,
+        -30
+      );
+
+
+    const to =
+      shiftDate(
+        now,
+        30
+      );
+
 
     try {
 
@@ -32,58 +98,82 @@ class ESPNProvider extends DataProvider {
           to
         );
 
+
       const fixtureEvent =
-        events.find(event =>
-          eventMatches(
-            event,
-            home,
-            away
-          )
+        events.find(
+          event =>
+            eventMatches(
+              event,
+              home,
+              away
+            )
         );
 
+
       /*
-       * ESPN is reachable but the requested
-       * match was not found.
+       * ESPN reached successfully,
+       * but fixture was not found.
        */
 
-      if (!fixtureEvent) {
+      if (
+        !fixtureEvent
+      ) {
 
         return {
-          status: "api_ok_no_match",
+
+          status:
+            "api_ok_no_match",
 
           message:
             "ESPN متصل لكن المباراة غير موجودة في نطاق البحث الحالي.",
 
           data: {
 
-            source: "espn",
+            source:
+              "espn",
 
-            available: true,
+            available:
+              true,
 
-            matchFound: false,
+            matchFound:
+              false,
 
             searchRange: {
 
               dateFrom:
-                formatDate(from),
+                formatDate(
+                  from
+                ),
 
               dateTo:
-                formatDate(to)
+                formatDate(
+                  to
+                )
 
             },
 
             totalEvents:
-              events.length
+              events.length,
+
+            recentMatches: {
+
+              home: [],
+              away: []
+
+            }
 
           }
 
         };
+
       }
+
 
       const fixture =
         normalizeEvent(
           fixtureEvent
         );
+
 
       const competitors =
         fixtureEvent
@@ -91,17 +181,22 @@ class ESPNProvider extends DataProvider {
           ?.competitors ||
         [];
 
+
       const homeCompetitor =
         competitors.find(
           item =>
-            item?.homeAway === "home"
+            item?.homeAway ===
+            "home"
         );
+
 
       const awayCompetitor =
         competitors.find(
           item =>
-            item?.homeAway === "away"
+            item?.homeAway ===
+            "away"
         );
+
 
       const homeId =
         homeCompetitor
@@ -109,15 +204,19 @@ class ESPNProvider extends DataProvider {
           ?.id ||
         null;
 
+
       const awayId =
         awayCompetitor
           ?.team
           ?.id ||
         null;
 
+
       /*
-       * Try to obtain recent matches
-       * from ESPN team schedules.
+       * Fetch schedules independently.
+       *
+       * Failure of one schedule must not
+       * destroy the ESPN fixture result.
        */
 
       const [
@@ -139,11 +238,13 @@ class ESPNProvider extends DataProvider {
 
       ]);
 
+
       let homeRecent =
         normalizeRecentMatches(
           homeSchedule,
           fixtureEvent
         );
+
 
       let awayRecent =
         normalizeRecentMatches(
@@ -151,8 +252,9 @@ class ESPNProvider extends DataProvider {
           fixtureEvent
         );
 
+
       /*
-       * Fallback to scoreboard data.
+       * Scoreboard fallback.
        */
 
       if (
@@ -173,6 +275,7 @@ class ESPNProvider extends DataProvider {
 
       }
 
+
       if (
         awayRecent.length === 0
       ) {
@@ -191,20 +294,25 @@ class ESPNProvider extends DataProvider {
 
       }
 
+
       return {
 
-        status: "success",
+        status:
+          "success",
 
         message:
           "تم العثور على المباراة وبياناتها عبر ESPN.",
 
         data: {
 
-          source: "espn",
+          source:
+            "espn",
 
-          available: true,
+          available:
+            true,
 
-          matchFound: true,
+          matchFound:
+            true,
 
           fixture,
 
@@ -222,32 +330,36 @@ class ESPNProvider extends DataProvider {
 
       };
 
-    } catch (error) {
+    } catch (
+      error
+    ) {
 
-      /*
-       * Important:
-       * ESPN failure must NOT break Y.C.B.
-       *
-       * The other providers can continue working.
-       */
+      const status =
+        classifyESPNError(
+          error
+        );
+
 
       return {
 
-        status: classifyESPNError(
-          error
-        ),
+        status,
 
         message:
-          error?.message ||
-          "ESPN request failed.",
+          getESPNErrorMessage(
+            status,
+            error
+          ),
 
         data: {
 
-          source: "espn",
+          source:
+            "espn",
 
-          available: false,
+          available:
+            false,
 
-          matchFound: false,
+          matchFound:
+            false,
 
           error:
             error?.message ||
@@ -278,15 +390,19 @@ async function getScoreboardEvents(
     `${formatDate(from)}-${formatDate(to)}` +
     `&limit=1000`;
 
+
   const payload =
     await fetchJSON(
       url
     );
 
+
   return Array.isArray(
     payload?.events
   )
+
     ? payload.events
+
     : [];
 
 }
@@ -334,8 +450,10 @@ async function fetchTeamSchedule(
 
   ];
 
+
   for (
-    const league of leagues
+    const league
+    of leagues
   ) {
 
     try {
@@ -346,10 +464,12 @@ async function fetchTeamSchedule(
           teamId
         )}/schedule`;
 
+
       const data =
         await fetchJSON(
           url
         );
+
 
       const events =
         Array.isArray(
@@ -357,6 +477,7 @@ async function fetchTeamSchedule(
         )
           ? data.events
           : [];
+
 
       if (
         events.length > 0
@@ -369,13 +490,13 @@ async function fetchTeamSchedule(
     } catch {
 
       /*
-       * Continue with the
-       * next league.
+       * Continue.
        */
 
     }
 
   }
+
 
   return [];
 
@@ -383,7 +504,7 @@ async function fetchTeamSchedule(
 
 
 /* ==========================================
-   NORMALIZE RECENT MATCHES
+   RECENT MATCHES
 ========================================== */
 
 function normalizeRecentMatches(
@@ -392,14 +513,18 @@ function normalizeRecentMatches(
 ) {
 
   return (
-    Array.isArray(events)
+    Array.isArray(
+      events
+    )
       ? events
       : []
   )
 
     .filter(
       event =>
-        isFinished(event)
+        isFinished(
+          event
+        )
     )
 
     .filter(
@@ -411,13 +536,28 @@ function normalizeRecentMatches(
     )
 
     .sort(
-      (a, b) =>
-        new Date(
-          b?.date || 0
-        ) -
-        new Date(
-          a?.date || 0
-        )
+      (
+        a,
+        b
+      ) => {
+
+        const dateA =
+          Date.parse(
+            a?.date ||
+            ""
+          );
+
+
+        const dateB =
+          Date.parse(
+            b?.date ||
+            ""
+          );
+
+
+        return dateB - dateA;
+
+      }
     )
 
     .slice(
@@ -440,56 +580,132 @@ async function fetchJSON(
   url
 ) {
 
-  const response =
-    await fetch(
-      url,
-      {
-        method: "GET",
+  const controller =
+    new AbortController();
 
-        headers: {
 
-          "Accept":
-            "application/json"
-
-        }
-
-      }
+  const timeout =
+    setTimeout(
+      () =>
+        controller.abort(),
+      REQUEST_TIMEOUT
     );
 
-  const text =
-    await response.text();
-
-  let data = null;
 
   try {
 
-    data =
-      text
-        ? JSON.parse(text)
-        : null;
+    const response =
+      await fetch(
+        url,
+        {
 
-  } catch {
+          method:
+            "GET",
 
-    data = null;
+          headers: {
 
-  }
+            "Accept":
+              "application/json"
 
-  if (
-    !response.ok
+          },
+
+          signal:
+            controller.signal
+
+        }
+      );
+
+
+    const text =
+      await response.text();
+
+
+    let data =
+      null;
+
+
+    try {
+
+      data =
+        text
+          ? JSON.parse(
+              text
+            )
+          : null;
+
+    } catch {
+
+      data =
+        null;
+
+    }
+
+
+    if (
+      !response.ok
+    ) {
+
+      throw new Error(
+        `ESPN HTTP ${response.status}` +
+        (
+          data?.message
+            ? `: ${data.message}`
+            : ""
+        )
+      );
+
+    }
+
+
+    return data;
+
+  } catch (
+    error
   ) {
 
-    throw new Error(
-      `ESPN HTTP ${response.status}` +
-      (
-        data?.message
-          ? `: ${data.message}`
-          : ""
-      )
+    if (
+      error?.name ===
+      "AbortError"
+    ) {
+
+      throw new Error(
+        "ESPN request timeout"
+      );
+
+    }
+
+
+    /*
+     * Browser fetch commonly reports
+     * CORS / blocked requests as TypeError.
+     *
+     * Preserve an explicit marker so the
+     * application can show access_blocked.
+     */
+
+    if (
+      error instanceof TypeError
+    ) {
+
+      throw new Error(
+        `ESPN access blocked or CORS failure: ${
+          error?.message ||
+          "Failed to fetch"
+        }`
+      );
+
+    }
+
+
+    throw error;
+
+  } finally {
+
+    clearTimeout(
+      timeout
     );
 
   }
-
-  return data;
 
 }
 
@@ -507,11 +723,27 @@ function classifyESPNError(
       error?.message ||
       error ||
       ""
-    );
+    ).toLowerCase();
+
 
   if (
     message.includes(
-      "403"
+      "access blocked"
+    ) ||
+    message.includes(
+      "cors"
+    ) ||
+    message.includes(
+      "access-control"
+    ) ||
+    message.includes(
+      "forbidden"
+    ) ||
+    message.includes(
+      "http 403"
+    ) ||
+    message.includes(
+      " 403"
     )
   ) {
 
@@ -519,9 +751,30 @@ function classifyESPNError(
 
   }
 
+
   if (
     message.includes(
-      "404"
+      "http 401"
+    ) ||
+    message.includes(
+      " 401"
+    ) ||
+    message.includes(
+      "unauthorized"
+    )
+  ) {
+
+    return "auth_error";
+
+  }
+
+
+  if (
+    message.includes(
+      "http 404"
+    ) ||
+    message.includes(
+      " 404"
     )
   ) {
 
@@ -529,9 +782,13 @@ function classifyESPNError(
 
   }
 
+
   if (
     message.includes(
-      "429"
+      "http 429"
+    ) ||
+    message.includes(
+      " 429"
     )
   ) {
 
@@ -539,7 +796,72 @@ function classifyESPNError(
 
   }
 
+
+  if (
+    message.includes(
+      "timeout"
+    )
+  ) {
+
+    return "timeout";
+
+  }
+
+
   return "network_error";
+
+}
+
+
+/* ==========================================
+   ERROR MESSAGE
+========================================== */
+
+function getESPNErrorMessage(
+  status,
+  error
+) {
+
+  if (
+    status ===
+    "access_blocked"
+  ) {
+
+    return (
+      "ESPN محجوب أو مرفوض من بيئة المتصفح (CORS/403). تم عزل المصدر ولن تتأثر بقية المصادر."
+    );
+
+  }
+
+
+  if (
+    status ===
+    "timeout"
+  ) {
+
+    return (
+      "ESPN لم يستجب خلال المهلة المحددة. تم تجاهل المصدر."
+    );
+
+  }
+
+
+  if (
+    status ===
+    "rate_limited"
+  ) {
+
+    return (
+      "ESPN حدّ من عدد الطلبات. تم تجاهل المصدر مؤقتًا."
+    );
+
+  }
+
+
+  return (
+    error?.message ||
+    "ESPN request failed."
+  );
 
 }
 
@@ -558,36 +880,44 @@ function normalizeEvent(
       ?.competitors ||
     [];
 
+
   const home =
     competitors.find(
       item =>
-        item?.homeAway === "home"
+        item?.homeAway ===
+        "home"
     ) ||
     competitors[0] ||
     {};
 
+
   const away =
     competitors.find(
       item =>
-        item?.homeAway === "away"
+        item?.homeAway ===
+        "away"
     ) ||
     competitors[1] ||
     {};
+
 
   const completed =
     isFinished(
       event
     );
 
+
   const homeScore =
     numberOrNull(
       home?.score
     );
 
+
   const awayScore =
     numberOrNull(
       away?.score
     );
+
 
   return {
 
@@ -716,17 +1046,22 @@ function eventMatches(
       ?.competitors ||
     [];
 
+
   const homeTeam =
     competitors.find(
       item =>
-        item?.homeAway === "home"
+        item?.homeAway ===
+        "home"
     )?.team;
+
 
   const awayTeam =
     competitors.find(
       item =>
-        item?.homeAway === "away"
+        item?.homeAway ===
+        "away"
     )?.team;
+
 
   if (
     !homeTeam ||
@@ -736,6 +1071,7 @@ function eventMatches(
     return false;
 
   }
+
 
   return (
 
@@ -787,6 +1123,7 @@ function isTeamEvent(
       ?.competitors ||
     [];
 
+
   return competitors.some(
     item =>
       namesMatch(
@@ -823,9 +1160,11 @@ function isFinished(
       ?.status
       ?.type;
 
+
   return (
 
-    type?.completed === true
+    type?.completed ===
+    true
 
     ||
 
@@ -854,6 +1193,16 @@ function sameEvent(
   second
 ) {
 
+  if (
+    !first ||
+    !second
+  ) {
+
+    return false;
+
+  }
+
+
   return (
 
     String(
@@ -881,10 +1230,25 @@ function numberOrNull(
   value
 ) {
 
+  if (
+    value ===
+    null ||
+    value ===
+    undefined ||
+    value ===
+    ""
+  ) {
+
+    return null;
+
+  }
+
+
   const number =
     Number(
       value
     );
+
 
   return Number.isFinite(
     number
@@ -964,15 +1328,29 @@ function namesMatch(
 
   }
 
+
   if (
-    first === second ||
-    first.includes(second) ||
-    second.includes(first)
+    first === second
   ) {
 
     return true;
 
   }
+
+
+  if (
+    first.includes(
+      second
+    ) ||
+    second.includes(
+      first
+    )
+  ) {
+
+    return true;
+
+  }
+
 
   const firstTokens =
     new Set(
@@ -984,6 +1362,7 @@ function namesMatch(
         )
     );
 
+
   const secondTokens =
     second
       .split(" ")
@@ -991,6 +1370,7 @@ function namesMatch(
         token =>
           token.length >= 3
       );
+
 
   return secondTokens.some(
     token =>
@@ -1016,10 +1396,12 @@ function shiftDate(
       date
     );
 
+
   result.setUTCDate(
     result.getUTCDate() +
     days
   );
+
 
   return result;
 
@@ -1055,8 +1437,10 @@ function formatDate(
 const provider =
   new ESPNProvider();
 
+
 registerProvider(
   provider
 );
+
 
 export default provider;
