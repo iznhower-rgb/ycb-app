@@ -10,14 +10,21 @@ import {
 import "./footballDataProvider.js";
 import "./sofaScoreProvider.js";
 
-const VERSION = "2.0.0";
+
+const VERSION =
+  "2.1.0";
+
 
 // ==========================================
 // FRONTEND
 // ==========================================
 
 const HTML = `<!DOCTYPE html>
-<html lang="ar" dir="rtl">
+
+<html
+  lang="ar"
+  dir="rtl"
+>
 
 <head>
 
@@ -28,7 +35,9 @@ const HTML = `<!DOCTYPE html>
   content="width=device-width,initial-scale=1.0"
 >
 
-<title>Y.C.B Football Prediction Engine</title>
+<title>
+Y.C.B Football Prediction Engine
+</title>
 
 <style>
 
@@ -148,13 +157,21 @@ button:disabled{
   line-height:1.6;
 }
 
-.warning-box{
+.recommendation{
+  border-radius:12px;
+  padding:14px;
+  margin-top:15px;
+  line-height:1.7;
+}
+
+.recommended{
+  background:#064e3b;
+  color:#6ee7b7;
+}
+
+.no-bet{
   background:#422006;
   color:#fbbf24;
-  border-radius:12px;
-  padding:13px;
-  margin-top:14px;
-  line-height:1.7;
 }
 
 .stats{
@@ -183,8 +200,13 @@ button:disabled{
   margin-top:15px;
 }
 
-small{
-  color:#94a3b8;
+.fixture{
+  background:#0f172a;
+  border-radius:12px;
+  padding:14px;
+  line-height:1.9;
+  margin-top:15px;
+  text-align:center;
 }
 
 </style>
@@ -232,6 +254,7 @@ Football Prediction Engine
   id="result"
   class="hidden"
 >
+
 
 <div class="panel">
 
@@ -317,8 +340,24 @@ Football Prediction Engine
 
 <div
   id="recommendation"
-  class="warning-box"
+  class="recommendation no-bet"
 >
+</div>
+
+</div>
+
+
+<div class="panel">
+
+<h3 class="section-title">
+بيانات المباراة
+</h3>
+
+<div
+  id="fixture"
+  class="fixture"
+>
+-
 </div>
 
 </div>
@@ -355,6 +394,16 @@ Football Prediction Engine
 <strong id="awayGF">-</strong>
 </div>
 
+<div class="stat">
+متوسط استقبال المضيف
+<strong id="homeGA">-</strong>
+</div>
+
+<div class="stat">
+متوسط استقبال الضيف
+<strong id="awayGA">-</strong>
+</div>
+
 </div>
 
 </div>
@@ -374,6 +423,7 @@ Football Prediction Engine
 
 </div>
 
+
 </div>
 
 </div>
@@ -388,15 +438,18 @@ async function analyzeMatch(){
       "match"
     );
 
+
   const button =
     document.getElementById(
       "analyzeButton"
     );
 
+
   const status =
     document.getElementById(
       "status"
     );
+
 
   const result =
     document.getElementById(
@@ -424,15 +477,18 @@ async function analyzeMatch(){
   button.disabled =
     true;
 
+
   result.classList.add(
     "hidden"
   );
 
+
   status.className =
     "";
 
+
   status.textContent =
-    "جاري جمع البيانات من المصادر وتحليلها...";
+    "جاري جمع البيانات وتحليل المباراة...";
 
 
   try{
@@ -522,16 +578,18 @@ async function analyzeMatch(){
           index + 1;
 
 
-        document.getElementById(
-          "prediction" + n
-        ).textContent =
-
+        const medals =
           [
             "🥇 ",
             "🥈 ",
             "🥉 "
-          ][index] +
+          ];
 
+
+        document.getElementById(
+          "prediction" + n
+        ).textContent =
+          medals[index] +
           prediction.label;
 
 
@@ -551,19 +609,73 @@ async function analyzeMatch(){
     );
 
 
-    document.getElementById(
-      "recommendation"
-    ).textContent =
-      data.recommendation?.message ||
+    const recommendation =
+      data.recommendation || {};
+
+
+    const recommendationElement =
+      document.getElementById(
+        "recommendation"
+      );
+
+
+    recommendationElement.textContent =
+      recommendation.message ||
       "لا توجد توصية.";
 
 
-    document.getElementById(
-      "recommendation"
-    ).className =
-      data.recommendation?.recommended
-        ? "success"
-        : "warning-box";
+    recommendationElement.className =
+      recommendation.recommended
+        ? "recommendation recommended"
+        : "recommendation no-bet";
+
+
+    const fixture =
+      data.analysis?.fixture ||
+      null;
+
+
+    const fixtureElement =
+      document.getElementById(
+        "fixture"
+      );
+
+
+    if(fixture){
+
+      fixtureElement.innerHTML =
+        "<strong>" +
+        (
+          fixture.homeTeam?.name ||
+          data.match.home
+        ) +
+        "</strong>" +
+        " 🆚 " +
+        "<strong>" +
+        (
+          fixture.awayTeam?.name ||
+          data.match.away
+        ) +
+        "</strong>" +
+        "<br>" +
+        "🏆 " +
+        (
+          fixture.competition ||
+          "-"
+        ) +
+        "<br>" +
+        "📅 " +
+        (
+          fixture.utcDate ||
+          "-"
+        );
+
+    }else{
+
+      fixtureElement.textContent =
+        "لم يتم العثور على بيانات المباراة.";
+
+    }
 
 
     document.getElementById(
@@ -591,6 +703,20 @@ async function analyzeMatch(){
       "awayGF"
     ).textContent =
       data.analysis?.away?.goalsForAvg ??
+      "-";
+
+
+    document.getElementById(
+      "homeGA"
+    ).textContent =
+      data.analysis?.home?.goalsAgainstAvg ??
+      "-";
+
+
+    document.getElementById(
+      "awayGA"
+    ).textContent =
+      data.analysis?.away?.goalsAgainstAvg ??
       "-";
 
 
@@ -624,6 +750,11 @@ async function analyzeMatch(){
             (
               item.status ||
               "unknown"
+            ) +
+            "<br>" +
+            (
+              item.message ||
+              ""
             )
 
           );
@@ -637,16 +768,26 @@ async function analyzeMatch(){
     );
 
 
-    status.className =
+    if(
       data.analysisStatus ===
       "ready"
-        ? "success"
-        : "warning";
+    ){
+
+      status.className =
+        "success";
+
+    }else{
+
+      status.className =
+        "warning";
+
+    }
 
 
     status.textContent =
       data.message ||
       "اكتمل التحليل.";
+
 
   }catch(error){
 
@@ -654,8 +795,10 @@ async function analyzeMatch(){
       error
     );
 
+
     status.className =
       "error";
+
 
     status.textContent =
       error?.message ||
@@ -723,9 +866,11 @@ export default {
 
         success:true,
 
-        status:"ok",
+        status:
+          "ok",
 
-        app:"Y.C.B",
+        app:
+          "Y.C.B",
 
         engine:
           "Y.C.B Prediction Engine",
@@ -826,10 +971,6 @@ export default {
         }
 
 
-        // ==================================
-        // PARSE MATCH
-        // ==================================
-
         const parsed =
           parseMatch(
             match
@@ -887,14 +1028,12 @@ export default {
 
         const merged =
           mergeProviderData(
-            home,
-            away,
             usable
           );
 
 
         // ==================================
-        // CHECK DATA
+        // NO FIXTURE
         // ==================================
 
         if(
@@ -905,7 +1044,8 @@ export default {
 
             success:true,
 
-            app:"Y.C.B",
+            app:
+              "Y.C.B",
 
             engine:
               "Y.C.B Prediction Engine",
@@ -917,26 +1057,32 @@ export default {
               "Multi Provider Architecture",
 
             match:{
-
               home,
               away
-
             },
 
             analysisStatus:
               "insufficient_data",
 
             message:
-              "لم يتم العثور على المباراة المطلوبة في مصادر البيانات المتاحة.",
+              "لم يتم العثور على المباراة في مصادر البيانات الحالية.",
 
-            providerCount:
-              providerResults.length,
+            analysis:{
 
-            successfulProviderCount:
-              usable.length,
+              home:
+                emptyTeamAnalysis(
+                  home
+                ),
 
-            providers:
-              providerResults,
+              away:
+                emptyTeamAnalysis(
+                  away
+                ),
+
+              fixture:
+                null
+
+            },
 
             predictions:
               fallbackPredictions(
@@ -946,12 +1092,28 @@ export default {
 
             recommendation:{
 
-              recommended:false,
+              recommended:
+                false,
+
+              market:
+                null,
+
+              probability:
+                null,
 
               message:
-                "لا يوجد رهان موصى به: البيانات غير كافية."
+                "لا يوجد رهان موصى به: المباراة غير متاحة في مصادر البيانات."
 
-            }
+            },
+
+            providerCount:
+              providerResults.length,
+
+            successfulProviderCount:
+              usable.length,
+
+            providers:
+              providerResults
 
           });
 
@@ -981,7 +1143,8 @@ export default {
 
             success:true,
 
-            app:"Y.C.B",
+            app:
+              "Y.C.B",
 
             engine:
               "Y.C.B Prediction Engine",
@@ -993,22 +1156,17 @@ export default {
               "Multi Provider Architecture",
 
             match:{
-
               home,
               away
-
             },
 
             analysisStatus:
               "insufficient_data",
 
             message:
-              "تم العثور على المباراة، لكن عدد المباريات التاريخية المتاحة غير كافٍ لبناء توقع موثوق.",
+              "تم العثور على المباراة، لكن البيانات التاريخية غير كافية لبناء توقع موثوق.",
 
             analysis,
-
-            providers:
-              providerResults,
 
             predictions:
               fallbackPredictions(
@@ -1018,12 +1176,28 @@ export default {
 
             recommendation:{
 
-              recommended:false,
+              recommended:
+                false,
+
+              market:
+                null,
+
+              probability:
+                null,
 
               message:
-                "لا يوجد رهان موصى به حتى تتوفر بيانات تاريخية كافية."
+                "No Bet — البيانات التاريخية غير كافية."
 
-            }
+            },
+
+            providerCount:
+              providerResults.length,
+
+            successfulProviderCount:
+              usable.length,
+
+            providers:
+              providerResults
 
           });
 
@@ -1075,20 +1249,22 @@ export default {
 
               ? `التوقع الأقوى حاليًا: ${top.label} بنسبة ${top.probability}.`
 
-              : "لا يوجد رهان موصى به: لا يوجد توقع تجاوز حد الثقة الحالي."
+              : "No Bet — لا يوجد توقع تجاوز حد الثقة الحالي."
 
         };
 
 
         // ==================================
-        // RESPONSE
+        // FINAL RESPONSE
         // ==================================
 
         return json({
 
-          success:true,
+          success:
+            true,
 
-          app:"Y.C.B",
+          app:
+            "Y.C.B",
 
           engine:
             "Y.C.B Prediction Engine",
@@ -1100,10 +1276,8 @@ export default {
             "Multi Provider Architecture",
 
           match:{
-
             home,
             away
-
           },
 
           analysisStatus:
@@ -1140,8 +1314,8 @@ export default {
         return json(
 
           {
-
-            success:false,
+            success:
+              false,
 
             error:
               error?.message ||
@@ -1169,7 +1343,8 @@ export default {
 
       {
 
-        status:200,
+        status:
+          200,
 
         headers:{
 
@@ -1191,7 +1366,7 @@ export default {
 
 
 // ==========================================
-// MATCH PARSER
+// PARSE MATCH
 // ==========================================
 
 function parseMatch(
@@ -1232,10 +1407,8 @@ function parseMatch(
 
 
   return {
-
     home,
     away
-
   };
 
 }
@@ -1246,16 +1419,16 @@ function parseMatch(
 // ==========================================
 
 function mergeProviderData(
-  home,
-  away,
   successfulProviders
 ){
 
   let fixture =
     null;
 
+
   const homeMatches =
     [];
+
 
   const awayMatches =
     [];
@@ -1353,15 +1526,12 @@ function dedupeMatches(
 
         const key =
           String(
-
             match.id ||
-
             [
               match.utcDate,
               match.homeTeam?.name,
               match.awayTeam?.name
             ].join("|")
-
           );
 
 
@@ -1432,7 +1602,54 @@ function buildTeamAnalysis(
       calculateTeamStats(
         awayName,
         merged.awayMatches
-      )
+      ),
+
+    fixture:
+      merged.fixture
+
+  };
+
+}
+
+
+// ==========================================
+// EMPTY ANALYSIS
+// ==========================================
+
+function emptyTeamAnalysis(
+  team
+){
+
+  return {
+
+    team,
+
+    games:
+      0,
+
+    wins:
+      0,
+
+    draws:
+      0,
+
+    losses:
+      0,
+
+    formPoints:
+      0,
+
+    formMax:
+      0,
+
+    formRate:
+      0,
+
+    goalsForAvg:
+      0,
+
+    goalsAgainstAvg:
+      0
 
   };
 
@@ -1636,10 +1853,10 @@ function calculateTeamStats(
     last5.length
 
       ? (
-          gf5 * 0.6
+          gf5 * 0.60
         ) +
         (
-          gf10 * 0.4
+          gf10 * 0.40
         )
 
       : gf10;
@@ -1649,10 +1866,10 @@ function calculateTeamStats(
     last5.length
 
       ? (
-          ga5 * 0.6
+          ga5 * 0.60
         ) +
         (
-          ga10 * 0.4
+          ga10 * 0.40
         )
 
       : ga10;
@@ -1750,7 +1967,6 @@ function buildPredictions(
     clamp(
 
       (
-
         home.goalsForAvg *
         0.55
 
@@ -1774,7 +1990,6 @@ function buildPredictions(
     clamp(
 
       (
-
         away.goalsForAvg *
         0.55
 
@@ -1805,20 +2020,26 @@ function buildPredictions(
   let homeWin =
     0;
 
+
   let draw =
     0;
+
 
   let awayWin =
     0;
 
+
   let over25 =
     0;
+
 
   let under25 =
     0;
 
+
   let bttsYes =
     0;
+
 
   let bttsNo =
     0;
@@ -1911,7 +2132,7 @@ function buildPredictions(
         homeWin,
 
       explanation:
-        "تقدير مبني على متوسط التسجيل والاستقبال وآخر النتائج."
+        `Poisson | xG تقديري: ${round(homeXg)} - ${round(awayXg)}`
 
     },
 
@@ -1928,7 +2149,7 @@ function buildPredictions(
         draw,
 
       explanation:
-        "احتمال التعادل من توزيع أهداف بواسون المقدر للمباراة."
+        `Poisson | xG تقديري: ${round(homeXg)} - ${round(awayXg)}`
 
     },
 
@@ -1945,7 +2166,7 @@ function buildPredictions(
         awayWin,
 
       explanation:
-        "تقدير مبني على متوسط التسجيل والاستقبال وآخر النتائج."
+        `Poisson | xG تقديري: ${round(homeXg)} - ${round(awayXg)}`
 
     },
 
@@ -1962,7 +2183,7 @@ function buildPredictions(
         over25,
 
       explanation:
-        "احتمال ثلاثة أهداف أو أكثر وفق توزيع الأهداف المقدر."
+        "Poisson | ثلاثة أهداف أو أكثر"
 
     },
 
@@ -1979,7 +2200,7 @@ function buildPredictions(
         under25,
 
       explanation:
-        "احتمال صفر أو هدف أو هدفين وفق توزيع الأهداف المقدر."
+        "Poisson | صفر إلى هدفين"
 
     },
 
@@ -1996,7 +2217,7 @@ function buildPredictions(
         bttsYes,
 
       explanation:
-        "احتمال تسجيل الفريقين هدفًا واحدًا على الأقل."
+        "Poisson | تسجيل الفريقين هدفًا على الأقل"
 
     },
 
@@ -2013,7 +2234,7 @@ function buildPredictions(
         bttsNo,
 
       explanation:
-        "احتمال عدم تسجيل أحد الفريقين على الأقل."
+        "Poisson | أحد الفريقين على الأقل لا يسجل"
 
     }
 
@@ -2021,15 +2242,12 @@ function buildPredictions(
 
 
   candidates.sort(
-
     (
       a,
       b
     ) =>
-
       b.probabilityValue -
       a.probabilityValue
-
   );
 
 
@@ -2093,7 +2311,7 @@ function fallbackPredictions(
         0,
 
       explanation:
-        "لا توجد بيانات كافية."
+        "لا توجد بيانات تاريخية كافية."
 
     },
 
@@ -2113,7 +2331,7 @@ function fallbackPredictions(
         0,
 
       explanation:
-        "لا توجد بيانات كافية."
+        "لا توجد بيانات تاريخية كافية."
 
     },
 
@@ -2133,7 +2351,7 @@ function fallbackPredictions(
         0,
 
       explanation:
-        "لا توجد بيانات كافية."
+        "لا توجد بيانات تاريخية كافية."
 
     }
 
