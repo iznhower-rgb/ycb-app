@@ -8,10 +8,6 @@ import {
 } from "./providers.js";
 
 
-// ==========================================
-// CONFIGURATION
-// ==========================================
-
 const API_BASE =
   "https://www.sofascore.com/api/v1";
 
@@ -47,92 +43,50 @@ class SofaScoreProvider
         null;
 
 
-      // ====================================
-      // TODAY
-      // ====================================
+      for (
+        let offset = 0;
+        offset <= 7 &&
+        !match;
+        offset++
+      ) {
 
-      const today =
-        new Date()
-          .toISOString()
-          .slice(
-            0,
-            10
-          );
+        const date =
+          new Date();
 
 
-      const todayData =
-        await fetchJSON(
-          `${API_BASE}/sport/football/scheduled-events/${today}`
+        date.setUTCDate(
+          date.getUTCDate() +
+          offset
         );
 
 
-      match =
-        findMatch(
-          todayData?.events,
-          home,
-          away
-        );
+        const day =
+          date
+            .toISOString()
+            .slice(
+              0,
+              10
+            );
 
 
-      // ====================================
-      // FUTURE DAYS
-      // ====================================
+        const data =
+          await fetchJSON(
 
-      if (!match) {
+            `${API_BASE}/sport/football/scheduled-events/${day}`
 
-        for (
-          let day = 1;
-          day <= 14;
-          day++
-        ) {
-
-          const date =
-            new Date();
-
-
-          date.setUTCDate(
-            date.getUTCDate() +
-            day
           );
 
 
-          const dateString =
-            date
-              .toISOString()
-              .slice(
-                0,
-                10
-              );
-
-
-          const result =
-            await fetchJSON(
-              `${API_BASE}/sport/football/scheduled-events/${dateString}`
-            );
-
-
-          match =
-            findMatch(
-              result?.events,
-              home,
-              away
-            );
-
-
-          if (match) {
-
-            break;
-
-          }
-
-        }
+        match =
+          findMatch(
+            data?.events ||
+            [],
+            home,
+            away
+          );
 
       }
 
-
-      // ====================================
-      // NOT FOUND
-      // ====================================
 
       if (!match) {
 
@@ -142,7 +96,7 @@ class SofaScoreProvider
             "api_ok_no_match",
 
           message:
-            "SofaScore متصل لكن المباراة المطلوبة لم يتم العثور عليها.",
+            "SofaScore متصل لكن المباراة غير موجودة خلال الأيام السبعة القادمة.",
 
           data: {
 
@@ -162,41 +116,30 @@ class SofaScoreProvider
       }
 
 
-      // ====================================
-      // TEAM IDS
-      // ====================================
-
-      const homeTeamId =
+      const homeId =
         match.homeTeam?.id;
 
 
-      const awayTeamId =
+      const awayId =
         match.awayTeam?.id;
 
 
-      // ====================================
-      // RECENT MATCHES
-      // ====================================
+      const [
+        homeRecent,
+        awayRecent
+      ] =
+        await Promise.all([
 
-      const homeRecent =
-        homeTeamId
-          ? await getRecentTeamMatches(
-              homeTeamId
-            )
-          : [];
+          getRecent(
+            homeId
+          ),
 
+          getRecent(
+            awayId
+          )
 
-      const awayRecent =
-        awayTeamId
-          ? await getRecentTeamMatches(
-              awayTeamId
-            )
-          : [];
+        ]);
 
-
-      // ====================================
-      // RETURN NORMALIZED DATA
-      // ====================================
 
       return {
 
@@ -217,10 +160,50 @@ class SofaScoreProvider
           matchFound:
             true,
 
-          fixture:
-            normalizeFixture(
-              match
-            ),
+          fixture: {
+
+            id:
+              match.id ||
+              null,
+
+            startTimestamp:
+              match.startTimestamp ||
+              null,
+
+            status:
+              match.status?.type ||
+              match.status ||
+              null,
+
+            tournament:
+              match.tournament?.name ||
+              null,
+
+            homeTeam: {
+
+              id:
+                homeId ||
+                null,
+
+              name:
+                match.homeTeam?.name ||
+                null
+
+            },
+
+            awayTeam: {
+
+              id:
+                awayId ||
+                null,
+
+              name:
+                match.awayTeam?.name ||
+                null
+
+            }
+
+          },
 
           recentMatches: {
 
@@ -272,13 +255,13 @@ async function fetchJSON(
       url,
       {
 
-        method:
-          "GET",
-
         headers: {
 
           "Accept":
-            "application/json"
+            "application/json",
+
+          "User-Agent":
+            "YCB-Football-Prediction-Engine"
 
         }
 
@@ -311,9 +294,7 @@ async function fetchJSON(
   }
 
 
-  if (
-    !response.ok
-  ) {
+  if (!response.ok) {
 
     throw new Error(
       `SofaScore HTTP ${response.status}`
@@ -337,22 +318,13 @@ function findMatch(
   away
 ) {
 
-  if (
-    !Array.isArray(events)
-  ) {
-
-    return null;
-
-  }
-
-
-  const requestedHome =
+  const homeName =
     normalizeName(
       home
     );
 
 
-  const requestedAway =
+  const awayName =
     normalizeName(
       away
     );
@@ -363,15 +335,21 @@ function findMatch(
 
       const eventHome =
         normalizeName(
+
           event?.homeTeam?.name ||
+
           event?.homeTeam?.shortName
+
         );
 
 
       const eventAway =
         normalizeName(
+
           event?.awayTeam?.name ||
+
           event?.awayTeam?.shortName
+
         );
 
 
@@ -379,20 +357,20 @@ function findMatch(
 
         namesMatch(
           eventHome,
-          requestedHome
+          homeName
         )
 
         &&
 
         namesMatch(
           eventAway,
-          requestedAway
+          awayName
         )
 
       );
 
     }
-  ) || null;
+  );
 
 }
 
@@ -401,15 +379,24 @@ function findMatch(
 // RECENT MATCHES
 // ==========================================
 
-async function getRecentTeamMatches(
+async function getRecent(
   teamId
 ) {
+
+  if (!teamId) {
+
+    return [];
+
+  }
+
 
   try {
 
     const data =
       await fetchJSON(
+
         `${API_BASE}/team/${teamId}/events/last/0`
+
       );
 
 
@@ -423,17 +410,6 @@ async function getRecentTeamMatches(
 
     return events
 
-      .filter(
-        event =>
-          event?.status?.type ===
-          "finished"
-      )
-
-      .slice(
-        0,
-        10
-      )
-
       .map(
         event => {
 
@@ -442,18 +418,38 @@ async function getRecentTeamMatches(
             teamId;
 
 
-          const homeGoals =
+          const gf =
             Number(
-              event.homeScore?.current ??
-              0
+
+              (
+                isHome
+                  ? event.homeScore
+                  : event.awayScore
+              )?.current
+
             );
 
 
-          const awayGoals =
+          const ga =
             Number(
-              event.awayScore?.current ??
-              0
+
+              (
+                isHome
+                  ? event.awayScore
+                  : event.homeScore
+              )?.current
+
             );
+
+
+          if (
+            !Number.isFinite(gf) ||
+            !Number.isFinite(ga)
+          ) {
+
+            return null;
+
+          }
 
 
           return {
@@ -470,37 +466,18 @@ async function getRecentTeamMatches(
                   ).toISOString()
                 : null,
 
-            status:
-              "FINISHED",
-
             homeTeam: {
-
-              id:
-                event.homeTeam?.id ||
-                null,
 
               name:
                 event.homeTeam?.name ||
-                null,
-
-              shortName:
-                event.homeTeam?.shortName ||
                 null
 
             },
 
             awayTeam: {
 
-              id:
-                event.awayTeam?.id ||
-                null,
-
               name:
                 event.awayTeam?.name ||
-                null,
-
-              shortName:
-                event.awayTeam?.shortName ||
                 null
 
             },
@@ -510,34 +487,31 @@ async function getRecentTeamMatches(
               fullTime: {
 
                 home:
-                  homeGoals,
+                  isHome
+                    ? gf
+                    : ga,
 
                 away:
-                  awayGoals
+                  isHome
+                    ? ga
+                    : gf
 
               }
-
-            },
-
-            perspective: {
-
-              isHome,
-
-              goalsFor:
-                isHome
-                  ? homeGoals
-                  : awayGoals,
-
-              goalsAgainst:
-                isHome
-                  ? awayGoals
-                  : homeGoals
 
             }
 
           };
 
         }
+      )
+
+      .filter(
+        Boolean
+      )
+
+      .slice(
+        0,
+        10
       );
 
   } catch {
@@ -550,74 +524,7 @@ async function getRecentTeamMatches(
 
 
 // ==========================================
-// NORMALIZE FIXTURE
-// ==========================================
-
-function normalizeFixture(
-  event
-) {
-
-  return {
-
-    id:
-      event?.id ||
-      null,
-
-    utcDate:
-      event?.startTimestamp
-        ? new Date(
-            event.startTimestamp *
-            1000
-          ).toISOString()
-        : null,
-
-    status:
-      event?.status?.type ||
-      null,
-
-    competition:
-      event?.tournament?.name ||
-      null,
-
-    homeTeam: {
-
-      id:
-        event?.homeTeam?.id ||
-        null,
-
-      name:
-        event?.homeTeam?.name ||
-        null,
-
-      shortName:
-        event?.homeTeam?.shortName ||
-        null
-
-    },
-
-    awayTeam: {
-
-      id:
-        event?.awayTeam?.id ||
-        null,
-
-      name:
-        event?.awayTeam?.name ||
-        null,
-
-      shortName:
-        event?.awayTeam?.shortName ||
-        null
-
-    }
-
-  };
-
-}
-
-
-// ==========================================
-// NORMALIZE TEAM NAME
+// NORMALIZE NAME
 // ==========================================
 
 function normalizeName(
@@ -629,8 +536,6 @@ function normalizeName(
   )
 
     .toLowerCase()
-
-    .trim()
 
     .normalize(
       "NFD"
@@ -647,12 +552,12 @@ function normalizeName(
     )
 
     .replace(
-      /\b(fc|cf|afc|sc|ac|fk|club)\b/gi,
-      ""
+      /\b(fc|cf|afc|sc|ac|fk|club)\b/g,
+      " "
     )
 
     .replace(
-      /[^a-z0-9\s]/gi,
+      /[^a-z0-9\u0600-\u06ff\s]/gi,
       " "
     )
 
@@ -667,7 +572,7 @@ function normalizeName(
 
 
 // ==========================================
-// NAME MATCH
+// MATCH NAMES
 // ==========================================
 
 function namesMatch(
@@ -686,15 +591,7 @@ function namesMatch(
 
 
   if (
-    first === second
-  ) {
-
-    return true;
-
-  }
-
-
-  if (
+    first === second ||
     first.includes(second) ||
     second.includes(first)
   ) {
@@ -704,27 +601,26 @@ function namesMatch(
   }
 
 
-  const firstTokens =
-    first.split(" ");
-
-
-  const secondTokens =
-    second.split(" ");
-
-
-  const common =
-    secondTokens.filter(
-      token =>
-        token.length >= 3 &&
-        firstTokens.includes(
-          token
+  const tokens =
+    new Set(
+      first
+        .split(" ")
+        .filter(
+          token =>
+            token.length >= 3
         )
     );
 
 
-  return (
-    common.length >= 1
-  );
+  return second
+    .split(" ")
+    .some(
+      token =>
+        token.length >= 3 &&
+        tokens.has(
+          token
+        )
+    );
 
 }
 
