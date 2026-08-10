@@ -10,7 +10,7 @@ import {
 
 import "./espnProvider.js";
 import "./theSportsDBProvider.js";
-
+import "./bsdProvider.js";
 
 const VERSION =
   "3.0.1";
