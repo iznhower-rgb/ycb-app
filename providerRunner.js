@@ -1,19 +1,12 @@
 // ==========================================================
-// Y.C.B PROVIDER RUNNER 3.0.1
+// Y.C.B PROVIDER RUNNER 3.1.0
 // ==========================================================
 //
-// مسؤولية هذا الملف:
-// تنفيذ getAllMatchData() على جميع مزودي البيانات.
+// Executes all registered providers.
 //
-// تم عزل هذه الوظيفة من providers.js حتى تصبح البنية:
-//
-// providers.js
-//     ↓
-// providerRunner.js
-//     ↓
-// statsCollector.js
-//     ↓
-// worker.js
+// IMPORTANT:
+// This file owns getAllMatchData().
+// providers.js only manages registration.
 //
 // ==========================================================
 
@@ -23,39 +16,18 @@ import {
 
 
 /* ==========================================================
-   GET ALL MATCH DATA
+   EXECUTE ALL PROVIDERS
 ========================================================== */
 
 export async function getAllMatchData(
   home,
   away,
   env
-){
+) {
 
   const providers =
     getProviderInstances();
 
-
-  /*
-   * إذا لم يوجد أي Provider
-   */
-
-  if(
-    !Array.isArray(providers) ||
-    providers.length === 0
-  ){
-
-    return [];
-
-  }
-
-
-  /*
-   * تشغيل جميع المصادر بالتوازي.
-   *
-   * كل Provider مستقل.
-   * فشل Provider واحد لا يوقف بقية المصادر.
-   */
 
   return Promise.all(
 
@@ -66,7 +38,7 @@ export async function getAllMatchData(
           Date.now();
 
 
-        try{
+        try {
 
           const result =
             await provider.getMatchData(
@@ -76,45 +48,26 @@ export async function getAllMatchData(
             );
 
 
-          /*
-           * حماية إضافية إذا أعاد Provider
-           * قيمة غير صالحة.
-           */
-
-          const safeResult =
-            result &&
-            typeof result === "object"
-
-              ? result
-
-              : {};
-
-
           return {
 
             provider:
               provider.name,
 
-
             success:
-              safeResult.status ===
+              result?.status ===
               "success",
 
-
             status:
-              safeResult.status ||
+              result?.status ||
               "unknown",
 
-
             message:
-              safeResult.message ||
+              result?.message ||
               "",
 
-
             data:
-              safeResult.data ||
+              result?.data ||
               null,
-
 
             durationMs:
               Date.now() -
@@ -122,39 +75,27 @@ export async function getAllMatchData(
 
           };
 
-        }catch(
+        } catch (
           error
-        ){
-
-          /*
-           * خطأ داخل Provider.
-           *
-           * لا نرمي الخطأ مرة أخرى حتى لا يتوقف
-           * باقي مزودي البيانات.
-           */
+        ) {
 
           return {
 
             provider:
               provider.name,
 
-
             success:
               false,
 
-
             status:
               "provider_error",
-
 
             message:
               error?.message ||
               String(error),
 
-
             data:
               null,
-
 
             durationMs:
               Date.now() -
@@ -173,90 +114,5 @@ export async function getAllMatchData(
 
 
 /* ==========================================================
-   GET SUCCESSFUL PROVIDER RESULTS
+   END providerRunner.js
 ========================================================== */
-
-export function getSuccessfulProviderResults(
-  results
-){
-
-  if(
-    !Array.isArray(
-      results
-    )
-  ){
-
-    return [];
-
-  }
-
-
-  return results.filter(
-    item =>
-
-      item &&
-
-      item.success &&
-
-      item.data
-
-  );
-
-}
-
-
-/* ==========================================================
-   GET PROVIDER COUNTS
-========================================================== */
-
-export function getProviderStats(
-  results
-){
-
-  const safeResults =
-
-    Array.isArray(
-      results
-    )
-
-      ? results
-
-      : [];
-
-
-  const successful =
-    safeResults.filter(
-      item =>
-
-        item &&
-
-        item.success &&
-
-        item.data
-
-    );
-
-
-  return {
-
-    providerCount:
-      safeResults.length,
-
-
-    successfulProviderCount:
-      successful.length
-
-  };
-
-}
-
-
-/* ==========================================================
-   DEFAULT
-========================================================== */
-
-export default {
-  getAllMatchData,
-  getSuccessfulProviderResults,
-  getProviderStats
-};
