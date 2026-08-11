@@ -1,23 +1,18 @@
 // ==========================================================
-// Y.C.B PROVIDERS CORE 3.0.1
+// Y.C.B PROVIDERS CORE 3.1.0
 // ==========================================================
 //
-// مسؤولية هذا الملف:
+// Provider registry only.
 //
-// 1. تعريف DataProvider
-// 2. تسجيل مزودي البيانات
-// 3. الحصول على قائمة المزودين
-// 4. الحصول على Instances الخاصة بالمزودين
-// 5. حساب عدد المزودين
+// Responsibilities:
+//   1. Define DataProvider.
+//   2. Register providers.
+//   3. List providers.
+//   4. Return provider instances.
 //
-// لا يحتوي هذا الملف على:
-//
-// - getAllMatchData()
-// - جمع الإحصائيات
-// - mergeProviderData()
-// - dedupeMatches()
-// - buildTeamAnalysis()
-// - calculateTeamStats()
+// IMPORTANT:
+// getAllMatchData() has been moved to:
+//   ./providerRunner.js
 //
 // ==========================================================
 
@@ -33,7 +28,7 @@ export class DataProvider {
 
   constructor(
     name
-  ){
+  ) {
 
     this.name =
       String(
@@ -48,7 +43,7 @@ export class DataProvider {
     home,
     away,
     env
-  ){
+  ) {
 
     throw new Error(
       `getMatchData() not implemented for ${this.name}`
@@ -65,16 +60,11 @@ export class DataProvider {
 
 export function registerProvider(
   provider
-){
+) {
 
-  if(
-    !provider ||
-
-    typeof provider.getMatchData !==
-      "function" ||
-
-    !provider.name
-  ){
+  if (
+    !provider
+  ) {
 
     throw new Error(
       "Invalid data provider"
@@ -83,17 +73,40 @@ export function registerProvider(
   }
 
 
-  /*
-   * منع تسجيل نفس Provider مرتين.
-   */
+  if (
+    typeof provider.getMatchData !==
+    "function"
+  ) {
 
-  if(
-    !providers.some(
+    throw new Error(
+      "Invalid data provider: getMatchData() is required"
+    );
+
+  }
+
+
+  if (
+    !provider.name
+  ) {
+
+    throw new Error(
+      "Invalid data provider: provider name is required"
+    );
+
+  }
+
+
+  const exists =
+    providers.some(
       item =>
         item.name ===
         provider.name
-    )
-  ){
+    );
+
+
+  if (
+    !exists
+  ) {
 
     providers.push(
       provider
@@ -111,7 +124,7 @@ export function registerProvider(
    GET PROVIDERS
 ========================================================== */
 
-export function getProviders(){
+export function getProviders() {
 
   return providers.map(
     provider => ({
@@ -129,7 +142,7 @@ export function getProviders(){
    GET PROVIDER INSTANCES
 ========================================================== */
 
-export function getProviderInstances(){
+export function getProviderInstances() {
 
   return [
     ...providers
@@ -142,7 +155,7 @@ export function getProviderInstances(){
    COUNT
 ========================================================== */
 
-export function getProviderCount(){
+export function getProviderCount() {
 
   return providers.length;
 
@@ -150,19 +163,22 @@ export function getProviderCount(){
 
 
 /* ==========================================================
-   DEFAULT EXPORT
-========================================================== */
+   CLEAR PROVIDERS
+==========================================================
+//
+// Useful for tests/reloading.
+//
+// Not normally used by worker.js.
+//
 
-export default {
+export function clearProviders() {
 
-  DataProvider,
+  providers.length =
+    0;
 
-  registerProvider,
+}
 
-  getProviders,
 
-  getProviderInstances,
-
-  getProviderCount
-
-};
+// ==========================================================
+// END providers.js
+// ==========================================================
