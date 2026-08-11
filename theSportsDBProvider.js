@@ -1,634 +1,1460 @@
+// ==========================================================
+// Y.C.B THESPORTSDB PROVIDER 3.1.0
+// ==========================================================
+//
+// Independent fixture verification + recent form provider.
+//
+// Compatible with:
+//   providers.js 3.0.1
+//
+// Main improvements:
+//   1. More flexible fixture search.
+//   2. Uses TheSportsDB team IDs when available.
+//   3. Attempts to collect recent matches.
+//   4. Normalizes recent matches for the prediction engine.
+//   5. Does NOT fake missing statistics.
+//   6. Keeps api_ok_no_match separate from success.
+//   7. Supports env.THESPORTSDB_API_KEY when available.
+//   8. Handles TheSportsDB's free-tier limitations safely.
+//
+// ==========================================================
+
 import {
-  DataProvider,
-  registerProvider
+  DataProvider,
+  registerProvider
 } from "./providers.js";
 
 
-const API =
-  "https://www.thesportsdb.com/api/v1/json/123";
+const DEFAULT_API_KEY =
+  "123";
+
+
+const API_BASE =
+  "https://www.thesportsdb.com/api/v1/json";
+
+
+const PROVIDER_VERSION =
+  "3.1.0";
 
 
 class TheSportsDBProvider
-  extends DataProvider {
-
-  constructor() {
-
-    super(
-      "TheSportsDB"
-    );
-
-  }
+  extends DataProvider {
 
 
-  async getMatchData(
-    home,
-    away
-  ) {
+  constructor() {
 
-    try {
+    super(
+      "TheSportsDB"
+    );
 
-      const fixture =
-        await findFixture(
-          home,
-          away
-        );
+  }
 
 
-      if (
-        !fixture
-      ) {
+  async getMatchData(
+    home,
+    away,
+    env
+  ) {
 
-        return {
-
-          status:
-            "api_ok_no_match",
-
-          message:
-            "TheSportsDB متصل لكن لم يتم العثور على المباراة المطلوبة.",
-
-          data: {
-
-            source:
-              "thesportsdb",
-
-            available:
-              true,
-
-            matchFound:
-              false,
-
-            fixture:
-              null,
-
-            recentMatches: {
-
-              home:
-                [],
-
-              away:
-                []
-
-            },
-
-            historyAvailable:
-              false
-
-          }
-
-        };
-
-      }
+    const startedAt =
+      Date.now();
 
 
-      return {
+    try {
 
-        status:
-          "success",
+      const apiKey =
+        getApiKey(
+          env
+        );
 
-        message:
-          "تم التحقق من المباراة عبر TheSportsDB كمصدر مستقل.",
 
-        data: {
+      const fixture =
+        await findFixture(
+          home,
+          away,
+          apiKey
+        );
 
-          source:
-            "thesportsdb",
 
-          available:
-            true,
+      if (
+        !fixture
+      ) {
 
-          matchFound:
-            true,
+        return {
 
-          fixture:
-            normalizeEvent(
-              fixture
-            ),
+          status:
+            "api_ok_no_match",
 
-          /*
-           * لا نعتبر غياب التاريخ من النسخة
-           * المجانية فشلًا في التحقق من المباراة.
-           *
-           * ESPN هو المصدر الأساسي للتاريخ.
-           */
-          recentMatches: {
+          message:
+            "TheSportsDB متصل لكن لم يتم العثور على المباراة المطلوبة.",
 
-            home:
-              [],
+          data: {
 
-            away:
-              []
+            source:
+              "thesportsdb",
 
-          },
+            providerVersion:
+              PROVIDER_VERSION,
 
-          historyAvailable:
-            false
+            available:
+              true,
 
-        }
+            matchFound:
+              false,
 
-      };
+            fixture:
+              null,
 
-    } catch (
-      error
-    ) {
+            recentMatches: {
 
-      return {
+              home:
+                [],
 
-        status:
-          "network_error",
+              away:
+                []
 
-        message:
-          error?.message ||
-          String(error),
+            },
 
-        data:
-          null
+            historyAvailable:
+              false,
 
-      };
+            historyCount: {
 
-    }
+              home:
+                0,
 
-  }
+              away:
+                0
+
+            },
+
+            durationMs:
+              Date.now() -
+              startedAt
+
+          }
+
+        };
+
+      }
+
+
+      const homeId =
+        fixture?.idHomeTeam ||
+        null;
+
+
+      const awayId =
+        fixture?.idAwayTeam ||
+        null;
+
+
+      const recent =
+        await getRecentMatches(
+          homeId,
+          awayId,
+          apiKey
+        );
+
+
+      const normalizedFixture =
+        normalizeEvent(
+          fixture
+        );
+
+
+      const historyAvailable =
+        (
+          recent.home.length >
+          0
+        )
+        ||
+        (
+          recent.away.length >
+          0
+        );
+
+
+      return {
+
+        status:
+          "success",
+
+        message:
+          historyAvailable
+
+            ? "تم التحقق من المباراة وجمع بيانات النتائج السابقة عبر TheSportsDB."
+
+            : "تم التحقق من المباراة عبر TheSportsDB، لكن النتائج السابقة غير متاحة بشكل كافٍ.",
+
+        data: {
+
+          source:
+            "thesportsdb",
+
+          providerVersion:
+            PROVIDER_VERSION,
+
+          available:
+            true,
+
+          matchFound:
+            true,
+
+          fixture:
+            normalizedFixture,
+
+          recentMatches: {
+
+            home:
+              recent.home,
+
+            away:
+              recent.away
+
+          },
+
+          historyAvailable,
+
+          historyCount: {
+
+            home:
+              recent.home.length,
+
+            away:
+              recent.away.length
+
+          },
+
+          limitations: {
+
+            freeTier:
+              true,
+
+            note:
+              "TheSportsDB free V1 may restrict previous team events."
+
+          },
+
+          durationMs:
+            Date.now() -
+            startedAt
+
+        }
+
+      };
+
+    } catch (
+      error
+    ) {
+
+      return {
+
+        status:
+          "network_error",
+
+        message:
+          error?.message ||
+          String(error),
+
+        data: {
+
+          source:
+            "thesportsdb",
+
+          providerVersion:
+            PROVIDER_VERSION,
+
+          available:
+            false,
+
+          matchFound:
+            false,
+
+          fixture:
+            null,
+
+          recentMatches: {
+
+            home:
+              [],
+
+            away:
+              []
+
+          },
+
+          historyAvailable:
+            false
+
+        }
+
+      };
+
+    }
+
+  }
 
 }
 
 
 /* ==========================================================
-   FIND FIXTURE
+   API KEY
+========================================================== */
+
+function getApiKey(
+  env
+) {
+
+  const envKey =
+
+    env?.THESPORTSDB_API_KEY ||
+
+    env?.THESPORTSDB_KEY ||
+
+    env?.SPORTSDB_API_KEY;
+
+
+  return String(
+    envKey ||
+    DEFAULT_API_KEY
+  ).trim();
+
+}
+
+
+/* ==========================================================
+   FIND FIXTURE
 ========================================================== */
 
 async function findFixture(
-  home,
-  away
+  home,
+  away,
+  apiKey
 ) {
 
-  const patterns = [
-
-    `${home}_vs_${away}`,
-
-    `${home}_v_${away}`,
-
-    `${away}_vs_${home}`,
-
-    `${away}_v_${home}`
-
-  ];
+  const homeName =
+    String(
+      home ||
+      ""
+    ).trim();
 
 
-  for (
-    const pattern
-    of patterns
-  ) {
-
-    try {
-
-      const data =
-        await fetchJSON(
-
-          `${API}/searchevents.php?e=` +
-
-          encodeURIComponent(
-            pattern
-          )
-
-        );
+  const awayName =
+    String(
+      away ||
+      ""
+    ).trim();
 
 
-      const events =
-        Array.isArray(
-          data?.event
-        )
+  if (
+    !homeName ||
+    !awayName
+  ) {
 
-          ? data.event
+    return null;
 
-          : [];
-
-
-      const exact =
-        events.find(
-          event =>
-
-            namesMatch(
-              event?.strHomeTeam,
-              home
-            )
-
-            &&
-
-            namesMatch(
-              event?.strAwayTeam,
-              away
-            )
-
-        );
+  }
 
 
-      if (
-        exact
-      ) {
+  /*
+   * TheSportsDB Search Events searches by event title.
+   *
+   * We deliberately try several title styles because
+   * different events can be stored with different separators
+   * or punctuation.
+   */
 
-        return exact;
-
-      }
-
-    } catch {
-
-      /*
-       * continue
-       */
-
-    }
-
-  }
+  const patterns =
+    buildSearchPatterns(
+      homeName,
+      awayName
+    );
 
 
-  return null;
+  const checked =
+    new Set();
+
+
+  for (
+    const pattern
+    of patterns
+  ) {
+
+    const key =
+      pattern.toLowerCase();
+
+
+    if (
+      checked.has(
+        key
+      )
+    ) {
+
+      continue;
+
+    }
+
+
+    checked.add(
+      key
+    );
+
+
+    try {
+
+      const url =
+
+        `${API_BASE}/${apiKey}/searchevents.php?e=` +
+
+        encodeURIComponent(
+          pattern
+        );
+
+
+      const data =
+        await fetchJSON(
+          url
+        );
+
+
+      const events =
+        Array.isArray(
+          data?.event
+        )
+          ? data.event
+          : [];
+
+
+      const exact =
+        events.find(
+          event =>
+
+            eventMatchesTeams(
+              event,
+              homeName,
+              awayName
+            )
+        );
+
+
+      if (
+        exact
+      ) {
+
+        return exact;
+
+      }
+
+    } catch {
+
+      /*
+       * Continue with the next search pattern.
+       */
+
+    }
+
+  }
+
+
+  return null;
 
 }
 
 
 /* ==========================================================
-   NORMALIZE EVENT
+   BUILD SEARCH PATTERNS
+========================================================== */
+
+function buildSearchPatterns(
+  home,
+  away
+) {
+
+  const patterns = [
+
+    `${home}_vs_${away}`,
+
+    `${home}_v_${away}`,
+
+    `${home} vs ${away}`,
+
+    `${home} v ${away}`,
+
+    `${home}_vs._${away}`,
+
+    `${home} vs. ${away}`,
+
+    `${away}_vs_${home}`,
+
+    `${away}_v_${home}`,
+
+    `${away} vs ${home}`,
+
+    `${away} v ${home}`
+
+  ];
+
+
+  return patterns.filter(
+    value =>
+      String(
+        value ||
+        ""
+      ).trim()
+  );
+
+}
+
+
+/* ==========================================================
+   EVENT TEAM MATCH
+========================================================== */
+
+function eventMatchesTeams(
+  event,
+  home,
+  away
+) {
+
+  if (
+    !event
+  ) {
+
+    return false;
+
+  }
+
+
+  const eventHome =
+    event?.strHomeTeam;
+
+
+  const eventAway =
+    event?.strAwayTeam;
+
+
+  if (
+    !eventHome ||
+    !eventAway
+  ) {
+
+    return false;
+
+  }
+
+
+  /*
+   * Normal orientation.
+   */
+
+  if (
+
+    namesMatch(
+      eventHome,
+      home
+    )
+
+    &&
+
+    namesMatch(
+      eventAway,
+      away
+    )
+
+  ) {
+
+    return true;
+
+  }
+
+
+  /*
+   * We intentionally do NOT accept reversed orientation
+   * here. The fixture must preserve home/away correctly.
+   */
+
+  return false;
+
+}
+
+
+/* ==========================================================
+   RECENT MATCHES
+========================================================== */
+
+async function getRecentMatches(
+  homeId,
+  awayId,
+  apiKey
+) {
+
+  const result = {
+
+    home:
+      [],
+
+    away:
+      []
+
+  };
+
+
+  /*
+   * The free API may only expose a limited subset of
+   * previous events. We therefore query each team
+   * independently and never fabricate missing records.
+   */
+
+
+  if (
+    homeId
+  ) {
+
+    try {
+
+      const data =
+        await fetchJSON(
+
+          `${API_BASE}/${apiKey}/eventslast.php?id=` +
+
+          encodeURIComponent(
+            String(
+              homeId
+            )
+          )
+
+        );
+
+
+      const events =
+        Array.isArray(
+          data?.results
+        )
+          ? data.results
+          : [];
+
+
+      result.home =
+        events
+          .filter(
+            isValidCompletedEvent
+          )
+          .map(
+            normalizeRecentMatch
+          )
+          .filter(
+            Boolean
+          );
+
+    } catch {
+
+      result.home =
+        [];
+
+    }
+
+  }
+
+
+  if (
+    awayId
+  ) {
+
+    try {
+
+      const data =
+        await fetchJSON(
+
+          `${API_BASE}/${apiKey}/eventslast.php?id=` +
+
+          encodeURIComponent(
+            String(
+              awayId
+            )
+          )
+
+        );
+
+
+      const events =
+        Array.isArray(
+          data?.results
+        )
+          ? data.results
+          : [];
+
+
+      result.away =
+        events
+          .filter(
+            isValidCompletedEvent
+          )
+          .map(
+            normalizeRecentMatch
+          )
+          .filter(
+            Boolean
+          );
+
+    } catch {
+
+      result.away =
+        [];
+
+    }
+
+  }
+
+
+  return result;
+
+}
+
+
+/* ==========================================================
+   VALID COMPLETED EVENT
+========================================================== */
+
+function isValidCompletedEvent(
+  event
+) {
+
+  if (
+    !event
+  ) {
+
+    return false;
+
+  }
+
+
+  const homeScore =
+    finiteOrNull(
+      event?.intHomeScore
+    );
+
+
+  const awayScore =
+    finiteOrNull(
+      event?.intAwayScore
+    );
+
+
+  if (
+    homeScore === null ||
+    awayScore === null
+  ) {
+
+    return false;
+
+  }
+
+
+  return true;
+
+}
+
+
+/* ==========================================================
+   NORMALIZE RECENT MATCH
+========================================================== */
+
+function normalizeRecentMatch(
+  event
+) {
+
+  if (
+    !event
+  ) {
+
+    return null;
+
+  }
+
+
+  const homeScore =
+    finiteOrNull(
+      event?.intHomeScore
+    );
+
+
+  const awayScore =
+    finiteOrNull(
+      event?.intAwayScore
+    );
+
+
+  if (
+    homeScore === null ||
+    awayScore === null
+  ) {
+
+    return null;
+
+  }
+
+
+  const utcDate =
+    buildDateTime(
+      event
+    );
+
+
+  return {
+
+    id:
+      String(
+        event?.idEvent ||
+        ""
+      ),
+
+    utcDate,
+
+    date:
+      event?.dateEvent ||
+      null,
+
+    status:
+      "FINISHED",
+
+    homeTeam: {
+
+      id:
+        event?.idHomeTeam ||
+        null,
+
+      name:
+        event?.strHomeTeam ||
+        null,
+
+      shortName:
+        event?.strHomeTeamShort ||
+        null
+
+    },
+
+    awayTeam: {
+
+      id:
+        event?.idAwayTeam ||
+        null,
+
+      name:
+        event?.strAwayTeam ||
+        null,
+
+      shortName:
+        event?.strAwayTeamShort ||
+        null
+
+    },
+
+    score: {
+
+      fullTime: {
+
+        home:
+          homeScore,
+
+        away:
+          awayScore
+
+      }
+
+    },
+
+    tournament:
+      event?.strLeague ||
+      null
+
+  };
+
+}
+
+
+/* ==========================================================
+   NORMALIZE EVENT
 ========================================================== */
 
 function normalizeEvent(
-  event
+  event
 ) {
 
-  const homeScore =
-    finiteOrNull(
-      event?.intHomeScore
-    );
+  const homeScore =
+    finiteOrNull(
+      event?.intHomeScore
+    );
 
 
-  const awayScore =
-    finiteOrNull(
-      event?.intAwayScore
-    );
+  const awayScore =
+    finiteOrNull(
+      event?.intAwayScore
+    );
 
 
-  const finished =
-
-    event?.strStatus ===
-      "Match Finished"
-
-    ||
-
-    event?.strProgress ===
-      "Final"
-
-    ||
-
-    (
-      homeScore !== null &&
-      awayScore !== null &&
-
-      (
-        event?.strStatus ===
-          "FT"
-
-        ||
-
-        event?.strStatus ===
-          "Finished"
-      )
-    );
+  const finished =
+    isFinishedEvent(
+      event,
+      homeScore,
+      awayScore
+    );
 
 
-  return {
+  return {
 
-    id:
-      String(
-        event?.idEvent ||
-        ""
-      ),
+    id:
+      String(
+        event?.idEvent ||
+        ""
+      ),
 
-    utcDate:
+    utcDate:
+      buildDateTime(
+        event
+      ),
 
-      event?.dateEvent
+    date:
+      event?.dateEvent ||
+      null,
 
-        ? `${event.dateEvent}T${
-            event?.strTime ||
-            "00:00:00"
-          }Z`
+    time:
+      event?.strTime ||
+      null,
 
-        : null,
+    status:
+      finished
+        ? "FINISHED"
+        : "SCHEDULED",
 
-    status:
-      finished
-        ? "FINISHED"
-        : "SCHEDULED",
+    homeTeam: {
 
-    homeTeam: {
+      id:
+        event?.idHomeTeam ||
+        null,
 
-      id:
-        event?.idHomeTeam ||
-        null,
+      name:
+        event?.strHomeTeam ||
+        null,
 
-      name:
-        event?.strHomeTeam ||
-        null,
+      shortName:
+        event?.strHomeTeamShort ||
+        null
 
-      shortName:
-        event?.strHomeTeamShort ||
-        null
+    },
 
-    },
+    awayTeam: {
 
-    awayTeam: {
+      id:
+        event?.idAwayTeam ||
+        null,
 
-      id:
-        event?.idAwayTeam ||
-        null,
+      name:
+        event?.strAwayTeam ||
+        null,
 
-      name:
-        event?.strAwayTeam ||
-        null,
+      shortName:
+        event?.strAwayTeamShort ||
+        null
 
-      shortName:
-        event?.strAwayTeamShort ||
-        null
+    },
 
-    },
+    score: {
 
-    score: {
+      fullTime: {
 
-      fullTime: {
+        home:
+          finished
+            ? homeScore
+            : null,
 
-        home:
-          finished
-            ? homeScore
-            : null,
+        away:
+          finished
+            ? awayScore
+            : null
 
-        away:
-          finished
-            ? awayScore
-            : null
+      }
 
-      }
+    },
 
-    },
+    tournament:
+      event?.strLeague ||
+      null
 
-    tournament:
-      event?.strLeague ||
-      null
-
-  };
+  };
 
 }
 
 
 /* ==========================================================
-   FETCH JSON
+   FINISHED EVENT
+========================================================== */
+
+function isFinishedEvent(
+  event,
+  homeScore,
+  awayScore
+) {
+
+  const status =
+    String(
+      event?.strStatus ||
+      ""
+    )
+      .toLowerCase()
+      .trim();
+
+
+  const progress =
+    String(
+      event?.strProgress ||
+      ""
+    )
+      .toLowerCase()
+      .trim();
+
+
+  if (
+    status ===
+      "match finished"
+  ) {
+
+    return true;
+
+  }
+
+
+  if (
+    status ===
+      "ft"
+  ) {
+
+    return true;
+
+  }
+
+
+  if (
+    progress ===
+      "final"
+  ) {
+
+    return true;
+
+  }
+
+
+  return (
+
+    homeScore !== null &&
+
+    awayScore !== null &&
+
+    (
+      status ===
+        "finished"
+      ||
+      status ===
+        "completed"
+    )
+
+  );
+
+}
+
+
+/* ==========================================================
+   BUILD DATE/TIME
+========================================================== */
+
+function buildDateTime(
+  event
+) {
+
+  /*
+   * Some TheSportsDB records contain strTimestamp.
+   * Prefer it when it is a valid timestamp.
+   */
+
+  const timestamp =
+    event?.strTimestamp;
+
+
+  if (
+    timestamp
+  ) {
+
+    const parsed =
+      new Date(
+        timestamp
+      );
+
+
+    if (
+      !Number.isNaN(
+        parsed.getTime()
+      )
+    ) {
+
+      return parsed.toISOString();
+
+    }
+
+  }
+
+
+  const date =
+    String(
+      event?.dateEvent ||
+      ""
+    ).trim();
+
+
+  const time =
+    String(
+      event?.strTime ||
+      ""
+    ).trim();
+
+
+  if (
+    !date
+  ) {
+
+    return null;
+
+  }
+
+
+  /*
+   * Important:
+   * dateEvent is supplied by TheSportsDB in the event's
+   * local timezone. We therefore do NOT append "Z" here,
+   * because doing so would falsely claim that the value
+   * is UTC.
+   */
+
+  if (
+    time
+  ) {
+
+    return `${date}T${time}`;
+
+  }
+
+
+  return date;
+
+}
+
+
+/* ==========================================================
+   FETCH JSON
 ========================================================== */
 
 async function fetchJSON(
-  url
+  url
 ) {
 
-  const response =
-    await fetch(
-      url,
-      {
+  const response =
+    await fetch(
+      url,
+      {
 
-        method:
-          "GET",
+        headers: {
 
-        headers: {
+          Accept:
+            "application/json",
 
-          Accept:
-            "application/json",
+          "User-Agent":
+            `YCB-Football-Prediction-Engine/${PROVIDER_VERSION}`
 
-          "User-Agent":
-            "YCB-Football-Prediction-Engine/4.0.0"
+        }
 
-        }
-
-      }
-    );
+      }
+    );
 
 
-  const text =
-    await response.text();
+  const text =
+    await response.text();
 
 
-  let data;
+  let data =
+    null;
 
 
-  try {
+  try {
 
-    data =
-      text
-        ? JSON.parse(
-            text
-          )
+    data =
+      text
+        ? JSON.parse(
+            text
+          )
+        : null;
 
-        : null;
+  } catch {
 
-  } catch {
+    throw new Error(
+      "TheSportsDB returned invalid JSON"
+    );
 
-    throw new Error(
-      "TheSportsDB returned invalid JSON"
-    );
-
-  }
-
-
-  if (
-    !response.ok
-  ) {
-
-    throw new Error(
-      `TheSportsDB HTTP ${response.status}`
-    );
-
-  }
+  }
 
 
-  return data;
+  if (
+    !response.ok
+  ) {
+
+    if (
+      response.status ===
+      429
+    ) {
+
+      throw new Error(
+        "TheSportsDB rate limit reached (HTTP 429)"
+      );
+
+    }
+
+
+    throw new Error(
+      `TheSportsDB HTTP ${response.status}`
+    );
+
+  }
+
+
+  return data;
 
 }
 
 
 /* ==========================================================
-   NORMALIZE NAME
+   NORMALIZE NAME
 ========================================================== */
 
 function normalizeName(
-  value
+  value
 ) {
 
-  return String(
-    value ||
-    ""
-  )
+  return String(
+    value ||
+    ""
+  )
 
-    .toLowerCase()
+    .toLowerCase()
 
-    .trim()
+    .trim()
 
-    .normalize(
-      "NFD"
-    )
+    .normalize(
+      "NFD"
+    )
 
-    .replace(
-      /[\u0300-\u036f]/g,
-      ""
-    )
+    .replace(
+      /[\u0300-\u036f]/g,
+      ""
+    )
 
-    .replace(
-      /&/g,
-      " and "
-    )
+    .replace(
+      /&/g,
+      " and "
+    )
 
-    .replace(
-      /\b(fc|cf|afc|sc|ac|fk|club|the)\b/g,
-      " "
-    )
+    .replace(
+      /\b(fc|cf|afc|sc|ac|fk|club|the)\b/g,
+      " "
+    )
 
-    .replace(
-      /[^a-z0-9\u0600-\u06ff\s]/gi,
-      " "
-    )
+    .replace(
+      /[^a-z0-9\u0600-\u06ff\s]/gi,
+      " "
+    )
 
-    .replace(
-      /\s+/g,
-      " "
-    )
+    .replace(
+      /\s+/g,
+      " "
+    )
 
-    .trim();
+    .trim();
 
 }
 
 
 /* ==========================================================
-   NAME MATCH
+   NAME MATCH
 ========================================================== */
 
 function namesMatch(
-  first,
-  second
+  first,
+  second
 ) {
 
-  const a =
-    normalizeName(
-      first
-    );
+  const a =
+    normalizeName(
+      first
+    );
 
 
-  const b =
-    normalizeName(
-      second
-    );
+  const b =
+    normalizeName(
+      second
+    );
 
 
-  if (
-    !a ||
-    !b
-  ) {
+  if (
+    !a ||
+    !b
+  ) {
 
-    return false;
+    return false;
 
-  }
-
-
-  if (
-    a === b ||
-    a.includes(b) ||
-    b.includes(a)
-  ) {
-
-    return true;
-
-  }
+  }
 
 
-  const ta =
-    new Set(
+  /*
+   * Exact normalized match.
+   */
 
-      a
-        .split(" ")
-        .filter(
-          x =>
-            x.length >= 3
-        )
+  if (
+    a === b
+  ) {
 
-    );
+    return true;
 
-
-  const tb =
-    b
-      .split(" ")
-      .filter(
-        x =>
-          x.length >= 3
-      );
+  }
 
 
-  return (
+  /*
+   * Containment is useful for:
+   *
+   * Manchester United
+   * Manchester United FC
+   */
 
-    tb.filter(
-      x =>
-        ta.has(x)
-    ).length
+  if (
+    a.includes(b) ||
+    b.includes(a)
+  ) {
 
-    >=
+    return true;
 
-    Math.min(
-      2,
-      tb.length
-    )
+  }
 
-  );
+
+  const ta =
+    new Set(
+
+      a
+        .split(
+          " "
+        )
+        .filter(
+          token =>
+            token.length >= 3
+        )
+
+    );
+
+
+  const tb =
+    b
+      .split(
+        " "
+      )
+      .filter(
+        token =>
+          token.length >= 3
+      );
+
+
+  if (
+    ta.size === 0 ||
+    tb.length === 0
+  ) {
+
+    return false;
+
+  }
+
+
+  const overlap =
+    tb.filter(
+      token =>
+        ta.has(
+          token
+        )
+    ).length;
+
+
+  /*
+   * Require all tokens when the target name is short,
+   * otherwise at least two meaningful tokens.
+   */
+
+  if (
+    tb.length === 1
+  ) {
+
+    return overlap >= 1;
+
+  }
+
+
+  return (
+    overlap >=
+    Math.min(
+      2,
+      tb.length
+    )
+  );
 
 }
 
 
 /* ==========================================================
-   NUMBER
+   NUMBER
 ========================================================== */
 
 function finiteOrNull(
-  value
+  value
 ) {
 
-  if (
-    value === null ||
-    value === undefined ||
-    value === ""
-  ) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
 
-    return null;
+    return null;
 
-  }
-
-
-  const number =
-    Number(
-      value
-    );
+  }
 
 
-  return Number.isFinite(
-    number
-  )
+  const number =
+    Number(
+      value
+    );
 
-    ? number
 
-    : null;
+  return Number.isFinite(
+    number
+  )
+    ? number
+    : null;
 
 }
 
 
 /* ==========================================================
-   REGISTER
+   REGISTER
 ========================================================== */
 
 const provider =
-  new TheSportsDBProvider();
+  new TheSportsDBProvider();
 
 
 registerProvider(
-  provider
+  provider
 );
 
 
