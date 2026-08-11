@@ -5,17 +5,9 @@
 // Independent fixture verification + recent form provider.
 //
 // Compatible with:
-//   providers.js 3.0.1
-//
-// Main improvements:
-//   1. More flexible fixture search.
-//   2. Uses TheSportsDB team IDs when available.
-//   3. Attempts to collect recent matches.
-//   4. Normalizes recent matches for the prediction engine.
-//   5. Does NOT fake missing statistics.
-//   6. Keeps api_ok_no_match separate from success.
-//   7. Supports env.THESPORTSDB_API_KEY when available.
-//   8. Handles TheSportsDB's free-tier limitations safely.
+//   providers.js 3.1.0
+//   providerRunner.js 3.1.0
+//   statsCollector.js 3.1.0
 //
 // ==========================================================
 
@@ -139,20 +131,14 @@ class TheSportsDBProvider
       }
 
 
-      const homeId =
-        fixture?.idHomeTeam ||
-        null;
-
-
-      const awayId =
-        fixture?.idAwayTeam ||
-        null;
-
-
       const recent =
         await getRecentMatches(
-          homeId,
-          awayId,
+          fixture?.idHomeTeam ||
+            null,
+
+          fixture?.idAwayTeam ||
+            null,
+
           apiKey
         );
 
@@ -164,15 +150,8 @@ class TheSportsDBProvider
 
 
       const historyAvailable =
-        (
-          recent.home.length >
-          0
-        )
-        ||
-        (
-          recent.away.length >
-          0
-        );
+        recent.home.length > 0 ||
+        recent.away.length > 0;
 
 
       return {
@@ -307,7 +286,6 @@ function getApiKey(
 ) {
 
   const envKey =
-
     env?.THESPORTSDB_API_KEY ||
 
     env?.THESPORTSDB_KEY ||
@@ -357,14 +335,6 @@ async function findFixture(
   }
 
 
-  /*
-   * TheSportsDB Search Events searches by event title.
-   *
-   * We deliberately try several title styles because
-   * different events can be stored with different separators
-   * or punctuation.
-   */
-
   const patterns =
     buildSearchPatterns(
       homeName,
@@ -404,7 +374,6 @@ async function findFixture(
     try {
 
       const url =
-
         `${API_BASE}/${apiKey}/searchevents.php?e=` +
 
         encodeURIComponent(
@@ -429,7 +398,6 @@ async function findFixture(
       const exact =
         events.find(
           event =>
-
             eventMatchesTeams(
               event,
               homeName,
@@ -448,9 +416,7 @@ async function findFixture(
 
     } catch {
 
-      /*
-       * Continue with the next search pattern.
-       */
+      // Continue.
 
     }
 
@@ -463,7 +429,7 @@ async function findFixture(
 
 
 /* ==========================================================
-   BUILD SEARCH PATTERNS
+   SEARCH PATTERNS
 ========================================================== */
 
 function buildSearchPatterns(
@@ -471,7 +437,7 @@ function buildSearchPatterns(
   away
 ) {
 
-  const patterns = [
+  return [
 
     `${home}_vs_${away}`,
 
@@ -495,15 +461,6 @@ function buildSearchPatterns(
 
   ];
 
-
-  return patterns.filter(
-    value =>
-      String(
-        value ||
-        ""
-      ).trim()
-  );
-
 }
 
 
@@ -518,7 +475,8 @@ function eventMatchesTeams(
 ) {
 
   if (
-    !event
+    !event?.strHomeTeam ||
+    !event?.strAwayTeam
   ) {
 
     return false;
@@ -526,55 +484,21 @@ function eventMatchesTeams(
   }
 
 
-  const eventHome =
-    event?.strHomeTeam;
-
-
-  const eventAway =
-    event?.strAwayTeam;
-
-
-  if (
-    !eventHome ||
-    !eventAway
-  ) {
-
-    return false;
-
-  }
-
-
-  /*
-   * Normal orientation.
-   */
-
-  if (
+  return (
 
     namesMatch(
-      eventHome,
+      event.strHomeTeam,
       home
     )
 
     &&
 
     namesMatch(
-      eventAway,
+      event.strAwayTeam,
       away
     )
 
-  ) {
-
-    return true;
-
-  }
-
-
-  /*
-   * We intentionally do NOT accept reversed orientation
-   * here. The fixture must preserve home/away correctly.
-   */
-
-  return false;
+  );
 
 }
 
@@ -598,13 +522,6 @@ async function getRecentMatches(
       []
 
   };
-
-
-  /*
-   * The free API may only expose a limited subset of
-   * previous events. We therefore query each team
-   * independently and never fabricate missing records.
-   */
 
 
   if (
@@ -637,12 +554,15 @@ async function getRecentMatches(
 
       result.home =
         events
+
           .filter(
             isValidCompletedEvent
           )
+
           .map(
             normalizeRecentMatch
           )
+
           .filter(
             Boolean
           );
@@ -687,12 +607,15 @@ async function getRecentMatches(
 
       result.away =
         events
+
           .filter(
             isValidCompletedEvent
           )
+
           .map(
             normalizeRecentMatch
           )
+
           .filter(
             Boolean
           );
@@ -731,27 +654,23 @@ function isValidCompletedEvent(
 
   const homeScore =
     finiteOrNull(
-      event?.intHomeScore
+      event.intHomeScore
     );
 
 
   const awayScore =
     finiteOrNull(
-      event?.intAwayScore
+      event.intAwayScore
     );
 
 
-  if (
-    homeScore === null ||
-    awayScore === null
-  ) {
+  return (
 
-    return false;
+    homeScore !== null &&
 
-  }
+    awayScore !== null
 
-
-  return true;
+  );
 
 }
 
@@ -763,15 +682,6 @@ function isValidCompletedEvent(
 function normalizeRecentMatch(
   event
 ) {
-
-  if (
-    !event
-  ) {
-
-    return null;
-
-  }
-
 
   const homeScore =
     finiteOrNull(
@@ -795,12 +705,6 @@ function normalizeRecentMatch(
   }
 
 
-  const utcDate =
-    buildDateTime(
-      event
-    );
-
-
   return {
 
     id:
@@ -809,7 +713,10 @@ function normalizeRecentMatch(
         ""
       ),
 
-    utcDate,
+    utcDate:
+      buildDateTime(
+        event
+      ),
 
     date:
       event?.dateEvent ||
@@ -1014,48 +921,39 @@ function isFinishedEvent(
       .trim();
 
 
-  if (
-    status ===
-      "match finished"
-  ) {
-
-    return true;
-
-  }
-
-
-  if (
-    status ===
-      "ft"
-  ) {
-
-    return true;
-
-  }
-
-
-  if (
-    progress ===
-      "final"
-  ) {
-
-    return true;
-
-  }
-
-
   return (
 
-    homeScore !== null &&
+    status ===
+      "match finished"
 
-    awayScore !== null &&
+    ||
+
+    status ===
+      "ft"
+
+    ||
+
+    progress ===
+      "final"
+
+    ||
 
     (
-      status ===
-        "finished"
-      ||
-      status ===
-        "completed"
+
+      homeScore !== null &&
+
+      awayScore !== null &&
+
+      (
+        status ===
+          "finished"
+
+        ||
+
+        status ===
+          "completed"
+      )
+
     )
 
   );
@@ -1064,17 +962,12 @@ function isFinishedEvent(
 
 
 /* ==========================================================
-   BUILD DATE/TIME
+   DATE/TIME
 ========================================================== */
 
 function buildDateTime(
   event
 ) {
-
-  /*
-   * Some TheSportsDB records contain strTimestamp.
-   * Prefer it when it is a valid timestamp.
-   */
 
   const timestamp =
     event?.strTimestamp;
@@ -1126,24 +1019,9 @@ function buildDateTime(
   }
 
 
-  /*
-   * Important:
-   * dateEvent is supplied by TheSportsDB in the event's
-   * local timezone. We therefore do NOT append "Z" here,
-   * because doing so would falsely claim that the value
-   * is UTC.
-   */
-
-  if (
-    time
-  ) {
-
-    return `${date}T${time}`;
-
-  }
-
-
-  return date;
+  return time
+    ? `${date}T${time}`
+    : date;
 
 }
 
@@ -1179,8 +1057,7 @@ async function fetchJSON(
     await response.text();
 
 
-  let data =
-    null;
+  let data;
 
 
   try {
@@ -1311,10 +1188,6 @@ function namesMatch(
   }
 
 
-  /*
-   * Exact normalized match.
-   */
-
   if (
     a === b
   ) {
@@ -1323,13 +1196,6 @@ function namesMatch(
 
   }
 
-
-  /*
-   * Containment is useful for:
-   *
-   * Manchester United
-   * Manchester United FC
-   */
 
   if (
     a.includes(b) ||
@@ -1345,9 +1211,7 @@ function namesMatch(
     new Set(
 
       a
-        .split(
-          " "
-        )
+        .split(" ")
         .filter(
           token =>
             token.length >= 3
@@ -1358,9 +1222,7 @@ function namesMatch(
 
   const tb =
     b
-      .split(
-        " "
-      )
+      .split(" ")
       .filter(
         token =>
           token.length >= 3
@@ -1368,7 +1230,6 @@ function namesMatch(
 
 
   if (
-    ta.size === 0 ||
     tb.length === 0
   ) {
 
@@ -1380,32 +1241,18 @@ function namesMatch(
   const overlap =
     tb.filter(
       token =>
-        ta.has(
-          token
-        )
+        ta.has(token)
     ).length;
 
 
-  /*
-   * Require all tokens when the target name is short,
-   * otherwise at least two meaningful tokens.
-   */
-
-  if (
-    tb.length === 1
-  ) {
-
-    return overlap >= 1;
-
-  }
-
-
   return (
+
     overlap >=
     Math.min(
       2,
       tb.length
     )
+
   );
 
 }
@@ -1459,3 +1306,8 @@ registerProvider(
 
 
 export default provider;
+
+
+// ==========================================================
+// END theSportsDBProvider.js
+// ==========================================================
