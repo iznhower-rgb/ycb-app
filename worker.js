@@ -1,19 +1,52 @@
 // ==========================================================
-// Y.C.B FINAL WORKER 3.0.1
+// Y.C.B FINAL WORKER 4.0.0
+// ==========================================================
+//
+// Main application worker.
+//
+// Responsibilities:
+//   - Serve HTML application
+//   - API endpoints
+//   - Request parsing
+//   - Provider orchestration
+//   - Prediction model
+//   - Data quality
+//
+// Provider registry:
+//   providers.js
+//
+// Provider execution:
+//   providerRunner.js
+//
+// Statistics collection:
+//   statsCollector.js
+//
 // ==========================================================
 
+
 import {
-  getProviders,
-  getAllMatchData
+  getProviders
 } from "./providers.js";
+
+
+import {
+  getAllMatchData
+} from "./providerRunner.js";
+
+
+import {
+  mergeProviderData,
+  buildTeamAnalysis
+} from "./statsCollector.js";
 
 
 import "./espnProvider.js";
 import "./theSportsDBProvider.js";
 import "./bsdProvider.js";
 
+
 const VERSION =
-  "3.0.1";
+  "4.0.0";
 
 
 /* ==========================================================
@@ -266,7 +299,7 @@ Y.C.B
 </h1>
 
 <div class="subtitle">
-Football Prediction Engine 3.0.1
+Football Prediction Engine 4.0.0
 </div>
 
 
@@ -562,7 +595,7 @@ async function analyzeMatch(){
 
 
   status.textContent =
-    "جاري جمع البيانات من المصدرين والتحليل...";
+    "جاري جمع البيانات من المصادر والتحليل...";
 
 
   try{
@@ -1175,7 +1208,9 @@ export default {
           );
 
 
-        if(!parsed){
+        if(
+          !parsed
+        ){
 
           return json(
 
@@ -1225,7 +1260,12 @@ export default {
 
 
         /* ==================================================
-           MERGE
+           STATISTICS COLLECTOR
+           
+           Imported from statsCollector.js
+           
+           No statistics collection functions are
+           duplicated inside this worker.
         ================================================== */
 
         const merged =
@@ -1294,7 +1334,9 @@ export default {
 
 
         /* ==================================================
-           ANALYSIS
+           TEAM ANALYSIS
+           
+           Imported from statsCollector.js
         ================================================== */
 
         const analysis =
@@ -1676,537 +1718,7 @@ function parseMatch(
 
 
 /* ==========================================================
-   MERGE PROVIDER DATA
-========================================================== */
-
-function mergeProviderData(
-  results
-){
-
-  let fixture =
-    null;
-
-
-  const homeMatches =
-    [];
-
-
-  const awayMatches =
-    [];
-
-
-  for(
-    const item
-    of results
-  ){
-
-    const data =
-      item.data ||
-      {};
-
-
-    if(
-      !fixture &&
-      data.fixture
-    ){
-
-      fixture =
-        data.fixture;
-
-    }
-
-
-    if(
-      Array.isArray(
-        data.recentMatches?.home
-      )
-    ){
-
-      homeMatches.push(
-        ...data.recentMatches.home
-      );
-
-    }
-
-
-    if(
-      Array.isArray(
-        data.recentMatches?.away
-      )
-    ){
-
-      awayMatches.push(
-        ...data.recentMatches.away
-      );
-
-    }
-
-  }
-
-
-  return {
-
-    fixture,
-
-    homeMatches:
-      dedupeMatches(
-        homeMatches
-      ),
-
-    awayMatches:
-      dedupeMatches(
-        awayMatches
-      )
-
-  };
-
-}
-
-
-/* ==========================================================
-   DEDUPE
-========================================================== */
-
-function dedupeMatches(
-  matches
-){
-
-  const seen =
-    new Set();
-
-
-  return matches
-
-    .filter(
-      match => {
-
-        const key =
-          String(
-
-            match.id ||
-
-            [
-              match.utcDate,
-              match.homeTeam?.name,
-              match.awayTeam?.name
-            ].join("|")
-
-          );
-
-
-        if(
-          seen.has(
-            key
-          )
-        ){
-
-          return false;
-
-        }
-
-
-        seen.add(
-          key
-        );
-
-
-        return true;
-
-      }
-    )
-
-    .sort(
-      (a,b) =>
-        new Date(
-          b.utcDate ||
-          0
-        ) -
-
-        new Date(
-          a.utcDate ||
-          0
-        )
-    )
-
-    .slice(
-      0,
-      15
-    );
-
-}
-
-
-/* ==========================================================
-   TEAM ANALYSIS
-========================================================== */
-
-function buildTeamAnalysis(
-  homeName,
-  awayName,
-  merged
-){
-
-  const home =
-    calculateTeamStats(
-      homeName,
-      merged.homeMatches
-    );
-
-
-  const away =
-    calculateTeamStats(
-      awayName,
-      merged.awayMatches
-    );
-
-
-  const homeXg =
-    clamp(
-
-      (
-        home.goalsForAvg *
-        0.55
-
-        +
-
-        away.goalsAgainstAvg *
-        0.45
-
-      )
-
-      *
-
-      1.08,
-
-      0.15,
-
-      4
-
-    );
-
-
-  const awayXg =
-    clamp(
-
-      (
-        away.goalsForAvg *
-        0.55
-
-        +
-
-        home.goalsAgainstAvg *
-        0.45
-
-      )
-
-      *
-
-      0.92,
-
-      0.10,
-
-      3.50
-
-    );
-
-
-  return {
-
-    home,
-
-    away,
-
-    model:
-      buildModel(
-        homeXg,
-        awayXg
-      )
-
-  };
-
-}
-
-
-/* ==========================================================
-   TEAM STATS
-========================================================== */
-
-function calculateTeamStats(
-  teamName,
-  matches
-){
-
-  const team =
-    normalizeName(
-      teamName
-    );
-
-
-  const usable =
-    matches
-
-      .map(
-        match => {
-
-          const home =
-            normalizeName(
-              match.homeTeam?.name
-            );
-
-
-          const away =
-            normalizeName(
-              match.awayTeam?.name
-            );
-
-
-          const homeGoals =
-            Number(
-              match.score?.fullTime?.home
-            );
-
-
-          const awayGoals =
-            Number(
-              match.score?.fullTime?.away
-            );
-
-
-          if(
-
-            !Number.isFinite(
-              homeGoals
-            )
-
-            ||
-
-            !Number.isFinite(
-              awayGoals
-            )
-
-            ||
-
-            (
-
-              !namesMatch(
-                home,
-                team
-              )
-
-              &&
-
-              !namesMatch(
-                away,
-                team
-              )
-
-            )
-
-          ){
-
-            return null;
-
-          }
-
-
-          const isHome =
-            namesMatch(
-              home,
-              team
-            );
-
-
-          const gf =
-            isHome
-              ? homeGoals
-              : awayGoals;
-
-
-          const ga =
-            isHome
-              ? awayGoals
-              : homeGoals;
-
-
-          return {
-
-            gf,
-
-            ga,
-
-            result:
-
-              gf > ga
-                ? "W"
-
-                : gf < ga
-                  ? "L"
-                  : "D"
-
-          };
-
-        }
-      )
-
-      .filter(
-        Boolean
-      );
-
-
-  const last5 =
-    usable.slice(
-      0,
-      5
-    );
-
-
-  const last10 =
-    usable.slice(
-      0,
-      10
-    );
-
-
-  const average =
-    (
-      items,
-      key
-    ) =>
-
-      items.length
-
-        ? items.reduce(
-            (
-              sum,
-              item
-            ) =>
-              sum +
-              item[key],
-
-            0
-          )
-
-          /
-
-          items.length
-
-        : 0;
-
-
-  const gf5 =
-    average(
-      last5,
-      "gf"
-    );
-
-
-  const gf10 =
-    average(
-      last10,
-      "gf"
-    );
-
-
-  const ga5 =
-    average(
-      last5,
-      "ga"
-    );
-
-
-  const ga10 =
-    average(
-      last10,
-      "ga"
-    );
-
-
-  const wins =
-    usable.filter(
-      item =>
-        item.result ===
-        "W"
-    ).length;
-
-
-  const draws =
-    usable.filter(
-      item =>
-        item.result ===
-        "D"
-    ).length;
-
-
-  const formPoints =
-    wins * 3 +
-    draws;
-
-
-  return {
-
-    team:
-      teamName,
-
-    games:
-      usable.length,
-
-    wins,
-
-    draws,
-
-    losses:
-      usable.length -
-      wins -
-      draws,
-
-    formPoints,
-
-    formRate:
-      round(
-
-        usable.length
-
-          ? formPoints /
-            (
-              usable.length *
-              3
-            )
-
-          : 0
-
-      ),
-
-    goalsForAvg:
-      round(
-
-        last5.length
-
-          ? gf5 * 0.60 +
-            gf10 * 0.40
-
-          : gf10
-
-      ),
-
-    goalsAgainstAvg:
-      round(
-
-        last5.length
-
-          ? ga5 * 0.60 +
-            ga10 * 0.40
-
-          : ga10
-
-      )
-
-  };
-
-}
-
-
-/* ==========================================================
-   POISSON
+   POISSON MODEL
 ========================================================== */
 
 function buildModel(
@@ -2568,7 +2080,10 @@ function buildPredictions(
     )
 
     .sort(
-      (a,b) =>
+      (
+        a,
+        b
+      ) =>
         b.probabilityValue -
         a.probabilityValue
     )
@@ -2602,7 +2117,7 @@ function buildPredictions(
 
     predictedScore:
 
-      `${model.bestScore.home} - ${model.bestScore.away}`
+      `${analysis.model.bestScore.home} - ${analysis.model.bestScore.away}`
 
   };
 
@@ -3081,142 +2596,6 @@ function fallbackPredictions(
     }
 
   ];
-
-}
-
-
-/* ==========================================================
-   NORMALIZE TEAM NAME
-========================================================== */
-
-function normalizeName(
-  value
-){
-
-  return String(
-    value ||
-    ""
-  )
-
-    .toLowerCase()
-
-    .trim()
-
-    .normalize(
-      "NFD"
-    )
-
-    .replace(
-      /[\u0300-\u036f]/g,
-      ""
-    )
-
-    .replace(
-      /&/g,
-      " and "
-    )
-
-    .replace(
-      /\b(fc|cf|afc|sc|ac|fk|club|the)\b/g,
-      " "
-    )
-
-    .replace(
-      /[^a-z0-9\u0600-\u06ff\s]/gi,
-      " "
-    )
-
-    .replace(
-      /\s+/g,
-      " "
-    )
-
-    .trim();
-
-}
-
-
-/* ==========================================================
-   NAME MATCH
-========================================================== */
-
-function namesMatch(
-  first,
-  second
-){
-
-  const a =
-    normalizeName(
-      first
-    );
-
-
-  const b =
-    normalizeName(
-      second
-    );
-
-
-  if(
-    !a ||
-    !b
-  ){
-
-    return false;
-
-  }
-
-
-  if(
-    a === b ||
-    a.includes(b) ||
-    b.includes(a)
-  ){
-
-    return true;
-
-  }
-
-
-  const ta =
-    new Set(
-
-      a
-        .split(" ")
-        .filter(
-          item =>
-            item.length >= 3
-        )
-
-    );
-
-
-  const tb =
-    b
-      .split(" ")
-      .filter(
-        item =>
-          item.length >= 3
-      );
-
-
-  return (
-
-    tb.filter(
-      item =>
-        ta.has(
-          item
-        )
-    ).length
-
-    >=
-
-    Math.min(
-      2,
-      tb.length
-    )
-
-  );
 
 }
 
