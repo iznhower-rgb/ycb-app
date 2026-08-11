@@ -1,23 +1,23 @@
 // ==========================================================
-// Y.C.B STATS COLLECTOR 3.0.1
+// Y.C.B STATS COLLECTOR 3.1.0
 // ==========================================================
 //
-// مسؤولية هذا الملف:
+// Responsibilities:
 //
-// 1. دمج بيانات مزودي البيانات
-// 2. إزالة المباريات المكررة
-// 3. بناء إحصائيات الفريق
-// 4. حساب xG الأساسي
-// 5. توحيد أسماء الفرق
-// 6. مطابقة أسماء الفرق
+//   mergeProviderData()
+//   dedupeMatches()
+//   buildTeamAnalysis()
+//   calculateTeamStats()
+//   normalizeName()
+//   namesMatch()
 //
-// لا يحتوي هذا الملف على:
+// This file contains statistics collection only.
 //
-// - getAllMatchData()
-// - registerProvider()
-// - DataProvider
-// - HTTP requests
-// - Worker routes
+// It does NOT:
+//   - register providers
+//   - execute providers
+//   - handle HTTP requests
+//   - generate HTML
 //
 // ==========================================================
 
@@ -28,7 +28,7 @@
 
 export function mergeProviderData(
   results
-){
+) {
 
   let fixture =
     null;
@@ -42,25 +42,20 @@ export function mergeProviderData(
     [];
 
 
-  const safeResults =
-    Array.isArray(
-      results
-    )
-
-      ? results
-
-      : [];
+  const sourceProviders =
+    [];
 
 
-  for(
+  for (
     const item
-    of safeResults
-  ){
+    of Array.isArray(results)
+      ? results
+      : []
+  ) {
 
-    if(
-      !item ||
-      !item.data
-    ){
+    if (
+      !item
+    ) {
 
       continue;
 
@@ -68,17 +63,14 @@ export function mergeProviderData(
 
 
     const data =
-      item.data;
+      item.data ||
+      {};
 
 
-    /*
-     * أول fixture صالح.
-     */
-
-    if(
+    if (
       !fixture &&
       data.fixture
-    ){
+    ) {
 
       fixture =
         data.fixture;
@@ -86,15 +78,22 @@ export function mergeProviderData(
     }
 
 
-    /*
-     * مباريات الفريق المضيف.
-     */
+    if (
+      item.provider
+    ) {
 
-    if(
+      sourceProviders.push(
+        item.provider
+      );
+
+    }
+
+
+    if (
       Array.isArray(
         data.recentMatches?.home
       )
-    ){
+    ) {
 
       homeMatches.push(
         ...data.recentMatches.home
@@ -103,15 +102,11 @@ export function mergeProviderData(
     }
 
 
-    /*
-     * مباريات الفريق الضيف.
-     */
-
-    if(
+    if (
       Array.isArray(
         data.recentMatches?.away
       )
-    ){
+    ) {
 
       awayMatches.push(
         ...data.recentMatches.away
@@ -134,7 +129,14 @@ export function mergeProviderData(
     awayMatches:
       dedupeMatches(
         awayMatches
-      )
+      ),
+
+    sourceProviders:
+      [
+        ...new Set(
+          sourceProviders
+        )
+      ]
 
   };
 
@@ -147,122 +149,102 @@ export function mergeProviderData(
 
 export function dedupeMatches(
   matches
-){
-
-  if(
-    !Array.isArray(
-      matches
-    )
-  ){
-
-    return [];
-
-  }
-
+) {
 
   const seen =
     new Set();
 
 
-  return matches
-
-    .filter(
-      match => {
-
-        if(
-          !match
-        ){
-
-          return false;
-
-        }
+  const result =
+    [];
 
 
-        const key =
+  for (
+    const match
+    of Array.isArray(matches)
+      ? matches
+      : []
+  ) {
 
-          match.id
+    if (
+      !match
+    ) {
 
-            ? String(
-                match.id
-              )
+      continue;
 
-            : [
-
-                match.utcDate ||
-                  "",
-
-                match.homeTeam?.name ||
-                  "",
-
-                match.awayTeam?.name ||
-                  ""
-
-              ].join(
-                "|"
-              );
+    }
 
 
-        if(
-          seen.has(
-            key
-          )
-        ){
+    const key =
+      String(
 
-          return false;
+        match.id ||
 
-        }
+        [
+          match.utcDate,
+          match.date,
+          match.homeTeam?.name,
+          match.awayTeam?.name,
+          match.score?.fullTime?.home,
+          match.score?.fullTime?.away
+        ].join("|")
+
+      );
 
 
-        seen.add(
-          key
+    if (
+      seen.has(
+        key
+      )
+    ) {
+
+      continue;
+
+    }
+
+
+    seen.add(
+      key
+    );
+
+
+    result.push(
+      match
+    );
+
+  }
+
+
+  result.sort(
+    (
+      a,
+      b
+    ) => {
+
+      const da =
+        parseDate(
+          a?.utcDate ||
+          a?.date
         );
 
 
-        return true;
-
-      }
-    )
-
-
-    /*
-     * الأحدث أولاً.
-     */
-
-    .sort(
-      (
-        a,
-        b
-      ) => {
-
-        const dateA =
-          new Date(
-            a.utcDate ||
-            0
-          ).getTime();
+      const db =
+        parseDate(
+          b?.utcDate ||
+          b?.date
+        );
 
 
-        const dateB =
-          new Date(
-            b.utcDate ||
-            0
-          ).getTime();
+      return db - da;
+
+    }
+  );
 
 
-        return dateB -
-               dateA;
-
-      }
-    )
-
-
-    /*
-     * نحتفظ بحد أقصى 15 مباراة.
-     */
-
-    .slice(
-      0,
-      15
-    );
+  return result.slice(
+    0,
+    15
+  );
 
 }
 
@@ -275,48 +257,28 @@ export function buildTeamAnalysis(
   homeName,
   awayName,
   merged
-){
+) {
 
   const safeMerged =
-    merged &&
-    typeof merged ===
-      "object"
-
-      ? merged
-
-      : {};
+    merged ||
+    {};
 
 
   const home =
     calculateTeamStats(
       homeName,
-      Array.isArray(
-        safeMerged.homeMatches
-      )
-        ? safeMerged.homeMatches
-        : []
+      safeMerged.homeMatches ||
+      []
     );
 
 
   const away =
     calculateTeamStats(
       awayName,
-      Array.isArray(
-        safeMerged.awayMatches
-      )
-        ? safeMerged.awayMatches
-        : []
+      safeMerged.awayMatches ||
+      []
     );
 
-
-  /*
-   * xG المضيف:
-   *
-   * 55% من قوة هجومه
-   * 45% من معدل استقبال الخصم
-   *
-   * مع أفضلية الملعب 1.08
-   */
 
   const homeXg =
     clamp(
@@ -343,15 +305,6 @@ export function buildTeamAnalysis(
 
     );
 
-
-  /*
-   * xG الضيف:
-   *
-   * 55% من قوة هجومه
-   * 45% من معدل استقبال المضيف
-   *
-   * مع معامل 0.92 للعب خارج الملعب.
-   */
 
   const awayXg =
     clamp(
@@ -411,7 +364,7 @@ export function buildTeamAnalysis(
 export function calculateTeamStats(
   teamName,
   matches
-){
+) {
 
   const team =
     normalizeName(
@@ -419,80 +372,64 @@ export function calculateTeamStats(
     );
 
 
-  const safeMatches =
-    Array.isArray(
-      matches
-    )
-      ? matches
-      : [];
-
-
   const usable =
-    safeMatches
+    (
+      Array.isArray(matches)
+        ? matches
+        : []
+    )
 
-      .map(
-        match => {
+    .map(
+      match => {
 
-          if(
-            !match
-          ){
+        if (
+          !match
+        ) {
 
-            return null;
+          return null;
 
-          }
-
-
-          const home =
-            normalizeName(
-              match.homeTeam?.name
-            );
+        }
 
 
-          const away =
-            normalizeName(
-              match.awayTeam?.name
-            );
+        const home =
+          normalizeName(
+            match.homeTeam?.name
+          );
 
 
-          const homeGoals =
-            finiteOrNull(
-              match.score?.fullTime?.home
-            );
+        const away =
+          normalizeName(
+            match.awayTeam?.name
+          );
 
 
-          const awayGoals =
-            finiteOrNull(
-              match.score?.fullTime?.away
-            );
+        const homeGoals =
+          Number(
+            match.score?.fullTime?.home
+          );
 
 
-          /*
-           * لا نستخدم المباراة إذا لم تكن
-           * النتيجة رقمية.
-           */
-
-          if(
-
-            homeGoals ===
-              null
-
-            ||
-
-            awayGoals ===
-              null
-
-          ){
-
-            return null;
-
-          }
+        const awayGoals =
+          Number(
+            match.score?.fullTime?.away
+          );
 
 
-          /*
-           * المباراة يجب أن تخص الفريق المطلوب.
-           */
+        if (
 
-          if(
+          !Number.isFinite(
+            homeGoals
+          )
+
+          ||
+
+          !Number.isFinite(
+            awayGoals
+          )
+
+          ||
+
+          (
 
             !namesMatch(
               home,
@@ -506,86 +443,67 @@ export function calculateTeamStats(
               team
             )
 
-          ){
+          )
 
-            return null;
+        ) {
 
-          }
-
-
-          const isHome =
-            namesMatch(
-              home,
-              team
-            );
-
-
-          const gf =
-            isHome
-
-              ? homeGoals
-
-              : awayGoals;
-
-
-          const ga =
-            isHome
-
-              ? awayGoals
-
-              : homeGoals;
-
-
-          let result;
-
-
-          if(
-            gf > ga
-          ){
-
-            result =
-              "W";
-
-          }
-
-          else if(
-            gf < ga
-          ){
-
-            result =
-              "L";
-
-          }
-
-          else{
-
-            result =
-              "D";
-
-          }
-
-
-          return {
-
-            gf,
-
-            ga,
-
-            result
-
-          };
+          return null;
 
         }
-      )
-
-      .filter(
-        Boolean
-      );
 
 
-  /*
-   * آخر 5 مباريات.
-   */
+        const isHome =
+          namesMatch(
+            home,
+            team
+          );
+
+
+        const gf =
+          isHome
+            ? homeGoals
+            : awayGoals;
+
+
+        const ga =
+          isHome
+            ? awayGoals
+            : homeGoals;
+
+
+        return {
+
+          id:
+            match.id ||
+            null,
+
+          utcDate:
+            match.utcDate ||
+            match.date ||
+            null,
+
+          gf,
+
+          ga,
+
+          result:
+
+            gf > ga
+              ? "W"
+
+              : gf < ga
+                ? "L"
+                : "D"
+
+        };
+
+      }
+    )
+
+    .filter(
+      Boolean
+    );
+
 
   const last5 =
     usable.slice(
@@ -594,10 +512,6 @@ export function calculateTeamStats(
     );
 
 
-  /*
-   * آخر 10 مباريات.
-   */
-
   const last10 =
     usable.slice(
       0,
@@ -605,26 +519,23 @@ export function calculateTeamStats(
     );
 
 
-  /*
-   * متوسط قيمة معينة.
-   */
-
   const average =
     (
       items,
       key
     ) => {
 
-      if(
+      if (
         !items.length
-      ){
+      ) {
 
         return 0;
 
       }
 
 
-      const total =
+      return (
+
         items.reduce(
           (
             sum,
@@ -638,12 +549,12 @@ export function calculateTeamStats(
             ),
 
           0
-        );
+        )
 
+        /
 
-      return (
-        total /
         items.length
+
       );
 
     };
@@ -706,25 +617,23 @@ export function calculateTeamStats(
     draws;
 
 
-  const formRate =
+  const games =
+    usable.length;
 
-    usable.length
+
+  const formRate =
+    games
 
       ? formPoints /
         (
-          usable.length *
+          games *
           3
         )
 
       : 0;
 
 
-  /*
-   * نعطي آخر 5 مباريات وزناً أكبر.
-   */
-
   const goalsForAvg =
-
     last5.length
 
       ? gf5 * 0.60 +
@@ -734,7 +643,6 @@ export function calculateTeamStats(
 
 
   const goalsAgainstAvg =
-
     last5.length
 
       ? ga5 * 0.60 +
@@ -748,8 +656,7 @@ export function calculateTeamStats(
     team:
       teamName,
 
-    games:
-      usable.length,
+    games,
 
     wins,
 
@@ -772,6 +679,21 @@ export function calculateTeamStats(
     goalsAgainstAvg:
       round(
         goalsAgainstAvg
+      ),
+
+    last5:
+
+      last5.map(
+        item => ({
+          gf:
+            item.gf,
+
+          ga:
+            item.ga,
+
+          result:
+            item.result
+        })
       )
 
   };
@@ -780,12 +702,12 @@ export function calculateTeamStats(
 
 
 /* ==========================================================
-   NORMALIZE TEAM NAME
+   NORMALIZE NAME
 ========================================================== */
 
 export function normalizeName(
   value
-){
+) {
 
   return String(
     value ||
@@ -796,11 +718,6 @@ export function normalizeName(
 
     .trim()
 
-
-    /*
-     * إزالة علامات التشكيل.
-     */
-
     .normalize(
       "NFD"
     )
@@ -810,41 +727,20 @@ export function normalizeName(
       ""
     )
 
-
-    /*
-     * توحيد &.
-     */
-
     .replace(
       /&/g,
       " and "
     )
-
-
-    /*
-     * إزالة الاختصارات الشائعة للأندية.
-     */
 
     .replace(
       /\b(fc|cf|afc|sc|ac|fk|club|the)\b/g,
       " "
     )
 
-
-    /*
-     * الإبقاء على الحروف الإنجليزية
-     * والأرقام والحروف العربية والمسافات.
-     */
-
     .replace(
       /[^a-z0-9\u0600-\u06ff\s]/gi,
       " "
     )
-
-
-    /*
-     * إزالة المسافات الزائدة.
-     */
 
     .replace(
       /\s+/g,
@@ -863,7 +759,7 @@ export function normalizeName(
 export function namesMatch(
   first,
   second
-){
+) {
 
   const a =
     normalizeName(
@@ -877,55 +773,45 @@ export function namesMatch(
     );
 
 
-  if(
+  if (
     !a ||
     !b
-  ){
+  ) {
 
     return false;
 
   }
 
 
-  /*
-   * تطابق كامل.
-   */
-
-  if(
+  if (
     a === b
-  ){
+  ) {
 
     return true;
 
   }
 
 
-  /*
-   * أحد الاسمين يحتوي الآخر.
-   */
-
-  if(
+  if (
     a.includes(b) ||
     b.includes(a)
-  ){
+  ) {
 
     return true;
 
   }
 
-
-  /*
-   * مقارنة الكلمات.
-   */
 
   const ta =
     new Set(
 
       a
-        .split(" ")
+        .split(
+          " "
+        )
         .filter(
-          item =>
-            item.length >= 3
+          token =>
+            token.length >= 3
         )
 
     );
@@ -933,16 +819,19 @@ export function namesMatch(
 
   const tb =
     b
-      .split(" ")
+      .split(
+        " "
+      )
       .filter(
-        item =>
-          item.length >= 3
+        token =>
+          token.length >= 3
       );
 
 
-  if(
+  if (
+    ta.size === 0 ||
     tb.length === 0
-  ){
+  ) {
 
     return false;
 
@@ -951,59 +840,61 @@ export function namesMatch(
 
   const overlap =
     tb.filter(
-      item =>
+      token =>
         ta.has(
-          item
+          token
         )
     ).length;
 
 
+  if (
+    tb.length === 1
+  ) {
+
+    return overlap >= 1;
+
+  }
+
+
   return (
-
     overlap >=
-
     Math.min(
       2,
       tb.length
     )
-
   );
 
 }
 
 
 /* ==========================================================
-   FINITE NUMBER
+   DATE
 ========================================================== */
 
-function finiteOrNull(
+function parseDate(
   value
-){
+) {
 
-  if(
-    value === null ||
-    value === undefined ||
-    value === ""
-  ){
+  if (
+    !value
+  ) {
 
-    return null;
+    return 0;
 
   }
 
 
-  const number =
-    Number(
+  const time =
+    new Date(
       value
-    );
+    ).getTime();
 
 
   return Number.isFinite(
-    number
+    time
   )
-
-    ? number
-
-    : null;
+    ? time
+    : 0;
 
 }
 
@@ -1016,7 +907,7 @@ function clamp(
   value,
   min,
   max
-){
+) {
 
   const number =
     Number(
@@ -1024,11 +915,11 @@ function clamp(
     );
 
 
-  if(
+  if (
     !Number.isFinite(
       number
     )
-  ){
+  ) {
 
     return min;
 
@@ -1055,7 +946,7 @@ function clamp(
 
 function round(
   value
-){
+) {
 
   const number =
     Number(
@@ -1063,11 +954,11 @@ function round(
     );
 
 
-  if(
+  if (
     !Number.isFinite(
       number
     )
-  ){
+  ) {
 
     return 0;
 
@@ -1083,21 +974,5 @@ function round(
 
 
 /* ==========================================================
-   DEFAULT EXPORT
+   END statsCollector.js
 ========================================================== */
-
-export default {
-
-  mergeProviderData,
-
-  dedupeMatches,
-
-  buildTeamAnalysis,
-
-  calculateTeamStats,
-
-  normalizeName,
-
-  namesMatch
-
-};
