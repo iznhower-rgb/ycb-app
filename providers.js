@@ -16,7 +16,6 @@
 //
 // ==========================================================
 
-
 const providers = [];
 
 
@@ -26,14 +25,11 @@ const providers = [];
 
 export class DataProvider {
 
-  constructor(
-    name
-  ) {
+  constructor(name) {
 
     this.name =
       String(
-        name ||
-        ""
+        name || ""
       ).trim();
 
   }
@@ -62,9 +58,7 @@ export function registerProvider(
   provider
 ) {
 
-  if (
-    !provider
-  ) {
+  if (!provider) {
 
     throw new Error(
       "Invalid data provider"
@@ -85,9 +79,7 @@ export function registerProvider(
   }
 
 
-  if (
-    !provider.name
-  ) {
+  if (!provider.name) {
 
     throw new Error(
       "Invalid data provider: provider name is required"
@@ -104,9 +96,7 @@ export function registerProvider(
     );
 
 
-  if (
-    !exists
-  ) {
+  if (!exists) {
 
     providers.push(
       provider
@@ -164,12 +154,10 @@ export function getProviderCount() {
 
 /* ==========================================================
    CLEAR PROVIDERS
-==========================================================
-//
+========================================================== */
+
 // Useful for tests/reloading.
-//
 // Not normally used by worker.js.
-//
 
 export function clearProviders() {
 
