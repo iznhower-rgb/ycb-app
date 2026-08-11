@@ -1,1627 +1,1885 @@
-// ==========================================================
-// Y.C.B ESPN PROVIDER 3.0.1
-// ==========================================================
-// ESPN is used for:
-// - fixture verification
-// - recent historical matches
-// - team discovery
-//
-// No API key required.
-// ==========================================================
-
 import {
-  DataProvider,
-  registerProvider
+  DataProvider,
+  registerProvider
 } from "./providers.js";
 
 
-const SITE =
-  "https://site.api.espn.com/apis/site/v2/sports/soccer";
+/* ==========================================================
+   ESPN API
+========================================================== */
 
+const SITE_API =
+  "https://site.api.espn.com/apis/site/v2/sports/soccer";
 
-const LEAGUES = [
-
-  "eng.1",
-  "eng.2",
-
-  "esp.1",
-
-  "ger.1",
-  "ger.2",
-
-  "ita.1",
-
-  "fra.1",
-
-  "ned.1",
-
-  "por.1",
-
-  "bel.1",
-
-  "tur.1",
-
-  "usa.1",
-
-  "sco.1",
-
-  "uefa.champions"
-
-];
-
-
-const TEAM_CACHE =
-  new Map();
-
-
-const SCHEDULE_CACHE =
-  new Map();
+const WEB_API =
+  "https://site.web.api.espn.com/apis/site/v2/sports/soccer";
 
 
 /* ==========================================================
-   PROVIDER
+   SETTINGS
+========================================================== */
+
+const HISTORY_LIMIT = 15;
+
+
+/*
+* البحث عن المباراة:
+*
+* 60 يومًا قبل اليوم
+* 90 يومًا بعد اليوم
+*/
+
+const MATCH_BACK_DAYS = 60;
+
+const MATCH_FORWARD_DAYS = 90;
+
+
+/*
+* fallback التاريخ:
+*
+* آخر 365 يومًا.
+*/
+
+const HISTORY_BACK_DAYS = 365;
+
+
+/*
+* حجم كل طلب scoreboard.
+*/
+
+const SCOREBOARD_CHUNK_DAYS = 7;
+
+
+/*
+* مهلة طلب ESPN.
+*/
+
+const REQUEST_TIMEOUT_MS = 15000;
+
+
+/* ==========================================================
+   PROVIDER
 ========================================================== */
 
 class ESPNProvider
-  extends DataProvider {
+  extends DataProvider {
 
+  constructor() {
 
-  constructor() {
+    super(
+      "ESPN"
+    );
 
-    super(
-      "ESPN"
-    );
+  }
 
-  }
 
+  /* ========================================================
+     GET MATCH DATA
+  ======================================================== */
 
-  async getMatchData(
-    home,
-    away
-  ) {
+  async getMatchData(
+    home,
+    away,
+    env
+  ) {
 
-    try {
+    try {
 
-      const teams =
-        await discoverTeams(
-          home,
-          away
-        );
+      if (
+        !home ||
+        !away
+      ) {
 
+        return {
 
-      if (
-        !teams.home &&
-        !teams.away
-      ) {
+          status:
+            "invalid_request",
 
-        return {
+          message:
+            "يجب تحديد الفريق المضيف والفريق الضيف.",
 
-          status:
-            "api_ok_no_match",
+          data:
+            null
 
-          message:
-            "ESPN متصل لكن لم يتم العثور على الفريقين.",
+        };
 
-          data:
-            emptyData()
+      }
 
-        };
 
-      }
+      /*
+       * =====================================================
+       * STEP 1
+       * البحث عن المباراة
+       * =====================================================
+       */
 
+      const exact =
+        await findMatchFromESPN(
+          home,
+          away
+        );
 
-      const selected =
-        [
-          teams.home,
-          teams.away
-        ]
-        .filter(Boolean);
 
+      /*
+       * لا توجد مباراة.
+       */
 
-      /*
-       * Search all leagues in which the selected
-       * team appears. This helps promoted/relegated teams.
-       */
+      if (
+        !exact
+      ) {
 
-      const scheduleTargets =
-        unique(
+        return {
 
-          selected.flatMap(
-            team =>
-              team.leagues.map(
-                league =>
-                  `${league}:${team.id}`
-              )
-          )
+          status:
+            "api_ok_no_match",
 
-        );
+          message:
+            "ESPN متصل بنجاح، لكن لم يتم العثور على المباراة ضمن نطاق البحث.",
 
+          data: {
 
-      const schedules =
-        await Promise.all(
+            source:
+              "espn",
 
-          scheduleTargets.map(
-            key => {
+            available:
+              true,
 
-              const [
-                league,
-                teamId
-              ] =
-                key.split(":");
+            matchFound:
+              false,
 
+            fixture:
+              null,
 
-              return getTeamSchedule(
-                league,
-                teamId
-              );
+            recentMatches: {
 
-            }
-          )
+              home:
+                [],
 
-        );
+              away:
+                []
 
+            },
 
-      let allEvents =
-        dedupeRawEvents(
-          schedules.flat()
-        );
+            historyAvailable:
+              false
 
+          }
 
-      /*
-       * Primary fixture search.
-       */
+        };
 
-      let fixture =
-        allEvents.find(
-          event =>
-            isExactFixture(
-              event,
-              home,
-              away
-            )
-        );
+      }
 
 
-      /*
-       * Fallback:
-       * search upcoming scoreboard data.
-       */
+      const homeId =
+        exact.homeTeam?.id ||
+        null;
 
-      if (
-        !fixture
-      ) {
 
-        const leagues =
-          unique(
+      const awayId =
+        exact.awayTeam?.id ||
+        null;
 
-            selected.flatMap(
-              team =>
-                team.leagues
-            )
 
-          );
+      /*
+       * =====================================================
+       * STEP 2
+       * جلب تاريخ الفريقين
+       * =====================================================
+       */
 
+      const [
+        homeMatches,
+        awayMatches
+      ] =
+        await Promise.all([
 
-        const scoreboardEvents =
-          await Promise.all(
+          getTeamHistory(
+            homeId,
+            exact.homeTeam?.name
+          ),
 
-            leagues.map(
-              league =>
-                getScoreboardRange(
-                  league,
-                  60
-                )
-            )
+          getTeamHistory(
+            awayId,
+            exact.awayTeam?.name
+          )
 
-          );
+        ]);
 
 
-        allEvents =
-          dedupeRawEvents(
+      /*
+       * =====================================================
+       * STEP 3
+       * النتيجة
+       * =====================================================
+       */
 
-            [
-              ...allEvents,
-              ...scoreboardEvents.flat()
-            ]
+      return {
 
-          );
+        status:
+          "success",
 
+        message:
+          "تم العثور على المباراة وبيانات التاريخ عبر ESPN.",
 
-        fixture =
-          allEvents.find(
-            event =>
-              isExactFixture(
-                event,
-                home,
-                away
-              )
-          );
+        data: {
 
-      }
+          source:
+            "espn",
 
+          available:
+            true,
 
-      /*
-       * Historical fallback.
-       */
+          matchFound:
+            true,
 
-      const historyRanges =
-        await Promise.all(
+          fixture:
+            normalizeFixture(
+              exact
+            ),
 
-          unique(
+          recentMatches: {
 
-            selected.flatMap(
-              team =>
-                team.leagues
-            )
+            home:
+              homeMatches,
 
-          ).map(
+            away:
+              awayMatches
 
-            league =>
-              getScoreboardPastRange(
-                league,
-                120
-              )
+          },
 
-          )
+          historyAvailable:
+            homeMatches.length > 0 ||
+            awayMatches.length > 0
 
-        );
+        }
 
+      };
 
-      allEvents =
-        dedupeRawEvents(
+    } catch (
+      error
+    ) {
 
-          [
-            ...allEvents,
-            ...historyRanges.flat()
-          ]
+      return {
 
-        );
+        status:
+          "network_error",
 
+        message:
+          error?.message ||
+          String(error),
 
-      const homeRecent =
-        buildRecentForTeam(
-          home,
-          allEvents
-        );
+        data:
+          null
 
+      };
 
-      const awayRecent =
-        buildRecentForTeam(
-          away,
-          allEvents
-        );
+    }
 
-
-      /*
-       * Nothing useful.
-       */
-
-      if (
-        !fixture &&
-        homeRecent.length === 0 &&
-        awayRecent.length === 0
-      ) {
-
-        return {
-
-          status:
-            "api_ok_no_match",
-
-          message:
-            "ESPN متصل لكن لم يتم العثور على المباراة أو بيانات تاريخية كافية.",
-
-          data: {
-
-            source:
-              "espn",
-
-            available:
-              true,
-
-            matchFound:
-              false,
-
-            fixture:
-              null,
-
-            recentMatches: {
-
-              home:
-                [],
-
-              away:
-                []
-
-            }
-
-          }
-
-        };
-
-      }
-
-
-      return {
-
-        status:
-          fixture
-            ? "success"
-            : "partial_success",
-
-        message:
-          fixture
-
-            ? "تم التحقق من المباراة وبياناتها عبر ESPN."
-
-            : "تم العثور على بيانات تاريخية عبر ESPN لكن لم يتم التحقق من المباراة.",
-
-        data: {
-
-          source:
-            "espn",
-
-          available:
-            true,
-
-          matchFound:
-            Boolean(
-              fixture
-            ),
-
-          fixture:
-            fixture
-              ? normalizeEvent(
-                  fixture
-                )
-              : null,
-
-          recentMatches: {
-
-            home:
-              homeRecent,
-
-            away:
-              awayRecent
-
-          }
-
-        }
-
-      };
-
-    } catch (
-      error
-    ) {
-
-      return {
-
-        status:
-          "network_error",
-
-        message:
-          error?.message ||
-          String(error),
-
-        data:
-          null
-
-      };
-
-    }
-
-  }
+  }
 
 }
 
 
 /* ==========================================================
-   DISCOVER TEAMS
+   FIND MATCH FROM ESPN
 ========================================================== */
 
-async function discoverTeams(
-  home,
-  away
+async function findMatchFromESPN(
+  home,
+  away
 ) {
 
-  const results =
-    await Promise.all(
-
-      LEAGUES.map(
-        async league => {
-
-          try {
-
-            const teams =
-              await getLeagueTeams(
-                league
-              );
+  const today =
+    new Date();
 
 
-            return teams.map(
-              team => ({
-
-                ...team,
-
-                league
-
-              })
-            );
-
-          } catch {
-
-            return [];
-
-          }
-
-        }
-      )
-
-    );
+  const dates =
+    buildDateRange(
+      today,
+      MATCH_BACK_DAYS,
+      MATCH_FORWARD_DAYS
+    );
 
 
-  const all =
-    results.flat();
+  const chunks =
+    chunkArray(
+      dates,
+      SCOREBOARD_CHUNK_DAYS
+    );
 
 
-  return {
+  /*
+   * نبحث بالتتابع بدل إرسال عشرات الطلبات
+   * في نفس اللحظة.
+   *
+   * بمجرد العثور على المباراة نتوقف.
+   */
 
-    home:
-      bestTeamMatch(
-        all,
-        home
-      ),
+  for (
+    const chunk
+    of chunks
+  ) {
 
-    away:
-      bestTeamMatch(
-        all,
-        away
-      )
+    const events =
+      await fetchScoreboardRange(
+        chunk[0],
+        chunk[chunk.length - 1]
+      );
 
-  };
+
+    if (
+      !events.length
+    ) {
+
+      continue;
+
+    }
+
+
+    /*
+     * Home → Away
+     */
+
+    const exact =
+      events.find(
+        event =>
+
+          namesMatch(
+            event?.homeTeam?.name,
+            home
+          )
+
+          &&
+
+          namesMatch(
+            event?.awayTeam?.name,
+            away
+          )
+      );
+
+
+    if (
+      exact
+    ) {
+
+      return exact;
+
+    }
+
+
+    /*
+     * fallback:
+     *
+     * قد تأتي المباراة معكوسة
+     * في بعض البيانات.
+     *
+     * نرجع المباراة مع إعادة ترتيب
+     * home / away.
+     */
+
+    const reversed =
+      events.find(
+        event =>
+
+          namesMatch(
+            event?.homeTeam?.name,
+            away
+          )
+
+          &&
+
+          namesMatch(
+            event?.awayTeam?.name,
+            home
+          )
+      );
+
+
+    if (
+      reversed
+    ) {
+
+      return {
+
+        ...reversed,
+
+        homeTeam:
+          reversed.awayTeam,
+
+        awayTeam:
+          reversed.homeTeam,
+
+        score: {
+
+          fullTime: {
+
+            home:
+              reversed?.score?.fullTime?.away ??
+              null,
+
+            away:
+              reversed?.score?.fullTime?.home ??
+              null
+
+          }
+
+        }
+
+      };
+
+    }
+
+  }
+
+
+  return null;
 
 }
 
 
 /* ==========================================================
-   BEST TEAM MATCH
+   SCOREBOARD RANGE
 ========================================================== */
 
-function bestTeamMatch(
-  teams,
-  name
+async function fetchScoreboardRange(
+  startDate,
+  endDate
 ) {
 
-  const candidates =
-    teams
+  const urls = [
 
-      .map(
-        team => ({
+    `${SITE_API}/all/scoreboard` +
+    `?dates=${startDate}-${endDate}` +
+    `&limit=1000`,
 
-          team,
+    `${WEB_API}/all/scoreboard` +
+    `?dates=${startDate}-${endDate}` +
+    `&limit=1000`
 
-          score:
-            nameScore(
-              team.name,
-              name
-            )
-
-        })
-      )
-
-      .filter(
-        item =>
-          item.score >=
-          70
-      )
-
-      .sort(
-        (a,b) =>
-          b.score -
-          a.score
-      );
+  ];
 
 
-  if (
-    !candidates.length
-  ) {
+  for (
+    const url
+    of urls
+  ) {
 
-    return null;
+    try {
 
-  }
-
-
-  const best =
-    candidates[0].team;
-
-
-  const leagues =
-    unique(
-
-      candidates
-
-        .filter(
-          item =>
-            item.score >=
-            Math.max(
-              70,
-              candidates[0].score - 15
-            )
-        )
-
-        .map(
-          item =>
-            item.team.league
-        )
-
-    );
+      const data =
+        await fetchJSON(
+          url
+        );
 
 
-  return {
+      if (
+        Array.isArray(
+          data?.events
+        )
+      ) {
 
-    ...best,
+        return data.events
 
-    leagues:
-      leagues.length
-        ? leagues
-        : [best.league]
+          .map(
+            normalizeScoreboardEvent
+          )
 
-  };
+          .filter(
+            Boolean
+          );
+
+      }
+
+    } catch {
+
+      /*
+       * fallback إلى URL التالي
+       */
+
+    }
+
+  }
+
+
+  return [];
 
 }
 
 
 /* ==========================================================
-   LEAGUE TEAMS
+   GET TEAM HISTORY
 ========================================================== */
 
-async function getLeagueTeams(
-  league
+async function getTeamHistory(
+  teamId,
+  teamName
 ) {
 
-  if (
-    TEAM_CACHE.has(
-      league
-    )
-  ) {
+  if (
+    !teamId
+  ) {
 
-    return TEAM_CACHE.get(
-      league
-    );
+    return [];
 
-  }
+  }
 
 
-  const data =
-    await fetchJSON(
+  /*
+   * ========================================================
+   * METHOD 1
+   * WEB API
+   * ========================================================
+   */
 
-      `${SITE}/${league}/teams`
+  const webUrls = [
 
-    );
+    `${WEB_API}/all/teams/${encodeURIComponent(
+      teamId
+    )}/schedule?fixture=true&limit=1000`,
 
+    `${WEB_API}/all/teams/${encodeURIComponent(
+      teamId
+    )}/schedule?limit=1000`
 
-  const teams =
-    [];
-
-
-  for (
-    const group
-    of
-    data?.sports?.[0]?.leagues ||
-    []
-  ) {
-
-    for (
-      const item
-      of
-      group?.teams ||
-      []
-    ) {
-
-      const team =
-        item?.team;
+  ];
 
 
-      if (
-        team?.id &&
-        team?.displayName
-      ) {
+  for (
+    const url
+    of webUrls
+  ) {
 
-        teams.push({
+    try {
 
-          id:
-            String(
-              team.id
-            ),
-
-          name:
-            team.displayName,
-
-          shortName:
-            team.shortDisplayName ||
-            team.name ||
-            team.displayName
-
-        });
-
-      }
-
-    }
-
-  }
+      const data =
+        await fetchJSON(
+          url
+        );
 
 
-  TEAM_CACHE.set(
-    league,
-    teams
-  );
+      const matches =
+        normalizeTeamSchedule(
+          data,
+          teamId
+        );
 
 
-  return teams;
+      if (
+        matches.length > 0
+      ) {
+
+        return matches
+          .slice(
+            0,
+            HISTORY_LIMIT
+          );
+
+      }
+
+    } catch {
+
+      /*
+       * fallback
+       */
+
+    }
+
+  }
+
+
+  /*
+   * ========================================================
+   * METHOD 2
+   * SITE API
+   * ========================================================
+   */
+
+  const siteUrls = [
+
+    `${SITE_API}/all/teams/${encodeURIComponent(
+      teamId
+    )}/schedule?fixture=true&limit=1000`,
+
+    `${SITE_API}/all/teams/${encodeURIComponent(
+      teamId
+    )}/schedule?limit=1000`
+
+  ];
+
+
+  for (
+    const url
+    of siteUrls
+  ) {
+
+    try {
+
+      const data =
+        await fetchJSON(
+          url
+        );
+
+
+      const matches =
+        normalizeTeamSchedule(
+          data,
+          teamId
+        );
+
+
+      if (
+        matches.length > 0
+      ) {
+
+        return matches
+          .slice(
+            0,
+            HISTORY_LIMIT
+          );
+
+      }
+
+    } catch {
+
+      /*
+       * fallback
+       */
+
+    }
+
+  }
+
+
+  /*
+   * ========================================================
+   * METHOD 3
+   * SCOREBOARD FALLBACK
+   * ========================================================
+   */
+
+  return await findTeamHistoryFromScoreboards(
+    teamId,
+    teamName
+  );
 
 }
 
 
 /* ==========================================================
-   TEAM SCHEDULE
+   NORMALIZE TEAM SCHEDULE
 ========================================================== */
 
-async function getTeamSchedule(
-  league,
-  teamId
+function normalizeTeamSchedule(
+  schedule,
+  teamId
 ) {
 
-  const key =
-    `${league}:${teamId}`;
+  let events =
+    Array.isArray(
+      schedule?.events
+    )
+      ? schedule.events
+      : [];
 
 
-  if (
-    SCHEDULE_CACHE.has(
-      key
-    )
-  ) {
+  /*
+   * بعض ESPN responses
+   * قد تحتوي calendar.
+   */
 
-    return SCHEDULE_CACHE.get(
-      key
-    );
+  if (
+    events.length === 0 &&
+    Array.isArray(
+      schedule?.calendar
+    )
+  ) {
 
-  }
+    events =
+      schedule.calendar;
 
-
-  const data =
-    await fetchJSON(
-
-      `${SITE}/${league}/teams/${encodeURIComponent(teamId)}/schedule?limit=100`
-
-    );
+  }
 
 
-  const events =
-    Array.isArray(
-      data?.events
-    )
-      ? data.events
-      : [];
+  const normalized =
+    [];
 
 
-  SCHEDULE_CACHE.set(
-    key,
-    events
-  );
+  for (
+    const event
+    of events
+  ) {
+
+    const item =
+      normalizeScoreboardEvent(
+        event
+      );
 
 
-  return events;
+    if (
+      !item
+    ) {
+
+      continue;
+
+    }
+
+
+    if (
+      item.status !==
+      "FINISHED"
+    ) {
+
+      continue;
+
+    }
+
+
+    if (
+      !isTeamEvent(
+        item,
+        teamId
+      )
+    ) {
+
+      continue;
+
+    }
+
+
+    if (
+      !hasValidScore(
+        item
+      )
+    ) {
+
+      continue;
+
+    }
+
+
+    normalized.push(
+      item
+    );
+
+  }
+
+
+  return dedupeAndSortMatches(
+    normalized
+  );
 
 }
 
 
 /* ==========================================================
-   SCOREBOARD FUTURE
+   SCOREBOARD HISTORY FALLBACK
 ========================================================== */
 
-async function getScoreboardRange(
-  league,
-  daysForward
+async function findTeamHistoryFromScoreboards(
+  teamId,
+  teamName
 ) {
 
-  const start =
-    new Date();
+  const today =
+    new Date();
 
 
-  const end =
-    new Date(
-
-      start.getTime() +
-      daysForward *
-      86400000
-
-    );
+  const start =
+    new Date(
+      today
+    );
 
 
-  return getScoreboardByDates(
+  start.setDate(
+    start.getDate() -
+    HISTORY_BACK_DAYS
+  );
 
-    league,
 
-    formatDate(
-      start
-    ),
+  const dates =
+    buildDateRange(
+      start,
+      0,
+      HISTORY_BACK_DAYS
+    );
 
-    formatDate(
-      end
-    )
 
-  );
+  const chunks =
+    chunkArray(
+      dates,
+      SCOREBOARD_CHUNK_DAYS
+    );
+
+
+  const allMatches =
+    [];
+
+
+  /*
+   * نبحث من الأحدث إلى الأقدم.
+   *
+   * وبمجرد أن نحصل على 15 مباراة
+   * يمكن التوقف.
+   */
+
+  for (
+    let i =
+      chunks.length - 1;
+
+    i >= 0;
+
+    i--
+  ) {
+
+    const chunk =
+      chunks[i];
+
+
+    const events =
+      await fetchScoreboardRange(
+        chunk[0],
+        chunk[chunk.length - 1]
+      );
+
+
+    if (
+      !events.length
+    ) {
+
+      continue;
+
+    }
+
+
+    const teamEvents =
+      events.filter(
+        event => {
+
+          if (
+            isTeamEvent(
+              event,
+              teamId
+            )
+          ) {
+
+            return true;
+
+          }
+
+
+          /*
+           * fallback بالاسم.
+           */
+
+          if (
+            teamName
+          ) {
+
+            return (
+
+              namesMatch(
+                event?.homeTeam?.name,
+                teamName
+              )
+
+              ||
+
+              namesMatch(
+                event?.awayTeam?.name,
+                teamName
+              )
+
+            );
+
+          }
+
+
+          return false;
+
+        }
+      );
+
+
+    const finished =
+      teamEvents.filter(
+        event =>
+
+          event?.status ===
+          "FINISHED"
+
+          &&
+
+          hasValidScore(
+            event
+          )
+      );
+
+
+    allMatches.push(
+      ...finished
+    );
+
+
+    const unique =
+      dedupeAndSortMatches(
+        allMatches
+      );
+
+
+    if (
+      unique.length >=
+      HISTORY_LIMIT
+    ) {
+
+      return unique.slice(
+        0,
+        HISTORY_LIMIT
+      );
+
+    }
+
+  }
+
+
+  return dedupeAndSortMatches(
+    allMatches
+  )
+    .slice(
+      0,
+      HISTORY_LIMIT
+    );
 
 }
 
 
 /* ==========================================================
-   SCOREBOARD HISTORY
+   IS TEAM EVENT
 ========================================================== */
 
-async function getScoreboardPastRange(
-  league,
-  daysBack
+function isTeamEvent(
+  event,
+  teamId
 ) {
 
-  const end =
-    new Date();
+  if (
+    !event ||
+    !teamId
+  ) {
+
+    return false;
+
+  }
 
 
-  const start =
-    new Date(
-
-      end.getTime() -
-      daysBack *
-      86400000
-
-    );
+  const target =
+    String(
+      teamId
+    );
 
 
-  return getScoreboardByDates(
+  return (
 
-    league,
+    String(
+      event?.homeTeam?.id ||
+      ""
+    ) ===
+    target
 
-    formatDate(
-      start
-    ),
+    ||
 
-    formatDate(
-      end
-    )
+    String(
+      event?.awayTeam?.id ||
+      ""
+    ) ===
+    target
 
-  );
+  );
 
 }
 
 
 /* ==========================================================
-   SCOREBOARD REQUEST
+   VALID SCORE
 ========================================================== */
 
-async function getScoreboardByDates(
-  league,
-  from,
-  to
+function hasValidScore(
+  event
 ) {
 
-  try {
-
-    const fixedUrl =
-      `${SITE}/${league}/scoreboard?dates=` +
-      `${from.replaceAll("-", "")}` +
-      "-" +
-      `${to.replaceAll("-", "")}`;
+  const home =
+    event?.score?.fullTime?.home;
 
 
-    const data =
-      await fetchJSON(
-        fixedUrl
-      );
+  const away =
+    event?.score?.fullTime?.away;
 
 
-    return Array.isArray(
-      data?.events
-    )
-      ? data.events
-      : [];
+  return (
 
-  } catch {
+    Number.isFinite(
+      Number(home)
+    )
 
-    return [];
+    &&
 
-  }
+    Number.isFinite(
+      Number(away)
+    )
+
+  );
 
 }
 
 
 /* ==========================================================
-   EXACT FIXTURE
+   DEDUPE + SORT
 ========================================================== */
 
-function isExactFixture(
-  event,
-  home,
-  away
+function dedupeAndSortMatches(
+  matches
 ) {
 
-  const competitors =
-    event?.competitions?.[0]?.competitors ||
-    [];
+  const map =
+    new Map();
 
 
-  const homeTeam =
-    competitors.find(
-      item =>
-        item?.homeAway ===
-        "home"
-    )?.team?.displayName;
+  for (
+    const match
+    of matches
+  ) {
+
+    const key =
+      match?.id ||
+
+      [
+        match?.utcDate,
+        match?.homeTeam?.id,
+        match?.awayTeam?.id
+      ].join(
+        "|"
+      );
 
 
-  const awayTeam =
-    competitors.find(
-      item =>
-        item?.homeAway ===
-        "away"
-    )?.team?.displayName;
+    if (
+      !map.has(
+        key
+      )
+    ) {
+
+      map.set(
+        key,
+        match
+      );
+
+    }
+
+  }
 
 
-  return (
+  return Array.from(
+    map.values()
+  )
 
-    namesMatch(
-      homeTeam,
-      home
-    )
+    .sort(
+      (
+        a,
+        b
+      ) =>
 
-    &&
+        new Date(
+          b?.utcDate ||
+          0
+        )
 
-    namesMatch(
-      awayTeam,
-      away
-    )
+        -
 
-  );
+        new Date(
+          a?.utcDate ||
+          0
+        )
+    );
 
 }
 
 
 /* ==========================================================
-   RECENT MATCHES
+   NORMALIZE SCOREBOARD EVENT
 ========================================================== */
 
-function buildRecentForTeam(
-  teamName,
-  events
+function normalizeScoreboardEvent(
+  event
 ) {
 
-  return events
+  if (
+    !event
+  ) {
 
-    .filter(
-      event => {
+    return null;
 
-        const competitors =
-          event?.competitions?.[0]?.competitors ||
-          [];
-
-
-        const home =
-          competitors.find(
-            item =>
-              item?.homeAway ===
-              "home"
-          )?.team?.displayName;
+  }
 
 
-        const away =
-          competitors.find(
-            item =>
-              item?.homeAway ===
-              "away"
-          )?.team?.displayName;
+  const competition =
+    event?.competitions?.[0];
 
 
-        return (
+  const competitors =
+    Array.isArray(
+      competition?.competitors
+    )
+      ? competition.competitors
+      : [];
 
-          (
-            namesMatch(
-              home,
-              teamName
-            )
 
-            ||
+  if (
+    competitors.length < 2
+  ) {
 
-            namesMatch(
-              away,
-              teamName
-            )
+    return null;
 
-          )
+  }
 
-          &&
 
-          hasFinalScore(
-            event
-          )
+  const home =
+    competitors.find(
+      item =>
+        item?.homeAway ===
+        "home"
+    );
 
-        );
 
-      }
-    )
+  const away =
+    competitors.find(
+      item =>
+        item?.homeAway ===
+        "away"
+    );
 
-    .sort(
-      (a,b) =>
-        eventTimestamp(
-          b
-        ) -
 
-        eventTimestamp(
-          a
-        )
-    )
+  if (
+    !home ||
+    !away
+  ) {
 
-    .slice(
-      0,
-      15
-    )
+    return null;
 
-    .map(
-      normalizeEvent
-    );
+  }
+
+
+  const type =
+    competition?.status?.type ||
+    event?.status?.type ||
+    {};
+
+
+  const completed =
+    Boolean(
+      type?.completed
+    );
+
+
+  const state =
+    type?.state ||
+    null;
+
+
+  let status =
+    "SCHEDULED";
+
+
+  if (
+    completed ||
+    state === "post"
+  ) {
+
+    status =
+      "FINISHED";
+
+  }
+
+
+  if (
+    state === "in"
+  ) {
+
+    status =
+      "LIVE";
+
+  }
+
+
+  const homeScore =
+    finiteOrNull(
+      home?.score
+    );
+
+
+  const awayScore =
+    finiteOrNull(
+      away?.score
+    );
+
+
+  /*
+   * league
+   */
+
+  const league =
+    event?.league?.slug ||
+
+    event?.league?.abbreviation ||
+
+    event?.competition?.league?.slug ||
+
+    competition?.league?.slug ||
+
+    null;
+
+
+  return {
+
+    id:
+      String(
+        event?.id ||
+        competition?.id ||
+        ""
+      ),
+
+    utcDate:
+      event?.date ||
+      competition?.date ||
+      null,
+
+    status,
+
+    homeTeam: {
+
+      id:
+        home?.team?.id ||
+        null,
+
+      name:
+        home?.team?.displayName ||
+        home?.team?.name ||
+        home?.team?.shortDisplayName ||
+        null,
+
+      shortName:
+        home?.team?.abbreviation ||
+        home?.team?.shortDisplayName ||
+        home?.team?.name ||
+        null
+
+    },
+
+    awayTeam: {
+
+      id:
+        away?.team?.id ||
+        null,
+
+      name:
+        away?.team?.displayName ||
+        away?.team?.name ||
+        away?.team?.shortDisplayName ||
+        null,
+
+      shortName:
+        away?.team?.abbreviation ||
+        away?.team?.shortDisplayName ||
+        away?.team?.name ||
+        null
+
+    },
+
+    score: {
+
+      fullTime: {
+
+        home:
+          completed ||
+          state === "post"
+
+            ? homeScore
+
+            : null,
+
+        away:
+          completed ||
+          state === "post"
+
+            ? awayScore
+
+            : null
+
+      }
+
+    },
+
+    tournament:
+      league ||
+
+      event?.season?.slug ||
+
+      competition?.league?.name ||
+
+      null
+
+  };
 
 }
 
 
 /* ==========================================================
-   FINAL SCORE CHECK
+   FIXTURE NORMALIZATION
 ========================================================== */
 
-function hasFinalScore(
-  event
+function normalizeFixture(
+  event
 ) {
 
-  const competitors =
-    event?.competitions?.[0]?.competitors ||
-    [];
+  return {
 
+    id:
+      String(
+        event?.id ||
+        ""
+      ),
 
-  const values =
-    competitors.map(
-      item =>
-        Number(
-          item?.score
-        )
-    );
+    utcDate:
+      event?.utcDate ||
+      null,
 
+    status:
+      event?.status ||
+      "SCHEDULED",
 
-  return (
+    homeTeam:
+      event?.homeTeam ||
+      {
 
-    values.length >= 2
+        id:
+          null,
 
-    &&
+        name:
+          null,
 
-    values.every(
-      Number.isFinite
-    )
+        shortName:
+          null
 
-    &&
+      },
 
-    event?.competitions?.[0]?.status?.type?.completed === true
+    awayTeam:
+      event?.awayTeam ||
+      {
 
-  );
+        id:
+          null,
+
+        name:
+          null,
+
+        shortName:
+          null
+
+      },
+
+    score:
+      event?.score ||
+      {
+
+        fullTime: {
+
+          home:
+            null,
+
+          away:
+            null
+
+        }
+
+      },
+
+    tournament:
+      event?.tournament ||
+      null
+
+  };
 
 }
 
 
 /* ==========================================================
-   NORMALIZE EVENT
-========================================================== */
-
-function normalizeEvent(
-  event
-) {
-
-  const competitors =
-    event?.competitions?.[0]?.competitors ||
-    [];
-
-
-  const home =
-    competitors.find(
-      item =>
-        item?.homeAway ===
-        "home"
-    );
-
-
-  const away =
-    competitors.find(
-      item =>
-        item?.homeAway ===
-        "away"
-    );
-
-
-  const homeScore =
-    finiteOrNull(
-      home?.score
-    );
-
-
-  const awayScore =
-    finiteOrNull(
-      away?.score
-    );
-
-
-  const completed =
-    event?.competitions?.[0]?.status?.type?.completed === true;
-
-
-  const finished =
-    completed &&
-    homeScore !== null &&
-    awayScore !== null;
-
-
-  return {
-
-    id:
-      String(
-        event?.id ||
-        ""
-      ),
-
-    utcDate:
-      event?.date ||
-      null,
-
-    status:
-      finished
-        ? "FINISHED"
-        : "SCHEDULED",
-
-    homeTeam: {
-
-      id:
-        home?.team?.id ||
-        null,
-
-      name:
-        home?.team?.displayName ||
-        null,
-
-      shortName:
-        home?.team?.shortDisplayName ||
-        null
-
-    },
-
-    awayTeam: {
-
-      id:
-        away?.team?.id ||
-        null,
-
-      name:
-        away?.team?.displayName ||
-        null,
-
-      shortName:
-        away?.team?.shortDisplayName ||
-        null
-
-    },
-
-    score: {
-
-      fullTime: {
-
-        home:
-          finished
-            ? homeScore
-            : null,
-
-        away:
-          finished
-            ? awayScore
-            : null
-
-      }
-
-    },
-
-    tournament:
-
-      event?.competitions?.[0]?.league?.name ||
-
-      event?.season?.displayName ||
-
-      null
-
-  };
-
-}
-
-
-/* ==========================================================
-   DEDUPE
-========================================================== */
-
-function dedupeRawEvents(
-  events
-) {
-
-  const seen =
-    new Set();
-
-
-  return events.filter(
-    event => {
-
-      const key =
-        String(
-
-          event?.id ||
-
-          [
-            event?.date,
-            event?.name
-          ].join("|")
-
-        );
-
-
-      if (
-        seen.has(
-          key
-        )
-      ) {
-
-        return false;
-
-      }
-
-
-      seen.add(
-        key
-      );
-
-
-      return true;
-
-    }
-  );
-
-}
-
-
-/* ==========================================================
-   TIMESTAMP
-========================================================== */
-
-function eventTimestamp(
-  event
-) {
-
-  const value =
-    Date.parse(
-      event?.date ||
-      ""
-    );
-
-
-  return Number.isFinite(
-    value
-  )
-    ? value
-    : 0;
-
-}
-
-
-/* ==========================================================
-   FETCH JSON
+   FETCH JSON
 ========================================================== */
 
 async function fetchJSON(
-  url
+  url
 ) {
 
-  const response =
-    await fetch(
-      url,
-      {
+  let controller =
+    null;
 
-        headers: {
-
-          Accept:
-            "application/json",
-
-          "User-Agent":
-            "YCB-Football-Prediction-Engine/3.0.1"
-
-        }
-
-      }
-    );
+  let timeout =
+    null;
 
 
-  const text =
-    await response.text();
+  /*
+   * AbortController قد لا يكون متاحًا
+   * في بعض البيئات القديمة.
+   */
+
+  if (
+    typeof AbortController !==
+    "undefined"
+  ) {
+
+    controller =
+      new AbortController();
 
 
-  let data;
+    timeout =
+      setTimeout(
+        () => {
+
+          try {
+
+            controller.abort();
+
+          } catch {
+
+            /*
+             * ignore
+             */
+
+          }
+
+        },
+        REQUEST_TIMEOUT_MS
+      );
+
+  }
 
 
-  try {
+  try {
 
-    data =
-      text
-        ? JSON.parse(
-            text
-          )
-        : null;
+    const response =
+      await fetch(
+        url,
+        {
 
-  } catch {
+          method:
+            "GET",
 
-    throw new Error(
-      "ESPN returned invalid JSON"
-    );
+          headers: {
 
-  }
+            Accept:
+              "application/json",
 
+            "User-Agent":
+              "YCB-Football-Prediction-Engine"
 
-  if (
-    !response.ok
-  ) {
+          },
 
-    throw new Error(
-      `ESPN HTTP ${response.status}`
-    );
+          signal:
+            controller?.signal
 
-  }
+        }
+      );
 
 
-  return data;
+    const text =
+      await response.text();
+
+
+    if (
+      !response.ok
+    ) {
+
+      throw new Error(
+        `ESPN HTTP ${response.status}`
+      );
+
+    }
+
+
+    if (
+      !text
+    ) {
+
+      return null;
+
+    }
+
+
+    try {
+
+      return JSON.parse(
+        text
+      );
+
+    } catch {
+
+      throw new Error(
+        "ESPN returned invalid JSON"
+      );
+
+    }
+
+  } finally {
+
+    if (
+      timeout
+    ) {
+
+      clearTimeout(
+        timeout
+      );
+
+    }
+
+  }
 
 }
 
 
 /* ==========================================================
-   NORMALIZE NAME
+   BUILD DATE RANGE
+========================================================== */
+
+function buildDateRange(
+  startDate,
+  backDays,
+  forwardDays
+) {
+
+  const dates =
+    [];
+
+
+  for (
+    let offset =
+      -backDays;
+
+    offset <=
+      forwardDays;
+
+    offset++
+  ) {
+
+    const date =
+      new Date(
+        startDate
+      );
+
+
+    date.setDate(
+      date.getDate() +
+      offset
+    );
+
+
+    dates.push(
+      formatESPNDate(
+        date
+      )
+    );
+
+  }
+
+
+  return dates;
+
+}
+
+
+/* ==========================================================
+   ESPN DATE
+========================================================== */
+
+function formatESPNDate(
+  date
+) {
+
+  const year =
+    date.getUTCFullYear();
+
+
+  const month =
+    String(
+      date.getUTCMonth() +
+      1
+    )
+      .padStart(
+        2,
+        "0"
+      );
+
+
+  const day =
+    String(
+      date.getUTCDate()
+    )
+      .padStart(
+        2,
+        "0"
+      );
+
+
+  return (
+    `${year}${month}${day}`
+  );
+
+}
+
+
+/* ==========================================================
+   CHUNK ARRAY
+========================================================== */
+
+function chunkArray(
+  array,
+  size
+) {
+
+  const result =
+    [];
+
+
+  for (
+    let i = 0;
+
+    i < array.length;
+
+    i += size
+  ) {
+
+    result.push(
+      array.slice(
+        i,
+        i + size
+      )
+    );
+
+  }
+
+
+  return result;
+
+}
+
+
+/* ==========================================================
+   NAME NORMALIZATION
 ========================================================== */
 
 function normalizeName(
-  value
+  value
 ) {
 
-  return String(
-    value ||
-    ""
-  )
+  return String(
+    value ||
+    ""
+  )
 
-    .toLowerCase()
+    .toLowerCase()
 
-    .trim()
+    .trim()
 
-    .normalize(
-      "NFD"
-    )
+    .normalize(
+      "NFD"
+    )
 
-    .replace(
-      /[\u0300-\u036f]/g,
-      ""
-    )
+    .replace(
+      /[\u0300-\u036f]/g,
+      ""
+    )
 
-    .replace(
-      /&/g,
-      " and "
-    )
+    .replace(
+      /&/g,
+      " and "
+    )
 
-    .replace(
-      /\b(fc|cf|afc|sc|ac|fk|club|the)\b/g,
-      " "
-    )
+    .replace(
+      /\b(fc|cf|afc|sc|ac|fk|club|the|football|futbol|calcio)\b/g,
+      " "
+    )
 
-    .replace(
-      /[^a-z0-9\u0600-\u06ff\s]/gi,
-      " "
-    )
+    .replace(
+      /[^a-z0-9\u0600-\u06ff\s]/gi,
+      " "
+    )
 
-    .replace(
-      /\s+/g,
-      " "
-    )
+    .replace(
+      /\s+/g,
+      " "
+    )
 
-    .trim();
+    .trim();
 
 }
 
 
 /* ==========================================================
-   NAME MATCH
+   NAME MATCH
 ========================================================== */
 
 function namesMatch(
-  first,
-  second
+  first,
+  second
 ) {
 
-  const a =
-    normalizeName(
-      first
-    );
+  const a =
+    normalizeName(
+      first
+    );
 
 
-  const b =
-    normalizeName(
-      second
-    );
+  const b =
+    normalizeName(
+      second
+    );
 
 
-  if (
-    !a ||
-    !b
-  ) {
+  if (
+    !a ||
+    !b
+  ) {
 
-    return false;
+    return false;
 
-  }
-
-
-  if (
-    a === b ||
-    a.includes(b) ||
-    b.includes(a)
-  ) {
-
-    return true;
-
-  }
+  }
 
 
-  const ta =
-    new Set(
+  /*
+   * exact
+   */
 
-      a
-        .split(" ")
-        .filter(
-          x =>
-            x.length >= 3
-        )
+  if (
+    a === b
+  ) {
 
-    );
+    return true;
 
-
-  const tb =
-    b
-      .split(" ")
-      .filter(
-        x =>
-          x.length >= 3
-      );
+  }
 
 
-  const overlap =
-    tb.filter(
-      x =>
-        ta.has(x)
-    ).length;
+  /*
+   * contains
+   */
+
+  if (
+    a.includes(b) ||
+    b.includes(a)
+  ) {
+
+    return true;
+
+  }
 
 
-  return (
-    overlap >=
-    Math.min(
-      2,
-      tb.length
-    )
-  );
+  /*
+   * token matching
+   */
+
+  const ta =
+    new Set(
+      a
+        .split(" ")
+        .filter(
+          token =>
+            token.length >= 3
+        )
+    );
+
+
+  const tb =
+    b
+      .split(" ")
+      .filter(
+        token =>
+          token.length >= 3
+      );
+
+
+  if (
+    ta.size === 0 ||
+    tb.length === 0
+  ) {
+
+    return false;
+
+  }
+
+
+  const overlap =
+    tb.filter(
+      token =>
+        ta.has(token)
+    ).length;
+
+
+  /*
+   * نحتاج تطابق كافٍ.
+   */
+
+  return (
+    overlap >=
+    Math.min(
+      2,
+      tb.length
+    )
+  );
 
 }
 
 
 /* ==========================================================
-   NAME SCORE
-========================================================== */
-
-function nameScore(
-  candidate,
-  wanted
-) {
-
-  const a =
-    normalizeName(
-      candidate
-    );
-
-
-  const b =
-    normalizeName(
-      wanted
-    );
-
-
-  if (
-    !a ||
-    !b
-  ) {
-
-    return 0;
-
-  }
-
-
-  if (
-    a === b
-  ) {
-
-    return 100;
-
-  }
-
-
-  if (
-    a.includes(b) ||
-    b.includes(a)
-  ) {
-
-    return 85;
-
-  }
-
-
-  const ta =
-    new Set(
-
-      a
-        .split(" ")
-        .filter(
-          x =>
-            x.length >= 3
-        )
-
-    );
-
-
-  const tb =
-    b
-      .split(" ")
-      .filter(
-        x =>
-          x.length >= 3
-      );
-
-
-  const overlap =
-    tb.filter(
-      x =>
-        ta.has(x)
-    ).length;
-
-
-  return overlap
-    ? 40 +
-      overlap * 10
-    : 0;
-
-}
-
-
-/* ==========================================================
-   NUMBER
+   NUMBER
 ========================================================== */
 
 function finiteOrNull(
-  value
+  value
 ) {
 
-  if (
-    value === null ||
-    value === undefined ||
-    value === ""
-  ) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
 
-    return null;
+    return null;
 
-  }
-
-
-  const number =
-    Number(
-      value
-    );
+  }
 
 
-  return Number.isFinite(
-    number
-  )
-    ? number
-    : null;
-
-}
+  const number =
+    Number(
+      value
+    );
 
 
-/* ==========================================================
-   DATE
-========================================================== */
+  return Number.isFinite(
+    number
+  )
 
-function formatDate(
-  date
-) {
+    ? number
 
-  return date
-    .toISOString()
-    .slice(
-      0,
-      10
-    );
+    : null;
 
 }
 
 
 /* ==========================================================
-   UNIQUE
-========================================================== */
-
-function unique(
-  values
-) {
-
-  return [
-    ...new Set(
-      values.filter(
-        Boolean
-      )
-    )
-  ];
-
-}
-
-
-/* ==========================================================
-   EMPTY DATA
-========================================================== */
-
-function emptyData() {
-
-  return {
-
-    source:
-      "espn",
-
-    available:
-      true,
-
-    matchFound:
-      false,
-
-    fixture:
-      null,
-
-    recentMatches: {
-
-      home:
-        [],
-
-      away:
-        []
-
-    }
-
-  };
-
-}
-
-
-/* ==========================================================
-   REGISTER
+   REGISTER
 ========================================================== */
 
 const provider =
-  new ESPNProvider();
+  new ESPNProvider();
 
 
 registerProvider(
-  provider
+  provider
 );
 
 
