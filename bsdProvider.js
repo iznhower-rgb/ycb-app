@@ -4,34 +4,23 @@
 //
 // BSD = Bzzoiro Sports Data
 //
-// Version:
-//   3.1.0
-//
-// Required environment variable:
-//   BSD_API_KEY
+// Corrected for BSD Football API v2
 //
 // API:
 //   https://sports.bzzoiro.com/api/v2
 //
-// Authentication:
+// AUTH:
 //   Authorization: Token YOUR_API_KEY
 //
-// Compatible with:
-//   providers.js 3.1.x
-//   providerRunner.js
-//   worker.js
+// Required ENV:
+//   BSD_API_KEY
 //
-// Main improvements:
-//   1. Team-ID based matching.
-//   2. Team fixtures endpoint.
-//   3. Events endpoint with team_id.
-//   4. Historical results collection.
-//   5. Upcoming fixture detection.
-//   6. Multiple BSD response-shape fallbacks.
-//   7. Better team-name normalization.
-//   8. Does not silently hide useful API errors.
-//   9. Deduplicates events.
-//  10. Keeps api_ok_no_match separate from network errors.
+// Main endpoints used:
+//   GET /teams/?search=TEAM
+//   GET /teams/{id}/
+//   GET /teams/{id}/fixtures/
+//   GET /events/?team_id={id}
+//   GET /events/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
 //
 // ==========================================================
 
@@ -49,21 +38,17 @@ import {
 const API =
   "https://sports.bzzoiro.com/api/v2";
 
-
 const PROVIDER_VERSION =
   "3.1.0";
 
+const PAGE_LIMIT =
+  200;
+
+const MAX_PAGES =
+  5;
 
 const MAX_RECENT_MATCHES =
   15;
-
-
-const TEAM_SEARCH_LIMIT =
-  30;
-
-
-const FIXTURE_LIMIT =
-  200;
 
 
 // ==========================================================
@@ -72,12 +57,9 @@ const FIXTURE_LIMIT =
 
 class BSDProvider extends DataProvider {
 
-
   constructor() {
 
-    super(
-      "BSD"
-    );
+    super("BSD");
 
   }
 
@@ -97,22 +79,11 @@ class BSDProvider extends DataProvider {
 
 
     const homeName =
-      String(
-        home ||
-        ""
-      ).trim();
-
+      cleanString(home);
 
     const awayName =
-      String(
-        away ||
-        ""
-      ).trim();
+      cleanString(away);
 
-
-    // ------------------------------------------------------
-    // Validate team names
-    // ------------------------------------------------------
 
     if (
       !homeName ||
@@ -123,82 +94,23 @@ class BSDProvider extends DataProvider {
         "configuration_error",
         "اسم الفريق المضيف أو الضيف مفقود.",
         startedAt,
-        {
-
-          available:
-            false,
-
-          matchFound:
-            false,
-
-          fixture:
-            null,
-
-          recentMatches: {
-
-            home:
-              [],
-
-            away:
-              []
-
-          },
-
-          historyAvailable:
-            false
-
-        }
+        emptyData()
       );
 
     }
 
 
-    // ------------------------------------------------------
-    // API KEY
-    // ------------------------------------------------------
-
     const apiKey =
-      String(
-        env?.BSD_API_KEY ||
-        env?.BSD_KEY ||
-        env?.SPORTS_BSD_API_KEY ||
-        ""
-      ).trim();
+      getApiKey(env);
 
 
-    if (
-      !apiKey
-    ) {
+    if (!apiKey) {
 
       return buildResponse(
         "configuration_error",
         "BSD_API_KEY غير موجود في Environment Variables.",
         startedAt,
-        {
-
-          available:
-            false,
-
-          matchFound:
-            false,
-
-          fixture:
-            null,
-
-          recentMatches: {
-
-            home:
-              [],
-
-            away:
-              []
-
-          },
-
-          historyAvailable:
-            false
-
-        }
+        emptyData()
       );
 
     }
@@ -207,10 +119,13 @@ class BSDProvider extends DataProvider {
     try {
 
       // ----------------------------------------------------
-      // Find both teams
+      // 1. Find both teams
       // ----------------------------------------------------
 
-      const teamResults =
+      const [
+        homeResult,
+        awayResult
+      ] =
         await Promise.all([
 
           findTeam(
@@ -227,48 +142,57 @@ class BSDProvider extends DataProvider {
 
 
       const homeTeam =
-        teamResults[0];
-
+        homeResult.team;
 
       const awayTeam =
-        teamResults[1];
+        awayResult.team;
 
 
       // ----------------------------------------------------
-      // Collect all available events
+      // 2. Collect events from both teams
       // ----------------------------------------------------
 
-      const homeData =
-        await collectTeamEvents(
-          homeTeam,
-          homeName,
-          apiKey
-        );
+      const homeEventsResult =
+        homeTeam?.id
+
+          ? await collectTeamEvents(
+              homeTeam.id,
+              apiKey
+            )
+
+          : {
+              events: [],
+              errors: []
+            };
 
 
-      const awayData =
-        await collectTeamEvents(
-          awayTeam,
-          awayName,
-          apiKey
-        );
+      const awayEventsResult =
+        awayTeam?.id
+
+          ? await collectTeamEvents(
+              awayTeam.id,
+              apiKey
+            )
+
+          : {
+              events: [],
+              errors: []
+            };
 
 
       // ----------------------------------------------------
-      // Merge and deduplicate events
+      // 3. Merge events
       // ----------------------------------------------------
 
-      const allEvents =
-        dedupeEvents(
-          [
-            ...homeData.events,
-            ...awayData.events
-          ]
-        );
+      let allEvents =
+        dedupeEvents([
+          ...homeEventsResult.events,
+          ...awayEventsResult.events
+        ]);
 
 
       // ----------------------------------------------------
-      // Find fixture
+      // 4. Find requested fixture
       // ----------------------------------------------------
 
       let fixture =
@@ -282,129 +206,29 @@ class BSDProvider extends DataProvider {
 
 
       // ----------------------------------------------------
-      // Global event fallback
+      // 5. Global date fallback
       // ----------------------------------------------------
 
       if (
         !fixture
       ) {
 
-        const globalEvents =
-          await findGlobalEvents(
-            homeName,
-            awayName,
+        const globalResult =
+          await collectGlobalEvents(
             apiKey
           );
 
 
-        if (
-          globalEvents.length
-        ) {
+        allEvents =
+          dedupeEvents([
+            ...allEvents,
+            ...globalResult.events
+          ]);
 
-          fixture =
-            findMatchingEvent(
-              globalEvents,
-              homeName,
-              awayName,
-              homeTeam,
-              awayTeam
-            );
-
-        }
-
-      }
-
-
-      // ----------------------------------------------------
-      // Normalize history
-      // ----------------------------------------------------
-
-      const normalizedHome =
-        normalizeRecentMatches(
-          allEvents,
-          homeName,
-          homeTeam
-        );
-
-
-      const normalizedAway =
-        normalizeRecentMatches(
-          allEvents,
-          awayName,
-          awayTeam
-        );
-
-
-      // ----------------------------------------------------
-      // If individual team calls gave nothing,
-      // try their dedicated fixture endpoints again.
-      // ----------------------------------------------------
-
-      let finalHome =
-        normalizedHome;
-
-
-      let finalAway =
-        normalizedAway;
-
-
-      if (
-        finalHome.length === 0 &&
-        homeTeam?.id
-      ) {
-
-        const events =
-          await getTeamFixtures(
-            homeTeam.id,
-            apiKey
-          );
-
-
-        finalHome =
-          normalizeRecentMatches(
-            events,
-            homeName,
-            homeTeam
-          );
-
-      }
-
-
-      if (
-        finalAway.length === 0 &&
-        awayTeam?.id
-      ) {
-
-        const events =
-          await getTeamFixtures(
-            awayTeam.id,
-            apiKey
-          );
-
-
-        finalAway =
-          normalizeRecentMatches(
-            events,
-            awayName,
-            awayTeam
-          );
-
-      }
-
-
-      // ----------------------------------------------------
-      // Final fixture fallback from dedicated histories
-      // ----------------------------------------------------
-
-      if (
-        !fixture
-      ) {
 
         fixture =
           findMatchingEvent(
-            [
-              ...allEvents
-            ],
+            allEvents,
             homeName,
             awayName,
             homeTeam,
@@ -414,13 +238,77 @@ class BSDProvider extends DataProvider {
       }
 
 
+      // ----------------------------------------------------
+      // 6. Normalize recent history
+      // ----------------------------------------------------
+
+      const homeHistory =
+        normalizeRecentMatches(
+          allEvents,
+          homeName,
+          homeTeam
+        );
+
+
+      const awayHistory =
+        normalizeRecentMatches(
+          allEvents,
+          awayName,
+          awayTeam
+        );
+
+
       const historyAvailable =
-        finalHome.length > 0 ||
-        finalAway.length > 0;
+        homeHistory.length > 0 ||
+        awayHistory.length > 0;
 
 
       // ----------------------------------------------------
-      // No fixture + no history
+      // 7. Diagnostics
+      // ----------------------------------------------------
+
+      const diagnostics = {
+
+        homeTeamFound:
+          Boolean(homeTeam),
+
+        awayTeamFound:
+          Boolean(awayTeam),
+
+        homeTeamId:
+          homeTeam?.id ||
+          null,
+
+        awayTeamId:
+          awayTeam?.id ||
+          null,
+
+        homeTeamSearch:
+          homeResult.diagnostics,
+
+        awayTeamSearch:
+          awayResult.diagnostics,
+
+        eventsCollected:
+          allEvents.length,
+
+        homeEvents:
+          homeEventsResult.events.length,
+
+        awayEvents:
+          awayEventsResult.events.length,
+
+        homeErrors:
+          homeEventsResult.errors,
+
+        awayErrors:
+          awayEventsResult.errors
+
+      };
+
+
+      // ----------------------------------------------------
+      // 8. Nothing found
       // ----------------------------------------------------
 
       if (
@@ -428,47 +316,9 @@ class BSDProvider extends DataProvider {
         !historyAvailable
       ) {
 
-        const diagnostics = {
-
-          homeTeamFound:
-            Boolean(
-              homeTeam
-            ),
-
-          awayTeamFound:
-            Boolean(
-              awayTeam
-            ),
-
-          homeTeamId:
-            homeTeam?.id ||
-            null,
-
-          awayTeamId:
-            awayTeam?.id ||
-            null,
-
-          eventsCollected:
-            allEvents.length,
-
-          homeEvents:
-            homeData.events.length,
-
-          awayEvents:
-            awayData.events.length,
-
-          homeErrors:
-            homeData.errors,
-
-          awayErrors:
-            awayData.errors
-
-        };
-
-
         return buildResponse(
           "api_ok_no_match",
-          "BSD متصل، لكن لم يتم العثور على المباراة أو نتائج تاريخية قابلة للاستخدام.",
+          "BSD متصل، لكن لم يتم العثور على المباراة أو بيانات تاريخية قابلة للاستخدام.",
           startedAt,
           {
 
@@ -504,6 +354,20 @@ class BSDProvider extends DataProvider {
 
             },
 
+            teams: {
+
+              home:
+                homeTeam
+                  ? normalizeTeam(homeTeam)
+                  : null,
+
+              away:
+                awayTeam
+                  ? normalizeTeam(awayTeam)
+                  : null
+
+            },
+
             diagnostics
 
           }
@@ -513,7 +377,7 @@ class BSDProvider extends DataProvider {
 
 
       // ----------------------------------------------------
-      // Success / partial success
+      // 9. Success
       // ----------------------------------------------------
 
       return buildResponse(
@@ -525,7 +389,7 @@ class BSDProvider extends DataProvider {
 
           ? "تم العثور على المباراة وبيانات BSD بنجاح."
 
-          : "تم العثور على بيانات تاريخية عبر BSD، لكن لم يتم التحقق من المباراة المطلوبة.",
+          : "تم العثور على بيانات تاريخية عبر BSD، لكن لم يتم العثور على المباراة المطلوبة.",
 
         startedAt,
         {
@@ -534,24 +398,20 @@ class BSDProvider extends DataProvider {
             true,
 
           matchFound:
-            Boolean(
-              fixture
-            ),
+            Boolean(fixture),
 
           fixture:
             fixture
-              ? normalizeEvent(
-                  fixture
-                )
+              ? normalizeEvent(fixture)
               : null,
 
           recentMatches: {
 
             home:
-              finalHome,
+              homeHistory,
 
             away:
-              finalAway
+              awayHistory
 
           },
 
@@ -560,47 +420,28 @@ class BSDProvider extends DataProvider {
           historyCount: {
 
             home:
-              finalHome.length,
+              homeHistory.length,
 
             away:
-              finalAway.length
+              awayHistory.length
 
           },
 
           teams: {
 
-            home: homeTeam
-              ? normalizeTeam(
-                  homeTeam
-                )
-              : null,
+            home:
+              homeTeam
+                ? normalizeTeam(homeTeam)
+                : null,
 
-            away: awayTeam
-              ? normalizeTeam(
-                  awayTeam
-                )
-              : null
+            away:
+              awayTeam
+                ? normalizeTeam(awayTeam)
+                : null
 
           },
 
-          diagnostics: {
-
-            eventsCollected:
-              allEvents.length,
-
-            homeEvents:
-              homeData.events.length,
-
-            awayEvents:
-              awayData.events.length,
-
-            homeErrors:
-              homeData.errors,
-
-            awayErrors:
-              awayData.errors
-
-          }
+          diagnostics
 
         }
       );
@@ -611,36 +452,20 @@ class BSDProvider extends DataProvider {
 
       return buildResponse(
         "network_error",
-
         error?.message ||
-        String(
-          error
-        ),
-
+          String(error),
         startedAt,
         {
 
-          available:
-            false,
+          ...emptyData(),
 
-          matchFound:
-            false,
+          diagnostics: {
 
-          fixture:
-            null,
+            error:
+              error?.message ||
+              String(error)
 
-          recentMatches: {
-
-            home:
-              [],
-
-            away:
-              []
-
-          },
-
-          historyAvailable:
-            false
+          }
 
         }
       );
@@ -648,6 +473,74 @@ class BSDProvider extends DataProvider {
     }
 
   }
+
+}
+
+
+// ==========================================================
+// API KEY
+// ==========================================================
+
+function getApiKey(
+  env
+) {
+
+  return cleanString(
+
+    env?.BSD_API_KEY ||
+
+    env?.BSD_KEY ||
+
+    env?.SPORTS_BSD_API_KEY ||
+
+    ""
+
+  );
+
+}
+
+
+// ==========================================================
+// EMPTY DATA
+// ==========================================================
+
+function emptyData() {
+
+  return {
+
+    available:
+      false,
+
+    matchFound:
+      false,
+
+    fixture:
+      null,
+
+    recentMatches: {
+
+      home:
+        [],
+
+      away:
+        []
+
+    },
+
+    historyAvailable:
+      false,
+
+    historyCount: {
+
+      home:
+        0,
+
+      away:
+        0
+
+    }
+
+  };
 
 }
 
@@ -699,34 +592,54 @@ async function findTeam(
   apiKey
 ) {
 
+  const diagnostics = {
+
+    requestedName:
+      name,
+
+    endpoint:
+      null,
+
+    candidates:
+      0,
+
+    error:
+      null
+
+  };
+
+
   const target =
-    normalizeName(
-      name
-    );
+    normalizeName(name);
 
 
-  if (
-    !target
-  ) {
+  if (!target) {
 
-    return null;
+    return {
+
+      team:
+        null,
+
+      diagnostics
+
+    };
 
   }
 
 
+  const url =
+    `${API}/teams/?search=` +
+
+    encodeURIComponent(name) +
+
+    `&limit=${PAGE_LIMIT}`;
+
+
+  diagnostics.endpoint =
+    url;
+
+
   try {
-
-    const url =
-      `${API}/teams/?search=` +
-
-      encodeURIComponent(
-        name
-      ) +
-
-      `&limit=` +
-
-      TEAM_SEARCH_LIMIT;
-
 
     const data =
       await fetchJSON(
@@ -736,107 +649,146 @@ async function findTeam(
 
 
     const teams =
-      extractResults(
-        data
-      );
+      extractResults(data);
+
+
+    diagnostics.candidates =
+      teams.length;
 
 
     if (
       teams.length === 0
     ) {
 
-      return null;
+      return {
+
+        team:
+          null,
+
+        diagnostics
+
+      };
 
     }
 
 
     // ------------------------------------------------------
-    // Exact normalized name
+    // Exact normalized match
     // ------------------------------------------------------
 
     const exact =
       teams.find(
         team =>
+
           normalizeName(
-            teamName(
-              team
-            )
+            teamName(team)
           ) === target
+
       );
 
 
-    if (
-      exact
-    ) {
+    if (exact) {
 
-      return exact;
+      return {
+
+        team:
+          exact,
+
+        diagnostics
+
+      };
 
     }
 
 
     // ------------------------------------------------------
-    // Strong name match
+    // Strong match
     // ------------------------------------------------------
 
     const strong =
       teams.find(
         team =>
+
           strongNameMatch(
-            teamName(
-              team
-            ),
+            teamName(team),
             name
           )
+
       );
 
 
-    if (
-      strong
-    ) {
+    if (strong) {
 
-      return strong;
+      return {
+
+        team:
+          strong,
+
+        diagnostics
+
+      };
 
     }
 
 
     // ------------------------------------------------------
-    // Normal name match
+    // Normal match
     // ------------------------------------------------------
 
-    const matched =
+    const normal =
       teams.find(
         team =>
+
           namesMatch(
-            teamName(
-              team
-            ),
+            teamName(team),
             name
           )
+
       );
 
 
-    if (
-      matched
-    ) {
+    if (normal) {
 
-      return matched;
+      return {
+
+        team:
+          normal,
+
+        diagnostics
+
+      };
 
     }
 
 
-    // ------------------------------------------------------
-    // IMPORTANT:
-    // Do not blindly use teams[0].
-    //
-    // A wrong team ID can cause the whole provider to
-    // search the wrong fixture history.
-    // ------------------------------------------------------
+    // Never blindly select first team.
 
-    return null;
+    return {
 
-  } catch {
+      team:
+        null,
 
-    return null;
+      diagnostics
+
+    };
+
+  } catch (
+    error
+  ) {
+
+    diagnostics.error =
+      error?.message ||
+      String(error);
+
+
+    return {
+
+      team:
+        null,
+
+      diagnostics
+
+    };
 
   }
 
@@ -848,8 +800,7 @@ async function findTeam(
 // ==========================================================
 
 async function collectTeamEvents(
-  team,
-  teamNameValue,
+  teamId,
   apiKey
 ) {
 
@@ -861,110 +812,82 @@ async function collectTeamEvents(
 
 
   // --------------------------------------------------------
-  // Endpoint 1:
+  // Endpoint A
   // /teams/{id}/fixtures/
   // --------------------------------------------------------
 
-  if (
-    team?.id
+  try {
+
+    const fixtureEvents =
+      await getAllPages(
+        `${API}/teams/${encodeURIComponent(
+          String(teamId)
+        )}/fixtures/`,
+        apiKey
+      );
+
+
+    events.push(
+      ...fixtureEvents
+    );
+
+  } catch (
+    error
   ) {
 
-    try {
+    errors.push({
 
-      const fixtureEvents =
-        await getTeamFixtures(
-          team.id,
-          apiKey
-        );
+      endpoint:
+        "team_fixtures",
 
-
-      events.push(
-        ...fixtureEvents
-      );
-
-    } catch (
-      error
-    ) {
-
-      errors.push(
+      error:
         error?.message ||
-        String(
-          error
-        )
-      );
+        String(error)
 
-    }
-
-
-    // ------------------------------------------------------
-    // Endpoint 2:
-    // /events/?team_id={id}
-    // ------------------------------------------------------
-
-    try {
-
-      const teamEvents =
-        await getTeamEvents(
-          team.id,
-          apiKey
-        );
-
-
-      events.push(
-        ...teamEvents
-      );
-
-    } catch (
-      error
-    ) {
-
-      errors.push(
-        error?.message ||
-        String(
-          error
-        )
-      );
-
-    }
+    });
 
   }
 
 
   // --------------------------------------------------------
-  // Endpoint 3:
-  // Search events by team name only when ID is unavailable.
+  // Endpoint B
+  // /events/?team_id={id}
   // --------------------------------------------------------
 
-  if (
-    events.length === 0 &&
-    teamNameValue
+  try {
+
+    const teamEvents =
+      await getAllPages(
+
+        `${API}/events/?team_id=` +
+
+        encodeURIComponent(
+          String(teamId)
+        ),
+
+        apiKey
+
+      );
+
+
+    events.push(
+      ...teamEvents
+    );
+
+  } catch (
+    error
   ) {
 
-    try {
+    errors.push({
 
-      const searchEvents =
-        await searchEventsByTeamName(
-          teamNameValue,
-          apiKey
-        );
+      endpoint:
+        "team_events",
 
-
-      events.push(
-        ...searchEvents
-      );
-
-    } catch (
-      error
-    ) {
-
-      errors.push(
+      error:
         error?.message ||
-        String(
-          error
-        )
-      );
+        String(error)
 
-    }
+    });
 
   }
 
@@ -972,9 +895,7 @@ async function collectTeamEvents(
   return {
 
     events:
-      dedupeEvents(
-        events
-      ),
+      dedupeEvents(events),
 
     errors
 
@@ -984,282 +905,162 @@ async function collectTeamEvents(
 
 
 // ==========================================================
-// GET TEAM FIXTURES
+// COLLECT GLOBAL EVENTS
 // ==========================================================
 
-async function getTeamFixtures(
-  teamId,
+async function collectGlobalEvents(
   apiKey
 ) {
 
-  if (
-    teamId === null ||
-    teamId === undefined ||
-    String(
-      teamId
-    ).trim() === ""
-  ) {
-
-    return [];
-
-  }
-
-
-  const url =
-    `${API}/teams/` +
-
-    encodeURIComponent(
-      String(
-        teamId
-      )
-    ) +
-
-    `/fixtures/?limit=` +
-
-    FIXTURE_LIMIT;
-
-
-  const data =
-    await fetchJSON(
-      url,
-      apiKey
-    );
-
-
-  return extractResults(
-    data
-  );
-
-}
-
-
-// ==========================================================
-// GET EVENTS BY TEAM ID
-// ==========================================================
-
-async function getTeamEvents(
-  teamId,
-  apiKey
-) {
-
-  if (
-    teamId === null ||
-    teamId === undefined
-  ) {
-
-    return [];
-
-  }
-
-
-  const urls = [
-
-    `${API}/events/?team_id=` +
-
-    encodeURIComponent(
-      String(
-        teamId
-      )
-    ) +
-
-    `&limit=${FIXTURE_LIMIT}`,
-
-    `${API}/events/?team_id=` +
-
-    encodeURIComponent(
-      String(
-        teamId
-      )
-    ) +
-
-    `&status=notstarted&limit=${FIXTURE_LIMIT}`
-
-  ];
-
-
-  const all =
+  const errors =
     [];
 
+  const events =
+    [];
 
-  for (
-    const url
-    of urls
-  ) {
-
-    try {
-
-      const data =
-        await fetchJSON(
-          url,
-          apiKey
-        );
-
-
-      all.push(
-        ...extractResults(
-          data
-        )
-      );
-
-    } catch {
-
-      // Continue with the next supported query.
-    }
-
-  }
-
-
-  return dedupeEvents(
-    all
-  );
-
-}
-
-
-// ==========================================================
-// SEARCH EVENTS BY TEAM NAME
-// ==========================================================
-
-async function searchEventsByTeamName(
-  name,
-  apiKey
-) {
-
-  const url =
-    `${API}/events/?search=` +
-
-    encodeURIComponent(
-      name
-    ) +
-
-    `&limit=${FIXTURE_LIMIT}`;
-
-
-  const data =
-    await fetchJSON(
-      url,
-      apiKey
-    );
-
-
-  return extractResults(
-    data
-  );
-
-}
-
-
-// ==========================================================
-// GLOBAL EVENTS
-// ==========================================================
-
-async function findGlobalEvents(
-  home,
-  away,
-  apiKey
-) {
 
   const now =
     new Date();
 
 
   const from =
-    new Date(
-      now.getTime()
-    );
+    new Date(now);
 
 
   from.setDate(
-    from.getDate() - 30
+    from.getDate() - 45
   );
 
 
   const to =
-    new Date(
-      now.getTime()
-    );
+    new Date(now);
 
 
   to.setDate(
-    to.getDate() + 60
+    to.getDate() + 90
   );
 
 
-  const urls = [
-
+  const url =
     `${API}/events/?date_from=` +
 
     encodeURIComponent(
-      formatDate(
-        from
-      )
+      formatDate(from)
     ) +
 
     `&date_to=` +
 
     encodeURIComponent(
-      formatDate(
-        to
-      )
-    ) +
-
-    `&limit=${FIXTURE_LIMIT}`,
-
-    `${API}/events/?limit=${FIXTURE_LIMIT}`
-
-  ];
+      formatDate(to)
+    );
 
 
-  const events =
-    [];
+  try {
 
-
-  for (
-    const url
-    of urls
-  ) {
-
-    try {
-
-      const data =
-        await fetchJSON(
-          url,
-          apiKey
-        );
-
-
-      events.push(
-        ...extractResults(
-          data
-        )
+    const results =
+      await getAllPages(
+        url,
+        apiKey
       );
 
 
-      if (
-        findMatchingEvent(
-          events,
-          home,
-          away,
-          null,
-          null
-        )
-      ) {
+    events.push(
+      ...results
+    );
 
-        break;
+  } catch (
+    error
+  ) {
 
-      }
-
-    } catch {
-
-      // Continue.
-    }
+    errors.push(
+      error?.message ||
+      String(error)
+    );
 
   }
 
 
-  return dedupeEvents(
-    events
-  );
+  return {
+
+    events:
+      dedupeEvents(events),
+
+    errors
+
+  };
+
+}
+
+
+// ==========================================================
+// PAGINATION
+// ==========================================================
+
+async function getAllPages(
+  firstUrl,
+  apiKey
+) {
+
+  const all =
+    [];
+
+  let url =
+    firstUrl;
+
+  let pages =
+    0;
+
+
+  while (
+    url &&
+    pages < MAX_PAGES
+  ) {
+
+    pages++;
+
+
+    const data =
+      await fetchJSON(
+        url,
+        apiKey
+      );
+
+
+    const results =
+      extractResults(data);
+
+
+    all.push(
+      ...results
+    );
+
+
+    // ------------------------------------------------------
+    // BSD normally returns "next".
+    // ------------------------------------------------------
+
+    if (
+      data?.next
+    ) {
+
+      url =
+        data.next;
+
+      continue;
+
+    }
+
+
+    // ------------------------------------------------------
+    // If next is unavailable, stop.
+    // ------------------------------------------------------
+
+    break;
+
+  }
+
+
+  return all;
 
 }
 
@@ -1277,9 +1078,7 @@ function findMatchingEvent(
 ) {
 
   if (
-    !Array.isArray(
-      events
-    ) ||
+    !Array.isArray(events) ||
     events.length === 0
   ) {
 
@@ -1289,15 +1088,11 @@ function findMatchingEvent(
 
 
   const targetHome =
-    normalizeName(
-      home
-    );
+    normalizeName(home);
 
 
   const targetAway =
-    normalizeName(
-      away
-    );
+    normalizeName(away);
 
 
   const homeId =
@@ -1313,7 +1108,7 @@ function findMatchingEvent(
 
 
   // --------------------------------------------------------
-  // 1. ID MATCH
+  // 1. Exact team IDs
   // --------------------------------------------------------
 
   if (
@@ -1341,13 +1136,9 @@ function findMatchingEvent(
 
           return (
 
-            eventHomeId ===
-            homeId
+            eventHomeId === homeId &&
 
-            &&
-
-            eventAwayId ===
-            awayId
+            eventAwayId === awayId
 
           );
 
@@ -1355,9 +1146,7 @@ function findMatchingEvent(
       );
 
 
-    if (
-      byId
-    ) {
+    if (byId) {
 
       return byId;
 
@@ -1367,7 +1156,7 @@ function findMatchingEvent(
 
 
   // --------------------------------------------------------
-  // 2. NAME MATCH
+  // 2. Exact names
   // --------------------------------------------------------
 
   const exact =
@@ -1375,15 +1164,11 @@ function findMatchingEvent(
       event => {
 
         const eventHome =
-          eventHomeName(
-            event
-          );
+          eventHomeName(event);
 
 
         const eventAway =
-          eventAwayName(
-            event
-          );
+          eventAwayName(event);
 
 
         return (
@@ -1391,9 +1176,7 @@ function findMatchingEvent(
           namesMatch(
             eventHome,
             targetHome
-          )
-
-          &&
+          ) &&
 
           namesMatch(
             eventAway,
@@ -1406,9 +1189,7 @@ function findMatchingEvent(
     );
 
 
-  if (
-    exact
-  ) {
+  if (exact) {
 
     return exact;
 
@@ -1416,36 +1197,22 @@ function findMatchingEvent(
 
 
   // --------------------------------------------------------
-  // 3. STRONG NAME MATCH
+  // 3. Strong names
   // --------------------------------------------------------
 
   const candidates =
     events.filter(
       event => {
 
-        const eventHome =
-          eventHomeName(
-            event
-          );
-
-
-        const eventAway =
-          eventAwayName(
-            event
-          );
-
-
         return (
 
           strongNameMatch(
-            eventHome,
+            eventHomeName(event),
             targetHome
-          )
-
-          &&
+          ) &&
 
           strongNameMatch(
-            eventAway,
+            eventAwayName(event),
             targetAway
           )
 
@@ -1475,14 +1242,12 @@ function findMatchingEvent(
 
 function normalizeRecentMatches(
   events,
-  teamNameValue,
+  requestedName,
   team
 ) {
 
   if (
-    !Array.isArray(
-      events
-    )
+    !Array.isArray(events)
   ) {
 
     return [];
@@ -1492,7 +1257,7 @@ function normalizeRecentMatches(
 
   const target =
     normalizeName(
-      teamNameValue
+      requestedName
     );
 
 
@@ -1502,26 +1267,18 @@ function normalizeRecentMatches(
     );
 
 
-  const filtered =
+  const matches =
     events
 
       .filter(
         event =>
-          hasValidScore(
-            event
-          )
+          hasValidScore(event)
       )
 
       .filter(
         event => {
 
-          // ------------------------------------------------
-          // Prefer ID matching.
-          // ------------------------------------------------
-
-          if (
-            targetId
-          ) {
+          if (targetId) {
 
             const homeId =
               getEventTeamId(
@@ -1549,33 +1306,15 @@ function normalizeRecentMatches(
           }
 
 
-          // ------------------------------------------------
-          // Fallback to name.
-          // ------------------------------------------------
-
-          const eventHome =
-            eventHomeName(
-              event
-            );
-
-
-          const eventAway =
-            eventAwayName(
-              event
-            );
-
-
           return (
 
             namesMatch(
-              eventHome,
+              eventHomeName(event),
               target
-            )
-
-            ||
+            ) ||
 
             namesMatch(
-              eventAway,
+              eventAwayName(event),
               target
             )
 
@@ -1585,42 +1324,35 @@ function normalizeRecentMatches(
       );
 
 
-  return filtered
+  matches.sort(
+    (
+      a,
+      b
+    ) => {
 
-    .sort(
-      (
-        a,
-        b
-      ) => {
-
-        const dateA =
-          getEventDate(
-            a
-          );
-
-
-        const dateB =
-          getEventDate(
-            b
-          );
+      const aTime =
+        getEventDate(a)
+          ? new Date(
+              getEventDate(a)
+            ).getTime()
+          : 0;
 
 
-        return (
+      const bTime =
+        getEventDate(b)
+          ? new Date(
+              getEventDate(b)
+            ).getTime()
+          : 0;
 
-          new Date(
-            dateB || 0
-          ).getTime()
 
-          -
+      return bTime - aTime;
 
-          new Date(
-            dateA || 0
-          ).getTime()
+    }
+  );
 
-        );
 
-      }
-    )
+  return matches
 
     .slice(
       0,
@@ -1646,9 +1378,7 @@ function extractResults(
   data
 ) {
 
-  if (
-    !data
-  ) {
+  if (!data) {
 
     return [];
 
@@ -1695,6 +1425,15 @@ function extractResults(
   ) {
 
     return data.data;
+
+  }
+
+
+  if (
+    Array.isArray(data)
+  ) {
+
+    return data;
 
   }
 
@@ -1750,9 +1489,7 @@ async function fetchJSON(
 
     data =
       text
-        ? JSON.parse(
-            text
-          )
+        ? JSON.parse(text)
         : null;
 
   } catch {
@@ -1769,8 +1506,7 @@ async function fetchJSON(
   ) {
 
     if (
-      response.status ===
-      401
+      response.status === 401
     ) {
 
       throw new Error(
@@ -1781,8 +1517,7 @@ async function fetchJSON(
 
 
     if (
-      response.status ===
-      402
+      response.status === 402
     ) {
 
       throw new Error(
@@ -1793,32 +1528,29 @@ async function fetchJSON(
 
 
     if (
-      response.status ===
-      403
+      response.status === 403
     ) {
 
       throw new Error(
-        "BSD HTTP 403 — الوصول إلى هذا المورد مرفوض."
+        "BSD HTTP 403 — الوصول إلى المورد مرفوض."
       );
 
     }
 
 
     if (
-      response.status ===
-      404
+      response.status === 404
     ) {
 
       throw new Error(
-        "BSD HTTP 404 — مسار API غير موجود."
+        `BSD HTTP 404 — المسار غير موجود: ${url}`
       );
 
     }
 
 
     if (
-      response.status ===
-      429
+      response.status === 429
     ) {
 
       throw new Error(
@@ -1828,14 +1560,67 @@ async function fetchJSON(
     }
 
 
+    const detail =
+      extractApiError(data);
+
+
     throw new Error(
-      `BSD HTTP ${response.status}`
+      detail
+        ? `BSD HTTP ${response.status} — ${detail}`
+        : `BSD HTTP ${response.status}`
     );
 
   }
 
 
   return data;
+
+}
+
+
+// ==========================================================
+// API ERROR
+// ==========================================================
+
+function extractApiError(
+  data
+) {
+
+  if (!data) {
+
+    return "";
+
+  }
+
+
+  if (
+    typeof data.detail === "string"
+  ) {
+
+    return data.detail;
+
+  }
+
+
+  if (
+    typeof data.message === "string"
+  ) {
+
+    return data.message;
+
+  }
+
+
+  if (
+    typeof data.error === "string"
+  ) {
+
+    return data.error;
+
+  }
+
+
+  return "";
 
 }
 
@@ -1848,9 +1633,7 @@ function normalizeEvent(
   event
 ) {
 
-  if (
-    !event
-  ) {
+  if (!event) {
 
     return null;
 
@@ -1871,53 +1654,28 @@ function normalizeEvent(
     );
 
 
-  const finished =
-    isFinishedEvent(
-      event,
-      homeScore,
-      awayScore
-    );
-
-
-  const homeTeam =
-    getEventTeamObject(
-      event,
-      "home"
-    );
-
-
-  const awayTeam =
-    getEventTeamObject(
-      event,
-      "away"
+  const status =
+    normalizeStatus(
+      event?.status ||
+      event?.match_status
     );
 
 
   return {
 
     id:
-      String(
+      normalizeId(
         event?.id ||
         event?.event_id ||
         event?.fixture_id ||
-        event?.match_id ||
-        ""
+        event?.match_id
       ),
-
 
     utcDate:
-      getEventDate(
-        event
-      ),
-
+      getEventDate(event),
 
     status:
-      finished
-        ? "FINISHED"
-        : normalizeStatus(
-            event?.status
-          ),
-
+      status,
 
     homeTeam: {
 
@@ -1928,22 +1686,18 @@ function normalizeEvent(
         ),
 
       name:
-        eventHomeName(
-          event
-        ) ||
+        eventHomeName(event) ||
         null,
 
       shortName:
-        getShortTeamName(
-          homeTeam
+        getEventShortName(
+          event,
+          "home"
         ) ||
-        eventHomeName(
-          event
-        ) ||
+        eventHomeName(event) ||
         null
 
     },
-
 
     awayTeam: {
 
@@ -1954,22 +1708,18 @@ function normalizeEvent(
         ),
 
       name:
-        eventAwayName(
-          event
-        ) ||
+        eventAwayName(event) ||
         null,
 
       shortName:
-        getShortTeamName(
-          awayTeam
+        getEventShortName(
+          event,
+          "away"
         ) ||
-        eventAwayName(
-          event
-        ) ||
+        eventAwayName(event) ||
         null
 
     },
-
 
     score: {
 
@@ -1985,14 +1735,17 @@ function normalizeEvent(
 
     },
 
-
     tournament:
       event?.league?.name ||
+
       event?.league_name ||
+
       event?.competition?.name ||
+
       event?.competition_name ||
+
       event?.tournament?.name ||
-      event?.league_name ||
+
       null
 
   };
@@ -2008,15 +1761,6 @@ function normalizeTeam(
   team
 ) {
 
-  if (
-    !team
-  ) {
-
-    return null;
-
-  }
-
-
   return {
 
     id:
@@ -2026,9 +1770,7 @@ function normalizeTeam(
       ),
 
     name:
-      teamName(
-        team
-      ) ||
+      teamName(team) ||
       null
 
   };
@@ -2037,7 +1779,7 @@ function normalizeTeam(
 
 
 // ==========================================================
-// GET EVENT TEAM OBJECT
+// EVENT TEAM OBJECT
 // ==========================================================
 
 function getEventTeamObject(
@@ -2080,7 +1822,7 @@ function getEventTeamObject(
 
 
 // ==========================================================
-// GET EVENT TEAM ID
+// EVENT TEAM ID
 // ==========================================================
 
 function getEventTeamId(
@@ -2096,46 +1838,31 @@ function getEventTeamId(
 
 
   const value =
-    side === "home"
 
-      ? (
+    team?.id ||
 
-          team?.id ||
+    team?.team_id ||
 
-          team?.team_id ||
+    (
+      side === "home"
 
-          event?.home_team_id ||
-
+        ? event?.home_team_id ||
           event?.homeTeamId ||
-
           event?.home_id
 
-        )
-
-      : (
-
-          team?.id ||
-
-          team?.team_id ||
-
-          event?.away_team_id ||
-
+        : event?.away_team_id ||
           event?.awayTeamId ||
-
           event?.away_id
+    );
 
-        );
 
-
-  return normalizeId(
-    value
-  );
+  return normalizeId(value);
 
 }
 
 
 // ==========================================================
-// EVENT HOME NAME
+// EVENT TEAM NAME
 // ==========================================================
 
 function eventHomeName(
@@ -2155,9 +1882,13 @@ function eventHomeName(
 
     team?.short_name ||
 
+    team?.shortName ||
+
     team?.team_name ||
 
     team?.display_name ||
+
+    team?.title ||
 
     event?.home_team_name ||
 
@@ -2169,10 +1900,6 @@ function eventHomeName(
 
 }
 
-
-// ==========================================================
-// EVENT AWAY NAME
-// ==========================================================
 
 function eventAwayName(
   event
@@ -2191,13 +1918,52 @@ function eventAwayName(
 
     team?.short_name ||
 
+    team?.shortName ||
+
     team?.team_name ||
 
     team?.display_name ||
 
+    team?.title ||
+
     event?.away_team_name ||
 
     event?.away_name ||
+
+    ""
+
+  );
+
+}
+
+
+// ==========================================================
+// SHORT TEAM NAME
+// ==========================================================
+
+function getEventShortName(
+  event,
+  side
+) {
+
+  const team =
+    getEventTeamObject(
+      event,
+      side
+    );
+
+
+  return (
+
+    team?.short_name ||
+
+    team?.shortName ||
+
+    team?.short ||
+
+    team?.abbr ||
+
+    team?.abbreviation ||
 
     ""
 
@@ -2220,38 +1986,13 @@ function teamName(
 
     team?.short_name ||
 
+    team?.shortName ||
+
     team?.team_name ||
 
     team?.display_name ||
 
     team?.title ||
-
-    ""
-
-  );
-
-}
-
-
-// ==========================================================
-// SHORT TEAM NAME
-// ==========================================================
-
-function getShortTeamName(
-  team
-) {
-
-  return (
-
-    team?.short_name ||
-
-    team?.shortName ||
-
-    team?.short ||
-
-    team?.abbr ||
-
-    team?.abbreviation ||
 
     ""
 
@@ -2270,6 +2011,7 @@ function scoreValue(
 ) {
 
   const values =
+
     side === "home"
 
       ? [
@@ -2314,8 +2056,7 @@ function scoreValue(
 
 
   for (
-    const value
-    of values
+    const value of values
   ) {
 
     if (
@@ -2330,15 +2071,11 @@ function scoreValue(
 
 
     const number =
-      Number(
-        value
-      );
+      Number(value);
 
 
     if (
-      Number.isFinite(
-        number
-      )
+      Number.isFinite(number)
     ) {
 
       return number;
@@ -2354,84 +2091,25 @@ function scoreValue(
 
 
 // ==========================================================
-// FINISHED EVENT
+// VALID SCORE
 // ==========================================================
 
-function isFinishedEvent(
-  event,
-  homeScore,
-  awayScore
+function hasValidScore(
+  event
 ) {
 
-  const status =
-    String(
-      event?.status ||
-      event?.match_status ||
-      ""
-    )
-      .toLowerCase()
-      .trim();
-
-
-  if (
-    status ===
-    "finished"
-  ) {
-
-    return true;
-
-  }
-
-
-  if (
-    status ===
-    "completed"
-  ) {
-
-    return true;
-
-  }
-
-
-  if (
-    status ===
-    "ft"
-  ) {
-
-    return true;
-
-  }
-
-
-  if (
-    homeScore !== null &&
-    awayScore !== null &&
-    (
-      status ===
-      "finished"
-
-      ||
-
-      status ===
-      "completed"
-
-      ||
-
-      status ===
-      "ft"
-
-    )
-  ) {
-
-    return true;
-
-  }
-
-
   return (
-    homeScore !== null &&
-    awayScore !== null &&
-    !status
+
+    scoreValue(
+      event,
+      "home"
+    ) !== null &&
+
+    scoreValue(
+      event,
+      "away"
+    ) !== null
+
   );
 
 }
@@ -2468,9 +2146,7 @@ function getEventDate(
     null;
 
 
-  if (
-    !value
-  ) {
+  if (!value) {
 
     return null;
 
@@ -2478,9 +2154,7 @@ function getEventDate(
 
 
   const date =
-    new Date(
-      value
-    );
+    new Date(value);
 
 
   if (
@@ -2509,22 +2183,16 @@ function normalizeStatus(
 
   const value =
     String(
-      status ||
-      ""
+      status || ""
     )
       .toLowerCase()
       .trim();
 
 
   if (
-    value ===
-    "finished" ||
-
-    value ===
-    "completed" ||
-
-    value ===
-    "ft"
+    value === "finished" ||
+    value === "completed" ||
+    value === "ft"
   ) {
 
     return "FINISHED";
@@ -2533,14 +2201,9 @@ function normalizeStatus(
 
 
   if (
-    value ===
-    "live" ||
-
-    value ===
-    "inplay" ||
-
-    value ===
-    "in_progress"
+    value === "live" ||
+    value === "inplay" ||
+    value === "in_progress"
   ) {
 
     return "LIVE";
@@ -2549,11 +2212,8 @@ function normalizeStatus(
 
 
   if (
-    value ===
-    "cancelled" ||
-
-    value ===
-    "canceled"
+    value === "cancelled" ||
+    value === "canceled"
   ) {
 
     return "CANCELLED";
@@ -2562,8 +2222,7 @@ function normalizeStatus(
 
 
   if (
-    value ===
-    "postponed"
+    value === "postponed"
   ) {
 
     return "POSTPONED";
@@ -2571,34 +2230,18 @@ function normalizeStatus(
   }
 
 
+  if (
+    value === "upcoming" ||
+    value === "scheduled" ||
+    value === "notstarted"
+  ) {
+
+    return "SCHEDULED";
+
+  }
+
+
   return "SCHEDULED";
-
-}
-
-
-// ==========================================================
-// VALID SCORE
-// ==========================================================
-
-function hasValidScore(
-  event
-) {
-
-  return (
-
-    scoreValue(
-      event,
-      "home"
-    ) !== null
-
-    &&
-
-    scoreValue(
-      event,
-      "away"
-    ) !== null
-
-  );
 
 }
 
@@ -2613,7 +2256,6 @@ function formatDate(
 
   if (
     !(date instanceof Date) ||
-
     Number.isNaN(
       date.getTime()
     )
@@ -2661,6 +2303,21 @@ function normalizeId(
 
 
 // ==========================================================
+// CLEAN STRING
+// ==========================================================
+
+function cleanString(
+  value
+) {
+
+  return String(
+    value || ""
+  ).trim();
+
+}
+
+
+// ==========================================================
 // NORMALIZE NAME
 // ==========================================================
 
@@ -2669,8 +2326,7 @@ function normalizeName(
 ) {
 
   return String(
-    value ||
-    ""
+    value || ""
   )
 
     .toLowerCase()
@@ -2721,15 +2377,11 @@ function namesMatch(
 ) {
 
   const a =
-    normalizeName(
-      first
-    );
+    normalizeName(first);
 
 
   const b =
-    normalizeName(
-      second
-    );
+    normalizeName(second);
 
 
   if (
@@ -2763,9 +2415,7 @@ function namesMatch(
 
   const firstTokens =
     a
-      .split(
-        " "
-      )
+      .split(" ")
       .filter(
         token =>
           token.length >= 3
@@ -2774,9 +2424,7 @@ function namesMatch(
 
   const secondTokens =
     b
-      .split(
-        " "
-      )
+      .split(" ")
       .filter(
         token =>
           token.length >= 3
@@ -2794,17 +2442,13 @@ function namesMatch(
 
 
   const firstSet =
-    new Set(
-      firstTokens
-    );
+    new Set(firstTokens);
 
 
   const common =
     secondTokens.filter(
       token =>
-        firstSet.has(
-          token
-        )
+        firstSet.has(token)
     );
 
 
@@ -2838,15 +2482,11 @@ function strongNameMatch(
 ) {
 
   const a =
-    normalizeName(
-      first
-    );
+    normalizeName(first);
 
 
   const b =
-    normalizeName(
-      second
-    );
+    normalizeName(second);
 
 
   if (
@@ -2880,9 +2520,7 @@ function strongNameMatch(
 
   const firstTokens =
     a
-      .split(
-        " "
-      )
+      .split(" ")
       .filter(
         token =>
           token.length >= 4
@@ -2891,9 +2529,7 @@ function strongNameMatch(
 
   const secondTokens =
     b
-      .split(
-        " "
-      )
+      .split(" ")
       .filter(
         token =>
           token.length >= 4
@@ -2913,21 +2549,17 @@ function strongNameMatch(
   const common =
     secondTokens.filter(
       token =>
-        firstTokens.includes(
-          token
-        )
+        firstTokens.includes(token)
     );
 
 
-  return (
-    common.length >= 1
-  );
+  return common.length >= 1;
 
 }
 
 
 // ==========================================================
-// DEDUPLICATE EVENTS
+// DEDUPLICATE
 // ==========================================================
 
 function dedupeEvents(
@@ -2935,9 +2567,7 @@ function dedupeEvents(
 ) {
 
   if (
-    !Array.isArray(
-      events
-    )
+    !Array.isArray(events)
   ) {
 
     return [];
@@ -2950,13 +2580,10 @@ function dedupeEvents(
 
 
   for (
-    const event
-    of events
+    const event of events
   ) {
 
-    if (
-      !event
-    ) {
+    if (!event) {
 
       continue;
 
@@ -2964,48 +2591,42 @@ function dedupeEvents(
 
 
     const id =
-      String(
+      normalizeId(
+
         event?.id ||
+
         event?.event_id ||
+
         event?.fixture_id ||
-        event?.match_id ||
-        ""
-      ).trim();
 
+        event?.match_id
 
-    const fallback =
-      [
-
-        getEventTeamId(
-          event,
-          "home"
-        ),
-
-        getEventTeamId(
-          event,
-          "away"
-        ),
-
-        getEventDate(
-          event
-        ),
-
-        normalizeName(
-          eventHomeName(
-            event
-          )
-        ),
-
-        normalizeName(
-          eventAwayName(
-            event
-          )
-
-        )
-
-      ].join(
-        "|"
       );
+
+
+    const fallback = [
+
+      getEventTeamId(
+        event,
+        "home"
+      ),
+
+      getEventTeamId(
+        event,
+        "away"
+      ),
+
+      getEventDate(event),
+
+      normalizeName(
+        eventHomeName(event)
+      ),
+
+      normalizeName(
+        eventAwayName(event)
+      )
+
+    ].join("|");
 
 
     const key =
@@ -3015,9 +2636,7 @@ function dedupeEvents(
 
 
     if (
-      !map.has(
-        key
-      )
+      !map.has(key)
     ) {
 
       map.set(
