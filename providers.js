@@ -1,5 +1,5 @@
 // ==========================================================
-// Y.C.B PROVIDERS CORE 3.1.0
+// Y.C.B PROVIDERS CORE 3.1.1
 // ==========================================================
 //
 // Provider registry only.
@@ -11,10 +11,10 @@
 //   4. Return provider instances.
 //
 // IMPORTANT:
-// getAllMatchData() has been moved to:
-//   ./providerRunner.js
+// getAllMatchData() is handled by providerRunner.js
 //
 // ==========================================================
+
 
 const providers = [];
 
@@ -91,8 +91,7 @@ export function registerProvider(
   const exists =
     providers.some(
       item =>
-        item.name ===
-        provider.name
+        item.name === provider.name
     );
 
 
@@ -156,17 +155,18 @@ export function getProviderCount() {
    CLEAR PROVIDERS
 ========================================================== */
 
-// Useful for tests/reloading.
-// Not normally used by worker.js.
+/*
+ * Useful for tests or provider reloading.
+ * Not normally required by worker.js.
+ */
 
 export function clearProviders() {
 
-  providers.length =
-    0;
+  providers.length = 0;
 
 }
 
 
-// ==========================================================
-// END providers.js
-// ==========================================================
+/* ==========================================================
+   END providers.js
+========================================================== */
