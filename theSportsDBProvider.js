@@ -5,9 +5,7 @@
 // Independent fixture verification + recent form provider.
 //
 // Compatible with:
-//   providers.js 3.1.0
-//   providerRunner.js 3.1.0
-//   statsCollector.js 3.1.0
+//   providers.js 3.0.1
 //
 // ==========================================================
 
@@ -16,169 +14,110 @@ import {
   registerProvider
 } from "./providers.js";
 
-
-const DEFAULT_API_KEY =
-  "123";
-
+const DEFAULT_API_KEY = "123";
 
 const API_BASE =
   "https://www.thesportsdb.com/api/v1/json";
 
+const PROVIDER_VERSION = "3.1.0";
 
-const PROVIDER_VERSION =
-  "3.1.0";
-
-
-class TheSportsDBProvider
-  extends DataProvider {
-
+class TheSportsDBProvider extends DataProvider {
 
   constructor() {
-
-    super(
-      "TheSportsDB"
-    );
-
+    super("TheSportsDB");
   }
 
+  async getMatchData(home, away, env) {
 
-  async getMatchData(
-    home,
-    away,
-    env
-  ) {
-
-    const startedAt =
-      Date.now();
-
+    const startedAt = Date.now();
 
     try {
 
-      const apiKey =
-        getApiKey(
-          env
-        );
+      const apiKey = getApiKey(env);
 
+      const fixture = await findFixture(
+        home,
+        away,
+        apiKey
+      );
 
-      const fixture =
-        await findFixture(
-          home,
-          away,
-          apiKey
-        );
-
-
-      if (
-        !fixture
-      ) {
+      if (!fixture) {
 
         return {
-
-          status:
-            "api_ok_no_match",
+          status: "api_ok_no_match",
 
           message:
             "TheSportsDB متصل لكن لم يتم العثور على المباراة المطلوبة.",
 
           data: {
-
-            source:
-              "thesportsdb",
+            source: "thesportsdb",
 
             providerVersion:
               PROVIDER_VERSION,
 
-            available:
-              true,
+            available: true,
 
-            matchFound:
-              false,
+            matchFound: false,
 
-            fixture:
-              null,
+            fixture: null,
 
             recentMatches: {
-
-              home:
-                [],
-
-              away:
-                []
-
+              home: [],
+              away: []
             },
 
-            historyAvailable:
-              false,
+            historyAvailable: false,
 
             historyCount: {
-
-              home:
-                0,
-
-              away:
-                0
-
+              home: 0,
+              away: 0
             },
 
             durationMs:
-              Date.now() -
-              startedAt
-
+              Date.now() - startedAt
           }
-
         };
 
       }
 
+      const homeId =
+        fixture?.idHomeTeam || null;
+
+      const awayId =
+        fixture?.idAwayTeam || null;
 
       const recent =
         await getRecentMatches(
-          fixture?.idHomeTeam ||
-            null,
-
-          fixture?.idAwayTeam ||
-            null,
-
+          homeId,
+          awayId,
           apiKey
         );
 
-
       const normalizedFixture =
-        normalizeEvent(
-          fixture
-        );
-
+        normalizeEvent(fixture);
 
       const historyAvailable =
         recent.home.length > 0 ||
         recent.away.length > 0;
 
-
       return {
 
-        status:
-          "success",
+        status: "success",
 
-        message:
-          historyAvailable
-
-            ? "تم التحقق من المباراة وجمع بيانات النتائج السابقة عبر TheSportsDB."
-
-            : "تم التحقق من المباراة عبر TheSportsDB، لكن النتائج السابقة غير متاحة بشكل كافٍ.",
+        message: historyAvailable
+          ? "تم التحقق من المباراة وجمع بيانات النتائج السابقة عبر TheSportsDB."
+          : "تم التحقق من المباراة عبر TheSportsDB، لكن النتائج السابقة غير متاحة بشكل كافٍ.",
 
         data: {
 
-          source:
-            "thesportsdb",
+          source: "thesportsdb",
 
           providerVersion:
             PROVIDER_VERSION,
 
-          available:
-            true,
+          available: true,
 
-          matchFound:
-            true,
+          matchFound: true,
 
           fixture:
             normalizedFixture,
@@ -207,8 +146,7 @@ class TheSportsDBProvider
 
           limitations: {
 
-            freeTier:
-              true,
+            freeTier: true,
 
             note:
               "TheSportsDB free V1 may restrict previous team events."
@@ -216,21 +154,17 @@ class TheSportsDBProvider
           },
 
           durationMs:
-            Date.now() -
-            startedAt
+            Date.now() - startedAt
 
         }
 
       };
 
-    } catch (
-      error
-    ) {
+    } catch (error) {
 
       return {
 
-        status:
-          "network_error",
+        status: "network_error",
 
         message:
           error?.message ||
@@ -244,27 +178,20 @@ class TheSportsDBProvider
           providerVersion:
             PROVIDER_VERSION,
 
-          available:
-            false,
+          available: false,
 
-          matchFound:
-            false,
+          matchFound: false,
 
-          fixture:
-            null,
+          fixture: null,
 
           recentMatches: {
 
-            home:
-              [],
-
-            away:
-              []
+            home: [],
+            away: []
 
           },
 
-          historyAvailable:
-            false
+          historyAvailable: false
 
         }
 
@@ -277,21 +204,14 @@ class TheSportsDBProvider
 }
 
 
-/* ==========================================================
-   API KEY
-========================================================== */
+/* API KEY */
 
-function getApiKey(
-  env
-) {
+function getApiKey(env) {
 
   const envKey =
     env?.THESPORTSDB_API_KEY ||
-
     env?.THESPORTSDB_KEY ||
-
     env?.SPORTSDB_API_KEY;
-
 
   return String(
     envKey ||
@@ -301,9 +221,7 @@ function getApiKey(
 }
 
 
-/* ==========================================================
-   FIND FIXTURE
-========================================================== */
+/* FIND FIXTURE */
 
 async function findFixture(
   home,
@@ -312,28 +230,14 @@ async function findFixture(
 ) {
 
   const homeName =
-    String(
-      home ||
-      ""
-    ).trim();
-
+    String(home || "").trim();
 
   const awayName =
-    String(
-      away ||
-      ""
-    ).trim();
+    String(away || "").trim();
 
-
-  if (
-    !homeName ||
-    !awayName
-  ) {
-
+  if (!homeName || !awayName) {
     return null;
-
   }
-
 
   const patterns =
     buildSearchPatterns(
@@ -341,103 +245,67 @@ async function findFixture(
       awayName
     );
 
+  const checked = new Set();
 
-  const checked =
-    new Set();
-
-
-  for (
-    const pattern
-    of patterns
-  ) {
+  for (const pattern of patterns) {
 
     const key =
       pattern.toLowerCase();
 
-
-    if (
-      checked.has(
-        key
-      )
-    ) {
-
+    if (checked.has(key)) {
       continue;
-
     }
 
-
-    checked.add(
-      key
-    );
-
+    checked.add(key);
 
     try {
 
       const url =
         `${API_BASE}/${apiKey}/searchevents.php?e=` +
-
-        encodeURIComponent(
-          pattern
-        );
-
+        encodeURIComponent(pattern);
 
       const data =
-        await fetchJSON(
-          url
-        );
-
+        await fetchJSON(url);
 
       const events =
-        Array.isArray(
-          data?.event
-        )
+        Array.isArray(data?.event)
           ? data.event
           : [];
 
-
       const exact =
-        events.find(
-          event =>
-            eventMatchesTeams(
-              event,
-              homeName,
-              awayName
-            )
+        events.find(event =>
+          eventMatchesTeams(
+            event,
+            homeName,
+            awayName
+          )
         );
 
-
-      if (
-        exact
-      ) {
-
+      if (exact) {
         return exact;
-
       }
 
     } catch {
 
-      // Continue.
+      continue;
 
     }
 
   }
-
 
   return null;
 
 }
 
 
-/* ==========================================================
-   SEARCH PATTERNS
-========================================================== */
+/* BUILD SEARCH PATTERNS */
 
 function buildSearchPatterns(
   home,
   away
 ) {
 
-  return [
+  const patterns = [
 
     `${home}_vs_${away}`,
 
@@ -461,12 +329,15 @@ function buildSearchPatterns(
 
   ];
 
+  return patterns.filter(
+    value =>
+      String(value || "").trim()
+  );
+
 }
 
 
-/* ==========================================================
-   EVENT TEAM MATCH
-========================================================== */
+/* EVENT TEAM MATCH */
 
 function eventMatchesTeams(
   event,
@@ -474,38 +345,41 @@ function eventMatchesTeams(
   away
 ) {
 
+  if (!event) {
+    return false;
+  }
+
+  const eventHome =
+    event?.strHomeTeam;
+
+  const eventAway =
+    event?.strAwayTeam;
+
+  if (!eventHome || !eventAway) {
+    return false;
+  }
+
   if (
-    !event?.strHomeTeam ||
-    !event?.strAwayTeam
+    namesMatch(
+      eventHome,
+      home
+    ) &&
+    namesMatch(
+      eventAway,
+      away
+    )
   ) {
 
-    return false;
+    return true;
 
   }
 
-
-  return (
-
-    namesMatch(
-      event.strHomeTeam,
-      home
-    )
-
-    &&
-
-    namesMatch(
-      event.strAwayTeam,
-      away
-    )
-
-  );
+  return false;
 
 }
 
 
-/* ==========================================================
-   RECENT MATCHES
-========================================================== */
+/* RECENT MATCHES */
 
 async function getRecentMatches(
   homeId,
@@ -515,185 +389,127 @@ async function getRecentMatches(
 
   const result = {
 
-    home:
-      [],
-
-    away:
-      []
+    home: [],
+    away: []
 
   };
 
-
-  if (
-    homeId
-  ) {
+  if (homeId) {
 
     try {
 
       const data =
         await fetchJSON(
-
           `${API_BASE}/${apiKey}/eventslast.php?id=` +
-
           encodeURIComponent(
-            String(
-              homeId
-            )
+            String(homeId)
           )
-
         );
 
-
       const events =
-        Array.isArray(
-          data?.results
-        )
+        Array.isArray(data?.results)
           ? data.results
           : [];
 
-
       result.home =
         events
-
-          .filter(
-            isValidCompletedEvent
-          )
-
-          .map(
-            normalizeRecentMatch
-          )
-
-          .filter(
-            Boolean
-          );
+          .filter(isValidCompletedEvent)
+          .map(normalizeRecentMatch)
+          .filter(Boolean);
 
     } catch {
 
-      result.home =
-        [];
+      result.home = [];
 
     }
 
   }
 
-
-  if (
-    awayId
-  ) {
+  if (awayId) {
 
     try {
 
       const data =
         await fetchJSON(
-
           `${API_BASE}/${apiKey}/eventslast.php?id=` +
-
           encodeURIComponent(
-            String(
-              awayId
-            )
+            String(awayId)
           )
-
         );
 
-
       const events =
-        Array.isArray(
-          data?.results
-        )
+        Array.isArray(data?.results)
           ? data.results
           : [];
 
-
       result.away =
         events
-
-          .filter(
-            isValidCompletedEvent
-          )
-
-          .map(
-            normalizeRecentMatch
-          )
-
-          .filter(
-            Boolean
-          );
+          .filter(isValidCompletedEvent)
+          .map(normalizeRecentMatch)
+          .filter(Boolean);
 
     } catch {
 
-      result.away =
-        [];
+      result.away = [];
 
     }
 
   }
-
 
   return result;
 
 }
 
 
-/* ==========================================================
-   VALID COMPLETED EVENT
-========================================================== */
+/* VALID COMPLETED EVENT */
 
-function isValidCompletedEvent(
-  event
-) {
+function isValidCompletedEvent(event) {
 
-  if (
-    !event
-  ) {
-
+  if (!event) {
     return false;
-
   }
-
-
-  const homeScore =
-    finiteOrNull(
-      event.intHomeScore
-    );
-
-
-  const awayScore =
-    finiteOrNull(
-      event.intAwayScore
-    );
-
-
-  return (
-
-    homeScore !== null &&
-
-    awayScore !== null
-
-  );
-
-}
-
-
-/* ==========================================================
-   NORMALIZE RECENT MATCH
-========================================================== */
-
-function normalizeRecentMatch(
-  event
-) {
 
   const homeScore =
     finiteOrNull(
       event?.intHomeScore
     );
 
-
   const awayScore =
     finiteOrNull(
       event?.intAwayScore
     );
 
+  if (
+    homeScore === null ||
+    awayScore === null
+  ) {
+
+    return false;
+
+  }
+
+  return true;
+
+}
+
+
+/* NORMALIZE RECENT MATCH */
+
+function normalizeRecentMatch(event) {
+
+  if (!event) {
+    return null;
+  }
+
+  const homeScore =
+    finiteOrNull(
+      event?.intHomeScore
+    );
+
+  const awayScore =
+    finiteOrNull(
+      event?.intAwayScore
+    );
 
   if (
     homeScore === null ||
@@ -704,6 +520,8 @@ function normalizeRecentMatch(
 
   }
 
+  const utcDate =
+    buildDateTime(event);
 
   return {
 
@@ -713,10 +531,7 @@ function normalizeRecentMatch(
         ""
       ),
 
-    utcDate:
-      buildDateTime(
-        event
-      ),
+    utcDate,
 
     date:
       event?.dateEvent ||
@@ -780,25 +595,19 @@ function normalizeRecentMatch(
 }
 
 
-/* ==========================================================
-   NORMALIZE EVENT
-========================================================== */
+/* NORMALIZE EVENT */
 
-function normalizeEvent(
-  event
-) {
+function normalizeEvent(event) {
 
   const homeScore =
     finiteOrNull(
       event?.intHomeScore
     );
 
-
   const awayScore =
     finiteOrNull(
       event?.intAwayScore
     );
-
 
   const finished =
     isFinishedEvent(
@@ -806,7 +615,6 @@ function normalizeEvent(
       homeScore,
       awayScore
     );
-
 
   return {
 
@@ -817,9 +625,7 @@ function normalizeEvent(
       ),
 
     utcDate:
-      buildDateTime(
-        event
-      ),
+      buildDateTime(event),
 
     date:
       event?.dateEvent ||
@@ -893,9 +699,7 @@ function normalizeEvent(
 }
 
 
-/* ==========================================================
-   FINISHED EVENT
-========================================================== */
+/* FINISHED EVENT */
 
 function isFinishedEvent(
   event,
@@ -911,7 +715,6 @@ function isFinishedEvent(
       .toLowerCase()
       .trim();
 
-
   const progress =
     String(
       event?.strProgress ||
@@ -920,68 +723,41 @@ function isFinishedEvent(
       .toLowerCase()
       .trim();
 
+  if (status === "match finished") {
+    return true;
+  }
+
+  if (status === "ft") {
+    return true;
+  }
+
+  if (progress === "final") {
+    return true;
+  }
 
   return (
-
-    status ===
-      "match finished"
-
-    ||
-
-    status ===
-      "ft"
-
-    ||
-
-    progress ===
-      "final"
-
-    ||
-
+    homeScore !== null &&
+    awayScore !== null &&
     (
-
-      homeScore !== null &&
-
-      awayScore !== null &&
-
-      (
-        status ===
-          "finished"
-
-        ||
-
-        status ===
-          "completed"
-      )
-
+      status === "finished" ||
+      status === "completed"
     )
-
   );
 
 }
 
 
-/* ==========================================================
-   DATE/TIME
-========================================================== */
+/* BUILD DATE TIME */
 
-function buildDateTime(
-  event
-) {
+function buildDateTime(event) {
 
   const timestamp =
     event?.strTimestamp;
 
-
-  if (
-    timestamp
-  ) {
+  if (timestamp) {
 
     const parsed =
-      new Date(
-        timestamp
-      );
-
+      new Date(timestamp);
 
     if (
       !Number.isNaN(
@@ -995,13 +771,11 @@ function buildDateTime(
 
   }
 
-
   const date =
     String(
       event?.dateEvent ||
       ""
     ).trim();
-
 
   const time =
     String(
@@ -1009,36 +783,27 @@ function buildDateTime(
       ""
     ).trim();
 
-
-  if (
-    !date
-  ) {
-
+  if (!date) {
     return null;
-
   }
 
+  if (time) {
+    return `${date}T${time}`;
+  }
 
-  return time
-    ? `${date}T${time}`
-    : date;
+  return date;
 
 }
 
 
-/* ==========================================================
-   FETCH JSON
-========================================================== */
+/* FETCH JSON */
 
-async function fetchJSON(
-  url
-) {
+async function fetchJSON(url) {
 
   const response =
     await fetch(
       url,
       {
-
         headers: {
 
           Accept:
@@ -1048,25 +813,19 @@ async function fetchJSON(
             `YCB-Football-Prediction-Engine/${PROVIDER_VERSION}`
 
         }
-
       }
     );
-
 
   const text =
     await response.text();
 
-
-  let data;
-
+  let data = null;
 
   try {
 
     data =
       text
-        ? JSON.parse(
-            text
-          )
+        ? JSON.parse(text)
         : null;
 
   } catch {
@@ -1077,15 +836,9 @@ async function fetchJSON(
 
   }
 
+  if (!response.ok) {
 
-  if (
-    !response.ok
-  ) {
-
-    if (
-      response.status ===
-      429
-    ) {
+    if (response.status === 429) {
 
       throw new Error(
         "TheSportsDB rate limit reached (HTTP 429)"
@@ -1093,39 +846,30 @@ async function fetchJSON(
 
     }
 
-
     throw new Error(
       `TheSportsDB HTTP ${response.status}`
     );
 
   }
 
-
   return data;
 
 }
 
 
-/* ==========================================================
-   NORMALIZE NAME
-========================================================== */
+/* NORMALIZE NAME */
 
-function normalizeName(
-  value
-) {
+function normalizeName(value) {
 
   return String(
-    value ||
-    ""
+    value || ""
   )
 
     .toLowerCase()
 
     .trim()
 
-    .normalize(
-      "NFD"
-    )
+    .normalize("NFD")
 
     .replace(
       /[\u0300-\u036f]/g,
@@ -1157,9 +901,7 @@ function normalizeName(
 }
 
 
-/* ==========================================================
-   NAME MATCH
-========================================================== */
+/* NAME MATCH */
 
 function namesMatch(
   first,
@@ -1167,35 +909,18 @@ function namesMatch(
 ) {
 
   const a =
-    normalizeName(
-      first
-    );
-
+    normalizeName(first);
 
   const b =
-    normalizeName(
-      second
-    );
+    normalizeName(second);
 
-
-  if (
-    !a ||
-    !b
-  ) {
-
+  if (!a || !b) {
     return false;
-
   }
 
-
-  if (
-    a === b
-  ) {
-
+  if (a === b) {
     return true;
-
   }
-
 
   if (
     a.includes(b) ||
@@ -1206,19 +931,15 @@ function namesMatch(
 
   }
 
-
   const ta =
     new Set(
-
       a
         .split(" ")
         .filter(
           token =>
             token.length >= 3
         )
-
     );
-
 
   const tb =
     b
@@ -1228,8 +949,8 @@ function namesMatch(
           token.length >= 3
       );
 
-
   if (
+    ta.size === 0 ||
     tb.length === 0
   ) {
 
@@ -1237,34 +958,30 @@ function namesMatch(
 
   }
 
-
   const overlap =
     tb.filter(
       token =>
         ta.has(token)
     ).length;
 
+  if (tb.length === 1) {
+    return overlap >= 1;
+  }
 
   return (
-
     overlap >=
     Math.min(
       2,
       tb.length
     )
-
   );
 
 }
 
 
-/* ==========================================================
-   NUMBER
-========================================================== */
+/* NUMBER */
 
-function finiteOrNull(
-  value
-) {
+function finiteOrNull(value) {
 
   if (
     value === null ||
@@ -1276,38 +993,21 @@ function finiteOrNull(
 
   }
 
-
   const number =
-    Number(
-      value
-    );
+    Number(value);
 
-
-  return Number.isFinite(
-    number
-  )
+  return Number.isFinite(number)
     ? number
     : null;
 
 }
 
 
-/* ==========================================================
-   REGISTER
-========================================================== */
+/* REGISTER */
 
 const provider =
   new TheSportsDBProvider();
 
-
-registerProvider(
-  provider
-);
-
+registerProvider(provider);
 
 export default provider;
-
-
-// ==========================================================
-// END theSportsDBProvider.js
-// ==========================================================
