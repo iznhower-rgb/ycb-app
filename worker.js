@@ -1,28 +1,6 @@
 // ==========================================================
-// Y.C.B FINAL WORKER 4.0.0
+// Y.C.B FINAL WORKER 3.1.0
 // ==========================================================
-//
-// Main application worker.
-//
-// Responsibilities:
-//   - Serve HTML application
-//   - API endpoints
-//   - Request parsing
-//   - Provider orchestration
-//   - Prediction model
-//   - Data quality
-//
-// Provider registry:
-//   providers.js
-//
-// Provider execution:
-//   providerRunner.js
-//
-// Statistics collection:
-//   statsCollector.js
-//
-// ==========================================================
-
 
 import {
   getProviders
@@ -46,7 +24,7 @@ import "./bsdProvider.js";
 
 
 const VERSION =
-  "4.0.0";
+  "3.1.0";
 
 
 /* ==========================================================
@@ -299,9 +277,8 @@ Y.C.B
 </h1>
 
 <div class="subtitle">
-Football Prediction Engine 4.0.0
+Football Prediction Engine 3.1.0
 </div>
-
 
 <div class="card">
 
@@ -326,7 +303,6 @@ Football Prediction Engine 4.0.0
 
 </div>
 
-
 <div
   id="result"
   class="hidden"
@@ -337,7 +313,6 @@ Football Prediction Engine 4.0.0
 <h2 class="section-title">
 أفضل 3 توقعات
 </h2>
-
 
 <div class="prediction">
 
@@ -363,7 +338,6 @@ Football Prediction Engine 4.0.0
 
 </div>
 
-
 <div class="prediction">
 
 <div
@@ -387,7 +361,6 @@ Football Prediction Engine 4.0.0
 </div>
 
 </div>
-
 
 <div class="prediction">
 
@@ -413,13 +386,11 @@ Football Prediction Engine 4.0.0
 
 </div>
 
-
 <div
   id="recommendation"
   class="warning-box"
 >
 </div>
-
 
 <div
   id="scoreline"
@@ -428,7 +399,6 @@ Football Prediction Engine 4.0.0
 </div>
 
 </div>
-
 
 <div class="panel">
 
@@ -471,7 +441,6 @@ BTTS
 </div>
 
 </div>
-
 
 <div class="panel">
 
@@ -519,7 +488,6 @@ BTTS
 
 </div>
 
-
 <div class="panel">
 
 <h3 class="section-title">
@@ -538,30 +506,21 @@ BTTS
 
 </div>
 
-
 <script>
 
 async function analyzeMatch(){
 
   const input =
-    document.getElementById(
-      "match"
-    );
+    document.getElementById("match");
 
   const button =
-    document.getElementById(
-      "analyzeButton"
-    );
+    document.getElementById("analyzeButton");
 
   const status =
-    document.getElementById(
-      "status"
-    );
+    document.getElementById("status");
 
   const result =
-    document.getElementById(
-      "result"
-    );
+    document.getElementById("result");
 
 
   const match =
@@ -605,8 +564,7 @@ async function analyzeMatch(){
         "/api/analyze",
         {
 
-          method:
-            "POST",
+          method:"POST",
 
           headers:{
             "Content-Type":
@@ -675,14 +633,9 @@ async function analyzeMatch(){
       const prediction =
         predictions[i] ||
         {
-          label:
-            "غير متاح",
-
-          probability:
-            "غير متاح",
-
-          explanation:
-            ""
+          label:"غير متاح",
+          probability:"غير متاح",
+          explanation:""
         };
 
 
@@ -743,9 +696,7 @@ async function analyzeMatch(){
 
     recommendation.className =
       recommended
-
         ? "warning-box recommended-box"
-
         : "warning-box";
 
 
@@ -913,12 +864,10 @@ async function analyzeMatch(){
 
           (
             item.message
-
               ? " — " +
                 escapeHtml(
                   item.message
                 )
-
               : ""
           )
 
@@ -948,9 +897,7 @@ async function analyzeMatch(){
     status.className =
       data.analysisStatus ===
       "ready"
-
         ? "success"
-
         : "warning";
 
 
@@ -1045,21 +992,11 @@ function escapeHtml(
     character =>
 
       ({
-        "&":
-          "&amp;",
-
-        "<":
-          "&lt;",
-
-        ">":
-          "&gt;",
-
-        '"':
-          "&quot;",
-
-        "'":
-          "&#39;"
-
+        "&":"&amp;",
+        "<":"&lt;",
+        ">":"&gt;",
+        '"':"&quot;",
+        "'":"&#39;"
       }[character])
 
   );
@@ -1096,8 +1033,7 @@ export default {
     ){
 
       return json({
-        success:
-          true
+        success:true
       });
 
     }
@@ -1114,14 +1050,11 @@ export default {
 
       return json({
 
-        success:
-          true,
+        success:true,
 
-        status:
-          "ok",
+        status:"ok",
 
-        app:
-          "Y.C.B",
+        app:"Y.C.B",
 
         engine:
           "Y.C.B Prediction Engine",
@@ -1151,8 +1084,7 @@ export default {
 
       return json({
 
-        success:
-          true,
+        success:true,
 
         providers:
           getProviders()
@@ -1177,17 +1109,12 @@ export default {
       ){
 
         return json(
-
           {
-            success:
-              false,
-
+            success:false,
             error:
               "POST method required"
           },
-
           405
-
         );
 
       }
@@ -1213,19 +1140,13 @@ export default {
         ){
 
           return json(
-
             {
-
-              success:
-                false,
+              success:false,
 
               error:
                 "اكتب المباراة بهذا الشكل: Arsenal vs Coventry City"
-
             },
-
             400
-
           );
 
         }
@@ -1260,12 +1181,7 @@ export default {
 
 
         /* ==================================================
-           STATISTICS COLLECTOR
-           
-           Imported from statsCollector.js
-           
-           No statistics collection functions are
-           duplicated inside this worker.
+           MERGE
         ================================================== */
 
         const merged =
@@ -1334,9 +1250,7 @@ export default {
 
 
         /* ==================================================
-           TEAM ANALYSIS
-           
-           Imported from statsCollector.js
+           ANALYSIS
         ================================================== */
 
         const analysis =
@@ -1437,10 +1351,6 @@ export default {
           result.predictions[0];
 
 
-        /* ==================================================
-           MULTI PROVIDER READY
-        ================================================== */
-
         const multiProviderReady =
 
           usable.length >= 2 &&
@@ -1500,17 +1410,11 @@ export default {
         }
 
 
-        /* ==================================================
-           FINAL
-        ================================================== */
-
         return json({
 
-          success:
-            true,
+          success:true,
 
-          app:
-            "Y.C.B",
+          app:"Y.C.B",
 
           engine:
             "Y.C.B Prediction Engine",
@@ -1521,12 +1425,9 @@ export default {
           architecture:
             "Multi Provider Architecture",
 
-          match: {
-
+          match:{
             home,
-
             away
-
           },
 
           analysisStatus,
@@ -1544,7 +1445,7 @@ export default {
           predictions:
             result.predictions,
 
-          recommendation: {
+          recommendation:{
 
             recommended,
 
@@ -1577,7 +1478,7 @@ export default {
           successfulProviderCount:
             usable.length,
 
-          validation: {
+          validation:{
 
             fixtureVerified:
               Boolean(
@@ -1610,20 +1511,14 @@ export default {
 
 
         return json(
-
           {
-
-            success:
-              false,
+            success:false,
 
             error:
               error?.message ||
               String(error)
-
           },
-
           500
-
         );
 
       }
@@ -1631,31 +1526,19 @@ export default {
     }
 
 
-    /* ======================================================
-       MAIN HTML
-    ====================================================== */
-
     return new Response(
-
       HTML,
-
       {
+        status:200,
 
-        status:
-          200,
-
-        headers: {
-
+        headers:{
           "Content-Type":
             "text/html;charset=UTF-8",
 
           "Cache-Control":
             "no-store"
-
         }
-
       }
-
     );
 
   }
@@ -1680,8 +1563,7 @@ function parseMatch(
 
 
   if(
-    parts.length !==
-    2
+    parts.length !== 2
   ){
 
     return null;
@@ -1703,13 +1585,9 @@ function parseMatch(
     away
 
   )
-
     ? {
-
         home,
-
         away
-
       }
 
     : null;
@@ -1734,44 +1612,22 @@ function buildModel(
     );
 
 
-  let homeWin =
-    0;
-
-
-  let draw =
-    0;
-
-
-  let awayWin =
-    0;
-
-
-  let over25 =
-    0;
-
-
-  let under25 =
-    0;
-
-
-  let bttsYes =
-    0;
-
-
-  let bttsNo =
-    0;
+  let homeWin = 0;
+  let draw = 0;
+  let awayWin = 0;
+  let over25 = 0;
+  let under25 = 0;
+  let bttsYes = 0;
+  let bttsNo = 0;
 
 
   let best = {
 
-    probability:
-      -1,
+    probability:-1,
 
-    home:
-      0,
+    home:0,
 
-    away:
-      0
+    away:0
 
   };
 
@@ -1799,14 +1655,11 @@ function buildModel(
 
         best = {
 
-          probability:
-            p,
+          probability:p,
 
-          home:
-            h,
+          home:h,
 
-          away:
-            a
+          away:a
 
         };
 
@@ -1817,8 +1670,7 @@ function buildModel(
         h > a
       ){
 
-        homeWin +=
-          p;
+        homeWin += p;
 
       }
 
@@ -1826,15 +1678,13 @@ function buildModel(
         h === a
       ){
 
-        draw +=
-          p;
+        draw += p;
 
       }
 
       else{
 
-        awayWin +=
-          p;
+        awayWin += p;
 
       }
 
@@ -1843,15 +1693,13 @@ function buildModel(
         h + a >= 3
       ){
 
-        over25 +=
-          p;
+        over25 += p;
 
       }
 
       else{
 
-        under25 +=
-          p;
+        under25 += p;
 
       }
 
@@ -1861,15 +1709,13 @@ function buildModel(
         a >= 1
       ){
 
-        bttsYes +=
-          p;
+        bttsYes += p;
 
       }
 
       else{
 
-        bttsNo +=
-          p;
+        bttsNo += p;
 
       }
 
@@ -1921,7 +1767,10 @@ function buildPredictions(
 ){
 
   const model =
-    analysis.model;
+    buildModel(
+      analysis.model.homeXg,
+      analysis.model.awayXg
+    );
 
 
   const home =
@@ -1936,8 +1785,7 @@ function buildPredictions(
 
     {
 
-      outcome:
-        "homeWin",
+      outcome:"homeWin",
 
       label:
         `فوز ${home.team}`,
@@ -1952,8 +1800,7 @@ function buildPredictions(
 
     {
 
-      outcome:
-        "draw",
+      outcome:"draw",
 
       label:
         "التعادل",
@@ -1968,8 +1815,7 @@ function buildPredictions(
 
     {
 
-      outcome:
-        "awayWin",
+      outcome:"awayWin",
 
       label:
         `فوز ${away.team}`,
@@ -1989,8 +1835,7 @@ function buildPredictions(
 
     {
 
-      outcome:
-        "over25",
+      outcome:"over25",
 
       label:
         "أكثر من 2.5 هدف",
@@ -2005,8 +1850,7 @@ function buildPredictions(
 
     {
 
-      outcome:
-        "under25",
+      outcome:"under25",
 
       label:
         "أقل من 2.5 هدف",
@@ -2026,8 +1870,7 @@ function buildPredictions(
 
     {
 
-      outcome:
-        "bttsYes",
+      outcome:"bttsYes",
 
       label:
         "كلا الفريقين يسجلان",
@@ -2042,8 +1885,7 @@ function buildPredictions(
 
     {
 
-      outcome:
-        "bttsNo",
+      outcome:"bttsNo",
 
       label:
         "ليس كلا الفريقين يسجلان",
@@ -2103,9 +1945,6 @@ function buildPredictions(
 
           ...item,
 
-          probabilityValue:
-            item.probabilityValue,
-
           probability:
             `${round(
               item.probabilityValue *
@@ -2116,8 +1955,7 @@ function buildPredictions(
       ),
 
     predictedScore:
-
-      `${analysis.model.bestScore.home} - ${analysis.model.bestScore.away}`
+      `${model.bestScore.home} - ${model.bestScore.away}`
 
   };
 
@@ -2179,8 +2017,7 @@ function poissonMatrix(
     );
 
 
-  const matrix =
-    [];
+  const matrix = [];
 
 
   for(
@@ -2189,8 +2026,7 @@ function poissonMatrix(
     h++
   ){
 
-    matrix[h] =
-      [];
+    matrix[h] = [];
 
 
     for(
@@ -2216,8 +2052,7 @@ function poissonMatrix(
           sum,
           value
         ) =>
-          sum +
-          value,
+          sum + value,
 
         0
       );
@@ -2227,8 +2062,9 @@ function poissonMatrix(
     row =>
       row.map(
         value =>
-          value /
-          total
+          total > 0
+            ? value / total
+            : 0
       )
   );
 
@@ -2244,8 +2080,7 @@ function poissonSeries(
   max
 ){
 
-  const result =
-    [];
+  const result = [];
 
 
   for(
@@ -2291,8 +2126,7 @@ function factorial(
   n
 ){
 
-  let result =
-    1;
+  let result = 1;
 
 
   for(
@@ -2301,8 +2135,7 @@ function factorial(
     i++
   ){
 
-    result *=
-      i;
+    result *= i;
 
   }
 
@@ -2335,13 +2168,9 @@ function calculateDataQuality(
       games,
       10
     )
-
     /
-
     10
-
     *
-
     60;
 
 
@@ -2350,9 +2179,7 @@ function calculateDataQuality(
       providerCount,
       4
     )
-
     *
-
     7.5;
 
 
@@ -2382,8 +2209,7 @@ function calculateDataQuality(
     providerCount <= 0
   ){
 
-    cap =
-      0;
+    cap = 0;
 
   }
 
@@ -2391,8 +2217,7 @@ function calculateDataQuality(
     providerCount === 1
   ){
 
-    cap =
-      55;
+    cap = 55;
 
   }
 
@@ -2400,8 +2225,7 @@ function calculateDataQuality(
     providerCount === 2
   ){
 
-    cap =
-      80;
+    cap = 80;
 
   }
 
@@ -2409,15 +2233,13 @@ function calculateDataQuality(
     providerCount === 3
   ){
 
-    cap =
-      90;
+    cap = 90;
 
   }
 
   else{
 
-    cap =
-      100;
+    cap = 100;
 
   }
 
@@ -2429,7 +2251,6 @@ function calculateDataQuality(
         raw,
         cap
       ),
-
       0,
       100
     )
@@ -2454,11 +2275,9 @@ function baseResponse(
 
   return {
 
-    success:
-      true,
+    success:true,
 
-    app:
-      "Y.C.B",
+    app:"Y.C.B",
 
     engine:
       "Y.C.B Prediction Engine",
@@ -2469,12 +2288,9 @@ function baseResponse(
     architecture:
       "Multi Provider Architecture",
 
-    match: {
-
+    match:{
       home,
-
       away
-
     },
 
     analysisStatus:
@@ -2488,10 +2304,13 @@ function baseResponse(
         away
       ),
 
-    recommendation: {
+    recommendation:{
 
-      recommended:
-        false,
+      recommended:false,
+
+      market:null,
+
+      probability:null,
 
       message:
         "لا يوجد رهان موصى به: البيانات غير كافية أو لم يتم التحقق من المباراة عبر مصدرين."
@@ -2506,19 +2325,20 @@ function baseResponse(
     successfulProviderCount:
       usable.length,
 
-    dataQuality:
-      0,
+    dataQuality:0,
 
-    validation: {
+    validation:{
 
-      minimumProvidersRequired:
-        2,
+      fixtureVerified:false,
+
+      fixtureVerifiedBy:0,
+
+      minimumProvidersRequired:2,
 
       successfulProviders:
         usable.length,
 
-      multiProviderVerified:
-        false
+      multiProviderVerified:false
 
     }
 
@@ -2540,8 +2360,7 @@ function fallbackPredictions(
 
     {
 
-      outcome:
-        "unavailable",
+      outcome:"unavailable",
 
       label:
         `فوز ${home}`,
@@ -2549,8 +2368,7 @@ function fallbackPredictions(
       probability:
         "غير متاح",
 
-      probabilityValue:
-        0,
+      probabilityValue:0,
 
       explanation:
         "لا توجد بيانات كافية."
@@ -2559,8 +2377,7 @@ function fallbackPredictions(
 
     {
 
-      outcome:
-        "unavailable",
+      outcome:"unavailable",
 
       label:
         "التعادل",
@@ -2568,8 +2385,7 @@ function fallbackPredictions(
       probability:
         "غير متاح",
 
-      probabilityValue:
-        0,
+      probabilityValue:0,
 
       explanation:
         "لا توجد بيانات كافية."
@@ -2578,8 +2394,7 @@ function fallbackPredictions(
 
     {
 
-      outcome:
-        "unavailable",
+      outcome:"unavailable",
 
       label:
         `فوز ${away}`,
@@ -2587,8 +2402,7 @@ function fallbackPredictions(
       probability:
         "غير متاح",
 
-      probabilityValue:
-        0,
+      probabilityValue:0,
 
       explanation:
         "لا توجد بيانات كافية."
@@ -2613,7 +2427,7 @@ function clamp(
   return Math.min(
 
     Math.max(
-      value,
+      Number(value) || 0,
       min
     ),
 
@@ -2632,10 +2446,22 @@ function round(
   value
 ){
 
-  return Math.round(
-    Number(value) *
-    100
-  ) / 100;
+  const number =
+    Number(
+      value
+    );
+
+
+  return Number.isFinite(
+    number
+  )
+
+    ? Math.round(
+        number *
+        100
+      ) / 100
+
+    : 0;
 
 }
 
@@ -2661,7 +2487,7 @@ function json(
 
       status,
 
-      headers: {
+      headers:{
 
         "Content-Type":
           "application/json;charset=UTF-8",
@@ -2682,3 +2508,8 @@ function json(
   );
 
 }
+
+
+// ==========================================================
+// END worker.js
+// ==========================================================
