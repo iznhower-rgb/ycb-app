@@ -1,20 +1,10 @@
 // ==========================================================
-// Y.C.B PROVIDERS CORE 3.1.1
+// Y.C.B PROVIDERS CORE 3.1.0
 // ==========================================================
 //
 // Provider registry only.
 //
-// Responsibilities:
-//   1. Define DataProvider.
-//   2. Register providers.
-//   3. List providers.
-//   4. Return provider instances.
-//
-// IMPORTANT:
-// getAllMatchData() is handled by providerRunner.js
-//
 // ==========================================================
-
 
 const providers = [];
 
@@ -26,20 +16,10 @@ const providers = [];
 export class DataProvider {
 
   constructor(name) {
-
-    this.name =
-      String(
-        name || ""
-      ).trim();
-
+    this.name = String(name || "").trim();
   }
 
-
-  async getMatchData(
-    home,
-    away,
-    env
-  ) {
+  async getMatchData(home, away, env) {
 
     throw new Error(
       `getMatchData() not implemented for ${this.name}`
@@ -54,55 +34,33 @@ export class DataProvider {
    REGISTER PROVIDER
 ========================================================== */
 
-export function registerProvider(
-  provider
-) {
+export function registerProvider(provider) {
 
   if (!provider) {
-
-    throw new Error(
-      "Invalid data provider"
-    );
-
+    throw new Error("Invalid data provider");
   }
 
-
   if (
-    typeof provider.getMatchData !==
-    "function"
+    typeof provider.getMatchData !== "function"
   ) {
-
     throw new Error(
       "Invalid data provider: getMatchData() is required"
     );
-
   }
 
-
   if (!provider.name) {
-
     throw new Error(
       "Invalid data provider: provider name is required"
     );
-
   }
 
-
-  const exists =
-    providers.some(
-      item =>
-        item.name === provider.name
-    );
-
+  const exists = providers.some(
+    item => item.name === provider.name
+  );
 
   if (!exists) {
-
-    providers.push(
-      provider
-    );
-
+    providers.push(provider);
   }
-
 
   return provider;
 
@@ -117,10 +75,7 @@ export function getProviders() {
 
   return providers.map(
     provider => ({
-
-      provider:
-        provider.name
-
+      provider: provider.name
     })
   );
 
@@ -133,9 +88,7 @@ export function getProviders() {
 
 export function getProviderInstances() {
 
-  return [
-    ...providers
-  ];
+  return [...providers];
 
 }
 
@@ -154,11 +107,6 @@ export function getProviderCount() {
 /* ==========================================================
    CLEAR PROVIDERS
 ========================================================== */
-
-/*
- * Useful for tests or provider reloading.
- * Not normally required by worker.js.
- */
 
 export function clearProviders() {
 
