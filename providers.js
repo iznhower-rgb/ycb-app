@@ -1,16 +1,45 @@
 // ==========================================================
 // Y.C.B PROVIDERS CORE 3.0.1
 // ==========================================================
+//
+// مسؤولية هذا الملف:
+//
+// 1. تعريف DataProvider
+// 2. تسجيل مزودي البيانات
+// 3. الحصول على قائمة المزودين
+// 4. الحصول على Instances الخاصة بالمزودين
+// 5. حساب عدد المزودين
+//
+// لا يحتوي هذا الملف على:
+//
+// - getAllMatchData()
+// - جمع الإحصائيات
+// - mergeProviderData()
+// - dedupeMatches()
+// - buildTeamAnalysis()
+// - calculateTeamStats()
+//
+// ==========================================================
+
 
 const providers = [];
 
 
+/* ==========================================================
+   DATA PROVIDER
+========================================================== */
+
 export class DataProvider {
 
-  constructor(name) {
+  constructor(
+    name
+  ){
 
     this.name =
-      String(name || "").trim();
+      String(
+        name ||
+        ""
+      ).trim();
 
   }
 
@@ -19,7 +48,7 @@ export class DataProvider {
     home,
     away,
     env
-  ) {
+  ){
 
     throw new Error(
       `getMatchData() not implemented for ${this.name}`
@@ -36,13 +65,16 @@ export class DataProvider {
 
 export function registerProvider(
   provider
-) {
+){
 
-  if (
+  if(
     !provider ||
-    typeof provider.getMatchData !== "function" ||
+
+    typeof provider.getMatchData !==
+      "function" ||
+
     !provider.name
-  ) {
+  ){
 
     throw new Error(
       "Invalid data provider"
@@ -51,12 +83,17 @@ export function registerProvider(
   }
 
 
-  if (
+  /*
+   * منع تسجيل نفس Provider مرتين.
+   */
+
+  if(
     !providers.some(
       item =>
-        item.name === provider.name
+        item.name ===
+        provider.name
     )
-  ) {
+  ){
 
     providers.push(
       provider
@@ -74,7 +111,7 @@ export function registerProvider(
    GET PROVIDERS
 ========================================================== */
 
-export function getProviders() {
+export function getProviders(){
 
   return providers.map(
     provider => ({
@@ -92,7 +129,7 @@ export function getProviders() {
    GET PROVIDER INSTANCES
 ========================================================== */
 
-export function getProviderInstances() {
+export function getProviderInstances(){
 
   return [
     ...providers
@@ -102,105 +139,30 @@ export function getProviderInstances() {
 
 
 /* ==========================================================
-   EXECUTE ALL PROVIDERS
+   COUNT
 ========================================================== */
 
-export async function getAllMatchData(
-  home,
-  away,
-  env
-) {
+export function getProviderCount(){
 
-  return Promise.all(
-
-    providers.map(
-      async provider => {
-
-        const startedAt =
-          Date.now();
-
-
-        try {
-
-          const result =
-            await provider.getMatchData(
-              home,
-              away,
-              env
-            );
-
-
-          return {
-
-            provider:
-              provider.name,
-
-            success:
-              result?.status ===
-              "success",
-
-            status:
-              result?.status ||
-              "unknown",
-
-            message:
-              result?.message ||
-              "",
-
-            data:
-              result?.data ||
-              null,
-
-            durationMs:
-              Date.now() -
-              startedAt
-
-          };
-
-        } catch (
-          error
-        ) {
-
-          return {
-
-            provider:
-              provider.name,
-
-            success:
-              false,
-
-            status:
-              "provider_error",
-
-            message:
-              error?.message ||
-              String(error),
-
-            data:
-              null,
-
-            durationMs:
-              Date.now() -
-              startedAt
-
-          };
-
-        }
-
-      }
-    )
-
-  );
+  return providers.length;
 
 }
 
 
 /* ==========================================================
-   COUNT
+   DEFAULT EXPORT
 ========================================================== */
 
-export function getProviderCount() {
+export default {
 
-  return providers.length;
+  DataProvider,
 
-}
+  registerProvider,
+
+  getProviders,
+
+  getProviderInstances,
+
+  getProviderCount
+
+};
