@@ -1,6 +1,31 @@
 // ==========================================================
 // Y.C.B BSD PROVIDER 3.1.0
 // ==========================================================
+//
+// BSD = Bzzoiro Sports Data
+//
+// Compatible with:
+//   providers.js 3.1.0
+//
+// Environment:
+//   BSD_API_KEY
+//
+// API:
+//   https://sports.bzzoiro.com/api/v2
+//
+// Main improvements:
+//   1. Team search with strict matching.
+//   2. Team ID based fixture search.
+//   3. /events/?team_id= support.
+//   4. Pagination support.
+//   5. Wider date-range fixture search.
+//   6. Recent finished matches.
+//   7. Strict home/away verification.
+//   8. Does not fabricate missing data.
+//   9. Preserves API errors instead of hiding everything.
+//  10. Compatible normalized output for Y.C.B.
+//
+// ==========================================================
 
 import {
   DataProvider,
@@ -18,6 +43,15 @@ const API =
 const PROVIDER_VERSION =
   "3.1.0";
 
+const DEFAULT_PAGE_SIZE =
+  200;
+
+const MAX_PAGES =
+  5;
+
+const RECENT_MATCH_LIMIT =
+  15;
+
 
 // ==========================================================
 // PROVIDER
@@ -27,10 +61,16 @@ class BSDProvider extends DataProvider {
 
   constructor() {
 
-    super("BSD");
+    super(
+      "BSD"
+    );
 
   }
 
+
+  // ========================================================
+  // GET MATCH DATA
+  // ========================================================
 
   async getMatchData(
     home,
@@ -41,92 +81,69 @@ class BSDProvider extends DataProvider {
     const startedAt =
       Date.now();
 
+
+    const homeName =
+      String(
+        home ||
+        ""
+      ).trim();
+
+
+    const awayName =
+      String(
+        away ||
+        ""
+      ).trim();
+
+
+    if (
+      !homeName ||
+      !awayName
+    ) {
+
+      return buildResponse(
+        "configuration_error",
+        "اسم الفريق المضيف أو الضيف مفقود.",
+        false,
+        false,
+        null,
+        [],
+        [],
+        startedAt
+      );
+
+    }
+
+
+    const apiKey =
+      getApiKey(
+        env
+      );
+
+
+    if (
+      !apiKey
+    ) {
+
+      return buildResponse(
+        "configuration_error",
+        "BSD_API_KEY غير موجود في Environment Variables.",
+        false,
+        false,
+        null,
+        [],
+        [],
+        startedAt
+      );
+
+    }
+
+
     try {
 
-      const homeName =
-        String(
-          home || ""
-        ).trim();
-
-      const awayName =
-        String(
-          away || ""
-        ).trim();
-
-
-      if (
-        !homeName ||
-        !awayName
-      ) {
-
-        return {
-
-          status:
-            "configuration_error",
-
-          message:
-            "اسم الفريق المضيف أو الضيف مفقود.",
-
-          data: {
-
-            source:
-              "bsd",
-
-            providerVersion:
-              PROVIDER_VERSION,
-
-            available:
-              false,
-
-            matchFound:
-              false
-
-          }
-
-        };
-
-      }
-
-
-      const apiKey =
-        String(
-          env?.BSD_API_KEY ||
-          env?.BSD_KEY ||
-          env?.SPORTS_BSD_API_KEY ||
-          ""
-        ).trim();
-
-
-      if (!apiKey) {
-
-        return {
-
-          status:
-            "configuration_error",
-
-          message:
-            "BSD_API_KEY غير موجود في Environment Variables.",
-
-          data: {
-
-            source:
-              "bsd",
-
-            providerVersion:
-              PROVIDER_VERSION,
-
-            available:
-              false,
-
-            matchFound:
-              false
-
-          }
-
-        };
-
-      }
-
+      // ----------------------------------------------------
+      // 1. FIND BOTH TEAMS
+      // ----------------------------------------------------
 
       const [
         homeTeam,
@@ -147,48 +164,48 @@ class BSDProvider extends DataProvider {
         ]);
 
 
+      // ----------------------------------------------------
+      // 2. GET TEAM EVENTS / FIXTURES
+      // ----------------------------------------------------
+
+      const [
+        homeEvents,
+        awayEvents
+      ] =
+        await Promise.all([
+
+          homeTeam?.id
+            ? getAllTeamEvents(
+                homeTeam.id,
+                apiKey
+              )
+            : Promise.resolve([]),
+
+          awayTeam?.id
+            ? getAllTeamEvents(
+                awayTeam.id,
+                apiKey
+              )
+            : Promise.resolve([])
+
+        ]);
+
+
+      // ----------------------------------------------------
+      // 3. FIND FIXTURE FROM HOME TEAM DATA
+      // ----------------------------------------------------
+
       let fixture =
-        await findFixture(
+        findMatchingEvent(
+          homeEvents,
           homeName,
-          awayName,
-          homeTeam,
-          awayTeam,
-          apiKey
+          awayName
         );
 
 
-      let homeRecent =
-        [];
-
-      let awayRecent =
-        [];
-
-
-      if (
-        homeTeam?.id
-      ) {
-
-        homeRecent =
-          await getTeamFixtures(
-            homeTeam.id,
-            apiKey
-          );
-
-      }
-
-
-      if (
-        awayTeam?.id
-      ) {
-
-        awayRecent =
-          await getTeamFixtures(
-            awayTeam.id,
-            apiKey
-          );
-
-      }
-
+      // ----------------------------------------------------
+      // 4. FIND FIXTURE FROM AWAY TEAM DATA
+      // ----------------------------------------------------
 
       if (
         !fixture
@@ -196,10 +213,7 @@ class BSDProvider extends DataProvider {
 
         fixture =
           findMatchingEvent(
-            [
-              ...homeRecent,
-              ...awayRecent
-            ],
+            awayEvents,
             homeName,
             awayName
           );
@@ -207,28 +221,108 @@ class BSDProvider extends DataProvider {
       }
 
 
+      // ----------------------------------------------------
+      // 5. DIRECT EVENT SEARCH
+      // ----------------------------------------------------
+
+      if (
+        !fixture &&
+        homeTeam?.id
+      ) {
+
+        const directHome =
+          await getEventsByTeam(
+            homeTeam.id,
+            apiKey,
+            false
+          );
+
+
+        fixture =
+          findMatchingEvent(
+            directHome,
+            homeName,
+            awayName
+          );
+
+      }
+
+
+      // ----------------------------------------------------
+      // 6. DIRECT EVENT SEARCH USING AWAY TEAM
+      // ----------------------------------------------------
+
+      if (
+        !fixture &&
+        awayTeam?.id
+      ) {
+
+        const directAway =
+          await getEventsByTeam(
+            awayTeam.id,
+            apiKey,
+            false
+          );
+
+
+        fixture =
+          findMatchingEvent(
+            directAway,
+            homeName,
+            awayName
+          );
+
+      }
+
+
+      // ----------------------------------------------------
+      // 7. DATE RANGE SEARCH
+      // ----------------------------------------------------
+
+      if (
+        !fixture
+      ) {
+
+        fixture =
+          await findFixtureByDateRange(
+            homeName,
+            awayName,
+            apiKey
+          );
+
+      }
+
+
+      // ----------------------------------------------------
+      // 8. NORMALIZE RECENT HISTORY
+      // ----------------------------------------------------
+
       const normalizedHome =
         normalizeRecentMatches(
-          homeRecent,
+          homeEvents,
           homeName
         );
 
 
       const normalizedAway =
         normalizeRecentMatches(
-          awayRecent,
+          awayEvents,
           awayName
         );
 
 
-      const hasHistory =
+      const historyAvailable =
         normalizedHome.length > 0 ||
         normalizedAway.length > 0;
 
 
+      // ----------------------------------------------------
+      // 9. NOTHING FOUND
+      // ----------------------------------------------------
+
       if (
         !fixture &&
-        !hasHistory
+        !historyAvailable
       ) {
 
         return {
@@ -237,7 +331,7 @@ class BSDProvider extends DataProvider {
             "api_ok_no_match",
 
           message:
-            "BSD متصل لكن لم يتم العثور على المباراة أو بيانات تاريخية.",
+            "BSD متصل بنجاح، لكن لم يتم العثور على المباراة أو نتائج تاريخية صالحة للفريقين.",
 
           data: {
 
@@ -279,6 +373,20 @@ class BSDProvider extends DataProvider {
 
             },
 
+            teams: {
+
+              home:
+                normalizeTeam(
+                  homeTeam
+                ),
+
+              away:
+                normalizeTeam(
+                  awayTeam
+                )
+
+            },
+
             durationMs:
               Date.now() -
               startedAt
@@ -290,6 +398,10 @@ class BSDProvider extends DataProvider {
       }
 
 
+      // ----------------------------------------------------
+      // 10. SUCCESS
+      // ----------------------------------------------------
+
       return {
 
         status:
@@ -300,9 +412,9 @@ class BSDProvider extends DataProvider {
         message:
           fixture
 
-            ? "تم العثور على المباراة وبياناتها عبر BSD."
+            ? "تم العثور على المباراة والتحقق من الفريقين عبر BSD."
 
-            : "تم العثور على بيانات تاريخية عبر BSD، لكن لم يتم التحقق من المباراة.",
+            : "تم العثور على بيانات تاريخية عبر BSD، لكن لم يتم العثور على المباراة المطلوبة.",
 
         data: {
 
@@ -337,8 +449,7 @@ class BSDProvider extends DataProvider {
 
           },
 
-          historyAvailable:
-            hasHistory,
+          historyAvailable,
 
           historyCount: {
 
@@ -347,6 +458,33 @@ class BSDProvider extends DataProvider {
 
             away:
               normalizedAway.length
+
+          },
+
+          teams: {
+
+            home:
+              normalizeTeam(
+                homeTeam
+              ),
+
+            away:
+              normalizeTeam(
+                awayTeam
+              )
+
+          },
+
+          limitations: {
+
+            dataProvider:
+              "BSD",
+
+            pagination:
+              true,
+
+            fabricatedData:
+              false
 
           },
 
@@ -401,7 +539,11 @@ class BSDProvider extends DataProvider {
           },
 
           historyAvailable:
-            false
+            false,
+
+          durationMs:
+            Date.now() -
+            startedAt
 
         }
 
@@ -415,6 +557,29 @@ class BSDProvider extends DataProvider {
 
 
 // ==========================================================
+// API KEY
+// ==========================================================
+
+function getApiKey(
+  env
+) {
+
+  return String(
+
+    env?.BSD_API_KEY ||
+
+    env?.BSD_KEY ||
+
+    env?.SPORTS_BSD_API_KEY ||
+
+    ""
+
+  ).trim();
+
+}
+
+
+// ==========================================================
 // FIND TEAM
 // ==========================================================
 
@@ -423,8 +588,14 @@ async function findTeam(
   apiKey
 ) {
 
+  const target =
+    normalizeName(
+      name
+    );
+
+
   if (
-    !name
+    !target
   ) {
 
     return null;
@@ -439,7 +610,7 @@ async function findTeam(
       encodeURIComponent(
         name
       ) +
-      `&limit=20`;
+      `&limit=50`;
 
 
     const data =
@@ -466,20 +637,23 @@ async function findTeam(
     }
 
 
-    const target =
-      normalizeName(
-        name
-      );
-
+    // ------------------------------------------------------
+    // EXACT NORMALIZED MATCH
+    // ------------------------------------------------------
 
     const exact =
       teams.find(
-        team =>
-          normalizeName(
-            teamName(
-              team
-            )
-          ) === target
+        team => {
+
+          return (
+            normalizeName(
+              teamName(
+                team
+              )
+            ) === target
+          );
+
+        }
       );
 
 
@@ -492,173 +666,47 @@ async function findTeam(
     }
 
 
-    const matched =
+    // ------------------------------------------------------
+    // HIGH CONFIDENCE MATCH
+    // ------------------------------------------------------
+
+    const strong =
       teams.find(
-        team =>
-          namesMatch(
+        team => {
+
+          return strongNameMatch(
             teamName(
               team
             ),
             name
-          )
-      );
+          );
 
-
-    return (
-      matched ||
-      teams[0] ||
-      null
-    );
-
-  } catch {
-
-    return null;
-
-  }
-
-}
-
-
-// ==========================================================
-// FIND FIXTURE
-// ==========================================================
-
-async function findFixture(
-  home,
-  away,
-  homeTeam,
-  awayTeam,
-  apiKey
-) {
-
-  if (
-    homeTeam?.id
-  ) {
-
-    const events =
-      await getTeamFixtures(
-        homeTeam.id,
-        apiKey
-      );
-
-
-    const match =
-      findMatchingEvent(
-        events,
-        home,
-        away
+        }
       );
 
 
     if (
-      match
+      strong
     ) {
 
-      return match;
+      return strong;
 
     }
 
-  }
 
-
-  if (
-    awayTeam?.id
-  ) {
-
-    const events =
-      await getTeamFixtures(
-        awayTeam.id,
-        apiKey
-      );
-
-
-    const match =
-      findMatchingEvent(
-        events,
-        home,
-        away
-      );
-
-
-    if (
-      match
-    ) {
-
-      return match;
-
-    }
-
-  }
-
-
-  try {
-
-    const now =
-      new Date();
-
-
-    const from =
-      new Date(
-        now.getTime()
-      );
-
-
-    from.setDate(
-      from.getDate() - 7
-    );
-
-
-    const to =
-      new Date(
-        now.getTime()
-      );
-
-
-    to.setDate(
-      to.getDate() + 45
-    );
-
-
-    const url =
-      `${API}/events/?date_from=` +
-      encodeURIComponent(
-        formatDate(
-          from
-        )
-      ) +
-      `&date_to=` +
-      encodeURIComponent(
-        formatDate(
-          to
-        )
-      ) +
-      `&limit=200`;
-
-
-    const data =
-      await fetchJSON(
-        url,
-        apiKey
-      );
-
-
-    const events =
-      Array.isArray(
-        data?.results
-      )
-        ? data.results
-        : [];
-
-
-    return findMatchingEvent(
-      events,
-      home,
-      away
-    );
-
-  } catch {
+    // ------------------------------------------------------
+    // DO NOT BLINDLY ACCEPT FIRST RESULT
+    // ------------------------------------------------------
 
     return null;
+
+  } catch (
+    error
+  ) {
+
+    throw new Error(
+      `BSD team search failed for "${name}": ${error?.message || String(error)}`
+    );
 
   }
 
@@ -683,16 +731,171 @@ async function getTeamFixtures(
   }
 
 
+  const url =
+    `${API}/teams/` +
+    encodeURIComponent(
+      String(
+        teamId
+      )
+    ) +
+    `/fixtures/?limit=` +
+    DEFAULT_PAGE_SIZE +
+    `&offset=0`;
+
+
+  const data =
+    await fetchJSON(
+      url,
+      apiKey
+    );
+
+
+  return Array.isArray(
+    data?.results
+  )
+    ? data.results
+    : [];
+
+}
+
+
+// ==========================================================
+// GET ALL TEAM EVENTS
+// ==========================================================
+
+async function getAllTeamEvents(
+  teamId,
+  apiKey
+) {
+
+  if (
+    !teamId
+  ) {
+
+    return [];
+
+  }
+
+
+  const combined =
+    [];
+
+
+  const seen =
+    new Set();
+
+
+  // --------------------------------------------------------
+  // PRIMARY SOURCE: TEAM FIXTURES
+  // --------------------------------------------------------
+
   try {
 
+    const fixtures =
+      await getTeamFixtures(
+        teamId,
+        apiKey
+      );
+
+
+    addUniqueEvents(
+      combined,
+      fixtures,
+      seen
+    );
+
+  } catch {
+
+    // Continue with events endpoint.
+  }
+
+
+  // --------------------------------------------------------
+  // SECONDARY SOURCE: EVENTS BY TEAM
+  // --------------------------------------------------------
+
+  try {
+
+    const events =
+      await getEventsByTeam(
+        teamId,
+        apiKey,
+        true
+      );
+
+
+    addUniqueEvents(
+      combined,
+      events,
+      seen
+    );
+
+  } catch {
+
+    // Keep already collected fixtures.
+  }
+
+
+  return combined;
+
+}
+
+
+// ==========================================================
+// EVENTS BY TEAM
+// ==========================================================
+
+async function getEventsByTeam(
+  teamId,
+  apiKey,
+  paginate
+) {
+
+  if (
+    !teamId
+  ) {
+
+    return [];
+
+  }
+
+
+  const all =
+    [];
+
+
+  const seen =
+    new Set();
+
+
+  const pages =
+    paginate
+      ? MAX_PAGES
+      : 1;
+
+
+  for (
+    let page = 0;
+    page < pages;
+    page++
+  ) {
+
+    const offset =
+      page *
+      DEFAULT_PAGE_SIZE;
+
+
     const url =
-      `${API}/teams/` +
+      `${API}/events/?team_id=` +
       encodeURIComponent(
         String(
           teamId
         )
       ) +
-      `/fixtures/?limit=100`;
+      `&limit=` +
+      DEFAULT_PAGE_SIZE +
+      `&offset=` +
+      offset;
 
 
     const data =
@@ -702,17 +905,338 @@ async function getTeamFixtures(
       );
 
 
-    return Array.isArray(
-      data?.results
-    )
-      ? data.results
-      : [];
+    const events =
+      Array.isArray(
+        data?.results
+      )
+        ? data.results
+        : [];
 
-  } catch {
 
-    return [];
+    if (
+      events.length === 0
+    ) {
+
+      break;
+
+    }
+
+
+    addUniqueEvents(
+      all,
+      events,
+      seen
+    );
+
+
+    if (
+      !paginate
+    ) {
+
+      break;
+
+    }
+
+
+    const total =
+      Number(
+        data?.count
+      );
+
+
+    if (
+      Number.isFinite(
+        total
+      ) &&
+      offset +
+      events.length >=
+      total
+    ) {
+
+      break;
+
+    }
+
+
+    if (
+      events.length <
+      DEFAULT_PAGE_SIZE
+    ) {
+
+      break;
+
+    }
 
   }
+
+
+  return all;
+
+}
+
+
+// ==========================================================
+// DATE RANGE FIXTURE SEARCH
+// ==========================================================
+
+async function findFixtureByDateRange(
+  home,
+  away,
+  apiKey
+) {
+
+  const now =
+    new Date();
+
+
+  const from =
+    new Date(
+      now.getTime()
+    );
+
+
+  from.setDate(
+    from.getDate() - 30
+  );
+
+
+  const to =
+    new Date(
+      now.getTime()
+    );
+
+
+  to.setDate(
+    to.getDate() + 90
+  );
+
+
+  const all =
+    [];
+
+
+  const seen =
+    new Set();
+
+
+  const pageCount =
+    3;
+
+
+  for (
+    let page = 0;
+    page < pageCount;
+    page++
+  ) {
+
+    const offset =
+      page *
+      DEFAULT_PAGE_SIZE;
+
+
+    const url =
+      `${API}/events/?date_from=` +
+
+      encodeURIComponent(
+        formatDate(
+          from
+        )
+      ) +
+
+      `&date_to=` +
+
+      encodeURIComponent(
+        formatDate(
+          to
+        )
+      ) +
+
+      `&limit=` +
+
+      DEFAULT_PAGE_SIZE +
+
+      `&offset=` +
+
+      offset;
+
+
+    const data =
+      await fetchJSON(
+        url,
+        apiKey
+      );
+
+
+    const events =
+      Array.isArray(
+        data?.results
+      )
+        ? data.results
+        : [];
+
+
+    if (
+      events.length === 0
+    ) {
+
+      break;
+
+    }
+
+
+    addUniqueEvents(
+      all,
+      events,
+      seen
+    );
+
+
+    const match =
+      findMatchingEvent(
+        events,
+        home,
+        away
+      );
+
+
+    if (
+      match
+    ) {
+
+      return match;
+
+    }
+
+
+    if (
+      events.length <
+      DEFAULT_PAGE_SIZE
+    ) {
+
+      break;
+
+    }
+
+  }
+
+
+  return findMatchingEvent(
+    all,
+    home,
+    away
+  );
+
+}
+
+
+// ==========================================================
+// ADD UNIQUE EVENTS
+// ==========================================================
+
+function addUniqueEvents(
+  target,
+  events,
+  seen
+) {
+
+  if (
+    !Array.isArray(
+      events
+    )
+  ) {
+
+    return;
+
+  }
+
+
+  for (
+    const event
+    of events
+  ) {
+
+    if (
+      !event
+    ) {
+
+      continue;
+
+    }
+
+
+    const id =
+      String(
+        event?.id ||
+        event?.event_id ||
+        event?.fixture_id ||
+        buildEventKey(
+          event
+        )
+      );
+
+
+    if (
+      seen.has(
+        id
+      )
+    ) {
+
+      continue;
+
+    }
+
+
+    seen.add(
+      id
+    );
+
+
+    target.push(
+      event
+    );
+
+  }
+
+}
+
+
+// ==========================================================
+// EVENT KEY
+// ==========================================================
+
+function buildEventKey(
+  event
+) {
+
+  return [
+
+    eventHomeName(
+      event
+    ),
+
+    eventAwayName(
+      event
+    ),
+
+    getEventDate(
+      event
+    )
+
+  ]
+
+    .map(
+      value =>
+        String(
+          value ||
+          ""
+        )
+          .toLowerCase()
+          .trim()
+    )
+
+    .join(
+      "|"
+    );
 
 }
 
@@ -761,6 +1285,10 @@ function findMatchingEvent(
   }
 
 
+  // --------------------------------------------------------
+  // EXACT NORMALIZED HOME + AWAY
+  // --------------------------------------------------------
+
   const exact =
     events.find(
       event => {
@@ -783,15 +1311,11 @@ function findMatchingEvent(
 
         return (
 
-          namesMatch(
-            eventHome,
-            targetHome
-          ) &&
+          eventHome ===
+          targetHome &&
 
-          namesMatch(
-            eventAway,
-            targetAway
-          )
+          eventAway ===
+          targetAway
 
         );
 
@@ -808,23 +1332,23 @@ function findMatchingEvent(
   }
 
 
-  const candidates =
+  // --------------------------------------------------------
+  // STRONG HOME + AWAY
+  // --------------------------------------------------------
+
+  const strong =
     events.filter(
       event => {
 
         const eventHome =
-          normalizeName(
-            eventHomeName(
-              event
-            )
+          eventHomeName(
+            event
           );
 
 
         const eventAway =
-          normalizeName(
-            eventAwayName(
-              event
-            )
+          eventAwayName(
+            event
           );
 
 
@@ -832,12 +1356,12 @@ function findMatchingEvent(
 
           strongNameMatch(
             eventHome,
-            targetHome
+            home
           ) &&
 
           strongNameMatch(
             eventAway,
-            targetAway
+            away
           )
 
         );
@@ -847,10 +1371,70 @@ function findMatchingEvent(
 
 
   if (
-    candidates.length === 1
+    strong.length === 1
   ) {
 
-    return candidates[0];
+    return strong[0];
+
+  }
+
+
+  // --------------------------------------------------------
+  // TEAM ID CONFIRMATION
+  // --------------------------------------------------------
+
+  const homeIdCandidates =
+    events.filter(
+      event => {
+
+        const eventHomeId =
+          getTeamId(
+            event,
+            "home"
+          );
+
+
+        const eventAwayNameValue =
+          eventAwayName(
+            event
+          );
+
+
+        return (
+
+          eventHomeId !== null &&
+
+          strongNameMatch(
+            eventAwayNameValue,
+            away
+          )
+
+        );
+
+      }
+    );
+
+
+  if (
+    homeIdCandidates.length === 1
+  ) {
+
+    const candidate =
+      homeIdCandidates[0];
+
+
+    if (
+      strongNameMatch(
+        eventHomeName(
+          candidate
+        ),
+        home
+      )
+    ) {
+
+      return candidate;
+
+    }
 
   }
 
@@ -886,210 +1470,186 @@ function normalizeRecentMatches(
     );
 
 
-  return events
+  const matches =
+    events
 
-    .filter(
-      event =>
-        hasValidScore(
-          event
-        )
-    )
+      .filter(
+        event =>
+          hasValidScore(
+            event
+          )
+      )
 
-    .filter(
-      event => {
+      .filter(
+        event => {
 
-        const home =
-          normalizeName(
+          const home =
             eventHomeName(
               event
-            )
-          );
+            );
 
 
-        const away =
-          normalizeName(
+          const away =
             eventAwayName(
               event
+            );
+
+
+          return (
+
+            namesMatch(
+              home,
+              target
+            ) ||
+
+            namesMatch(
+              away,
+              target
             )
+
           );
 
+        }
+      )
 
-        return (
+      .sort(
+        (
+          a,
+          b
+        ) => {
 
-          namesMatch(
-            home,
-            target
-          ) ||
+          const dateA =
+            getEventDate(
+              a
+            );
 
-          namesMatch(
-            away,
-            target
-          )
 
-        );
+          const dateB =
+            getEventDate(
+              b
+            );
 
-      }
-    )
 
-    .sort(
-      (
-        a,
-        b
-      ) => {
+          return (
 
-        const dateA =
-          getEventDate(
-            a
+            new Date(
+              dateB || 0
+            ).getTime()
+
+            -
+
+            new Date(
+              dateA || 0
+            ).getTime()
+
           );
 
-        const dateB =
-          getEventDate(
-            b
-          );
+        }
+      );
 
 
-        return (
-          new Date(
-            dateB || 0
-          ).getTime() -
+  const unique =
+    [];
 
-          new Date(
-            dateA || 0
-          ).getTime()
-        );
 
-      }
-    )
+  const seen =
+    new Set();
 
-    .slice(
-      0,
-      15
-    )
 
-    .map(
-      normalizeEvent
-    )
+  for (
+    const event
+    of matches
+  ) {
 
-    .filter(
-      Boolean
+    const normalized =
+      normalizeEvent(
+        event
+      );
+
+
+    if (
+      !normalized
+    ) {
+
+      continue;
+
+    }
+
+
+    if (
+      seen.has(
+        normalized.id
+      )
+    ) {
+
+      continue;
+
+    }
+
+
+    seen.add(
+      normalized.id
     );
+
+
+    unique.push(
+      normalized
+    );
+
+
+    if (
+      unique.length >=
+      RECENT_MATCH_LIMIT
+    ) {
+
+      break;
+
+    }
+
+  }
+
+
+  return unique;
 
 }
 
 
 // ==========================================================
-// FETCH JSON
+// NORMALIZE TEAM
 // ==========================================================
 
-async function fetchJSON(
-  url,
-  apiKey
+function normalizeTeam(
+  team
 ) {
 
-  const response =
-    await fetch(
-      url,
-      {
-
-        method:
-          "GET",
-
-        headers: {
-
-          Accept:
-            "application/json",
-
-          Authorization:
-            `Token ${apiKey}`
-
-        }
-
-      }
-    );
-
-
-  const text =
-    await response.text();
-
-
-  let data =
-    null;
-
-
-  try {
-
-    data =
-      text
-        ? JSON.parse(
-            text
-          )
-        : null;
-
-  } catch {
-
-    throw new Error(
-      "BSD returned invalid JSON."
-    );
-
-  }
-
-
   if (
-    !response.ok
+    !team
   ) {
 
-    if (
-      response.status === 401
-    ) {
-
-      throw new Error(
-        "BSD HTTP 401 — API key مفقود أو غير صالح."
-      );
-
-    }
-
-
-    if (
-      response.status === 403
-    ) {
-
-      throw new Error(
-        "BSD HTTP 403 — الوصول إلى BSD API مرفوض."
-      );
-
-    }
-
-
-    if (
-      response.status === 404
-    ) {
-
-      throw new Error(
-        "BSD HTTP 404 — مسار API غير موجود."
-      );
-
-    }
-
-
-    if (
-      response.status === 429
-    ) {
-
-      throw new Error(
-        "BSD HTTP 429 — تم تجاوز حد الطلبات."
-      );
-
-    }
-
-
-    throw new Error(
-      `BSD HTTP ${response.status}`
-    );
+    return null;
 
   }
 
 
-  return data;
+  return {
+
+    id:
+      team?.id ||
+      team?.team_id ||
+      null,
+
+    name:
+      teamName(
+        team
+      ) ||
+      null,
+
+    shortName:
+      team?.short_name ||
+      team?.shortName ||
+      null
+
+  };
 
 }
 
@@ -1133,12 +1693,14 @@ function normalizeEvent(
   const homeTeam =
     event?.home_team ||
     event?.homeTeam ||
+    event?.home ||
     {};
 
 
   const awayTeam =
     event?.away_team ||
     event?.awayTeam ||
+    event?.away ||
     {};
 
 
@@ -1161,7 +1723,9 @@ function normalizeEvent(
 
     status:
       finished
+
         ? "FINISHED"
+
         : normalizeStatus(
             event?.status
           ),
@@ -1171,6 +1735,7 @@ function normalizeEvent(
 
       id:
         homeTeam?.id ||
+        homeTeam?.team_id ||
         event?.home_team_id ||
         null,
 
@@ -1182,6 +1747,7 @@ function normalizeEvent(
 
       shortName:
         homeTeam?.short_name ||
+        homeTeam?.shortName ||
         homeTeam?.name ||
         null
 
@@ -1192,6 +1758,7 @@ function normalizeEvent(
 
       id:
         awayTeam?.id ||
+        awayTeam?.team_id ||
         event?.away_team_id ||
         null,
 
@@ -1203,6 +1770,7 @@ function normalizeEvent(
 
       shortName:
         awayTeam?.short_name ||
+        awayTeam?.shortName ||
         awayTeam?.name ||
         null
 
@@ -1226,10 +1794,15 @@ function normalizeEvent(
 
     tournament:
       event?.league?.name ||
+
       event?.league_name ||
+
       event?.competition?.name ||
+
       event?.competition_name ||
+
       event?.tournament?.name ||
+
       null
 
   };
@@ -1238,7 +1811,7 @@ function normalizeEvent(
 
 
 // ==========================================================
-// SCORE
+// SCORE VALUE
 // ==========================================================
 
 function scoreValue(
@@ -1247,6 +1820,7 @@ function scoreValue(
 ) {
 
   const values =
+
     side === "home"
 
       ? [
@@ -1261,7 +1835,9 @@ function scoreValue(
 
           event?.home?.score,
 
-          event?.home_team_score
+          event?.home_team_score,
+
+          event?.homeTeamScore
 
         ]
 
@@ -1277,7 +1853,9 @@ function scoreValue(
 
           event?.away?.score,
 
-          event?.away_team_score
+          event?.away_team_score,
+
+          event?.awayTeamScore
 
         ];
 
@@ -1323,6 +1901,31 @@ function scoreValue(
 
 
 // ==========================================================
+// VALID SCORE
+// ==========================================================
+
+function hasValidScore(
+  event
+) {
+
+  return (
+
+    scoreValue(
+      event,
+      "home"
+    ) !== null &&
+
+    scoreValue(
+      event,
+      "away"
+    ) !== null
+
+  );
+
+}
+
+
+// ==========================================================
 // HOME TEAM NAME
 // ==========================================================
 
@@ -1340,9 +1943,9 @@ function eventHomeName(
 
     event?.homeTeam?.shortName ||
 
-    event?.home_team_name ||
-
     event?.home?.name ||
+
+    event?.home_team_name ||
 
     ""
 
@@ -1369,9 +1972,9 @@ function eventAwayName(
 
     event?.awayTeam?.shortName ||
 
-    event?.away_team_name ||
-
     event?.away?.name ||
+
+    event?.away_team_name ||
 
     ""
 
@@ -1394,11 +1997,60 @@ function teamName(
 
     team?.short_name ||
 
+    team?.shortName ||
+
     team?.team_name ||
 
     team?.display_name ||
 
     ""
+
+  );
+
+}
+
+
+// ==========================================================
+// TEAM ID
+// ==========================================================
+
+function getTeamId(
+  event,
+  side
+) {
+
+  if (
+    side === "home"
+  ) {
+
+    return (
+
+      event?.home_team?.id ||
+
+      event?.homeTeam?.id ||
+
+      event?.home?.id ||
+
+      event?.home_team_id ||
+
+      null
+
+    );
+
+  }
+
+
+  return (
+
+    event?.away_team?.id ||
+
+    event?.awayTeam?.id ||
+
+    event?.away?.id ||
+
+    event?.away_team_id ||
+
+    null
 
   );
 
@@ -1426,6 +2078,8 @@ function getEventDate(
     event?.datetime ||
 
     event?.startTime ||
+
+    event?.date_time ||
 
     null;
 
@@ -1471,7 +2125,8 @@ function normalizeStatus(
 
   const value =
     String(
-      status || ""
+      status ||
+      ""
     )
       .toLowerCase()
       .trim();
@@ -1524,31 +2179,6 @@ function normalizeStatus(
 
 
 // ==========================================================
-// VALID SCORE
-// ==========================================================
-
-function hasValidScore(
-  event
-) {
-
-  return (
-
-    scoreValue(
-      event,
-      "home"
-    ) !== null &&
-
-    scoreValue(
-      event,
-      "away"
-    ) !== null
-
-  );
-
-}
-
-
-// ==========================================================
 // FORMAT DATE
 // ==========================================================
 
@@ -1557,7 +2187,15 @@ function formatDate(
 ) {
 
   if (
-    !(date instanceof Date) ||
+    !(date instanceof Date)
+  ) {
+
+    return "";
+
+  }
+
+
+  if (
     Number.isNaN(
       date.getTime()
     )
@@ -1587,7 +2225,8 @@ function normalizeName(
 ) {
 
   return String(
-    value || ""
+    value ||
+    ""
   )
 
     .toLowerCase()
@@ -1608,8 +2247,10 @@ function normalizeName(
       " and "
     )
 
+    // IMPORTANT:
+    // Do NOT remove "united" or "utd".
     .replace(
-      /\b(fc|cf|afc|sc|ac|fk|club|utd|united)\b/g,
+      /\b(fc|cf|afc|sc|ac|fk|club)\b/g,
       " "
     )
 
@@ -1678,7 +2319,7 @@ function namesMatch(
   }
 
 
-  const firstTokens =
+  const aTokens =
     a
       .split(" ")
       .filter(
@@ -1687,7 +2328,7 @@ function namesMatch(
       );
 
 
-  const secondTokens =
+  const bTokens =
     b
       .split(" ")
       .filter(
@@ -1697,8 +2338,8 @@ function namesMatch(
 
 
   if (
-    firstTokens.length === 0 ||
-    secondTokens.length === 0
+    aTokens.length === 0 ||
+    bTokens.length === 0
   ) {
 
     return false;
@@ -1706,23 +2347,23 @@ function namesMatch(
   }
 
 
-  const firstSet =
+  const aSet =
     new Set(
-      firstTokens
+      aTokens
     );
 
 
   const common =
-    secondTokens.filter(
+    bTokens.filter(
       token =>
-        firstSet.has(
+        aSet.has(
           token
         )
     );
 
 
   if (
-    secondTokens.length === 1
+    bTokens.length === 1
   ) {
 
     return common.length >= 1;
@@ -1731,11 +2372,13 @@ function namesMatch(
 
 
   return (
+
     common.length >=
     Math.min(
       2,
-      secondTokens.length
+      bTokens.length
     )
+
   );
 
 }
@@ -1791,7 +2434,7 @@ function strongNameMatch(
   }
 
 
-  const firstTokens =
+  const aTokens =
     a
       .split(" ")
       .filter(
@@ -1800,7 +2443,7 @@ function strongNameMatch(
       );
 
 
-  const secondTokens =
+  const bTokens =
     b
       .split(" ")
       .filter(
@@ -1810,8 +2453,8 @@ function strongNameMatch(
 
 
   if (
-    firstTokens.length === 0 ||
-    secondTokens.length === 0
+    aTokens.length === 0 ||
+    bTokens.length === 0
   ) {
 
     return false;
@@ -1819,10 +2462,16 @@ function strongNameMatch(
   }
 
 
+  const aSet =
+    new Set(
+      aTokens
+    );
+
+
   const common =
-    secondTokens.filter(
+    bTokens.filter(
       token =>
-        firstTokens.includes(
+        aSet.has(
           token
         )
     );
@@ -1831,6 +2480,244 @@ function strongNameMatch(
   return (
     common.length >= 1
   );
+
+}
+
+
+// ==========================================================
+// FETCH JSON
+// ==========================================================
+
+async function fetchJSON(
+  url,
+  apiKey
+) {
+
+  const response =
+    await fetch(
+      url,
+      {
+
+        method:
+          "GET",
+
+        headers: {
+
+          Accept:
+            "application/json",
+
+          Authorization:
+            `Token ${apiKey}`
+
+        }
+
+      }
+    );
+
+
+  const text =
+    await response.text();
+
+
+  let data =
+    null;
+
+
+  try {
+
+    data =
+      text
+        ? JSON.parse(
+            text
+          )
+        : null;
+
+  } catch {
+
+    throw new Error(
+      "BSD returned invalid JSON."
+    );
+
+  }
+
+
+  if (
+    !response.ok
+  ) {
+
+    if (
+      response.status ===
+      401
+    ) {
+
+      throw new Error(
+        "BSD HTTP 401 — API key مفقود أو غير صالح."
+      );
+
+    }
+
+
+    if (
+      response.status ===
+      403
+    ) {
+
+      throw new Error(
+        "BSD HTTP 403 — الوصول إلى Football API مرفوض."
+      );
+
+    }
+
+
+    if (
+      response.status ===
+      404
+    ) {
+
+      throw new Error(
+        "BSD HTTP 404 — endpoint غير موجود."
+      );
+
+    }
+
+
+    if (
+      response.status ===
+      429
+    ) {
+
+      throw new Error(
+        "BSD HTTP 429 — تم تجاوز حد الطلبات."
+      );
+
+    }
+
+
+    throw new Error(
+      `BSD HTTP ${response.status}`
+    );
+
+  }
+
+
+  if (
+    !data ||
+    typeof data !==
+    "object"
+  ) {
+
+    throw new Error(
+      "BSD returned an empty or invalid response."
+    );
+
+  }
+
+
+  return data;
+
+}
+
+
+// ==========================================================
+// BUILD RESPONSE
+// ==========================================================
+
+function buildResponse(
+  status,
+  message,
+  available,
+  matchFound,
+  fixture,
+  homeRecent,
+  awayRecent,
+  startedAt
+) {
+
+  return {
+
+    status,
+
+    message,
+
+    data: {
+
+      source:
+        "bsd",
+
+      providerVersion:
+        PROVIDER_VERSION,
+
+      available,
+
+      matchFound,
+
+      fixture:
+        fixture
+          ? normalizeEvent(
+              fixture
+            )
+          : null,
+
+      recentMatches: {
+
+        home:
+          Array.isArray(
+            homeRecent
+          )
+            ? homeRecent
+            : [],
+
+        away:
+          Array.isArray(
+            awayRecent
+          )
+            ? awayRecent
+            : []
+
+      },
+
+      historyAvailable:
+        (
+          Array.isArray(
+            homeRecent
+          ) &&
+          homeRecent.length > 0
+        )
+
+        ||
+
+        (
+          Array.isArray(
+            awayRecent
+          ) &&
+          awayRecent.length > 0
+        ),
+
+      historyCount: {
+
+        home:
+          Array.isArray(
+            homeRecent
+          )
+            ? homeRecent.length
+            : 0,
+
+        away:
+          Array.isArray(
+            awayRecent
+          )
+            ? awayRecent.length
+            : 0
+
+      },
+
+      durationMs:
+        Date.now() -
+        startedAt
+
+    }
+
+  };
 
 }
 
@@ -1849,3 +2736,8 @@ registerProvider(
 
 
 export default provider;
+
+
+// ==========================================================
+// END BSD PROVIDER 3.1.0
+// ==========================================================
