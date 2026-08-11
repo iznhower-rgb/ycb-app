@@ -1,7 +1,0 @@
-{
-  "name": "ycb-app",
-  "version": "3.0.1",
-  "private": true,
-  "type": "module",
-  "main": "./worker.js"
-}
