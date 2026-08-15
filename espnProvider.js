@@ -392,17 +392,11 @@ async function getMatchData(
     of leagues
   ) {
 
-    const sampleDates = [
-
-      dates[0],
-      dates[15],
-      dates[30],
-      dates[45],
-      dates[60],
-      dates[75],
-      dates[90]
-
-    ];
+    // تم توسيع نطاق عينات التاريخ لتجنب تفويت المباريات التاريخية ورفع جودة البيانات
+    const sampleDates = [];
+    for (let i = 0; i < dates.length; i += 4) {
+      sampleDates.push(dates[i]);
+    }
 
 
     for (
