@@ -1,15 +1,31 @@
 /* ==========================================================
-   2. PROVIDER RUNNER (providerRunner.js)
+   Y.C.B PROVIDER RUNNER 3.2.0
 ========================================================== */
 
 import { getProviderInstances } from "./providers.js";
 
-// استيراد جميع المزودين لضمان تسجيلهم في النظام
 import "./espnProvider.js";
-import "./bsdProvider.js";
 import "./theSportsDBProvider.js";
+import "./bsdProvider.js";
 
-export async function getAllMatchData(home, away, env) {
+const TIMEOUT_MS = 20000;
+
+function withTimeout(promise, ms, label) {
+  let timer;
+
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label} timeout after ${ms}ms`)),
+      ms
+    );
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    clearTimeout(timer);
+  });
+}
+
+export async function getAllMatchData(home, away, env = {}) {
   const providers = getProviderInstances().filter(
     provider => provider.enabled !== false
   );
@@ -19,11 +35,16 @@ export async function getAllMatchData(home, away, env) {
       const startedAt = Date.now();
 
       try {
-        const result = await provider.getMatchData(home, away, env);
+        const result = await withTimeout(
+          provider.getMatchData(home, away, env),
+          Number(env.YCB_PROVIDER_TIMEOUT_MS) || TIMEOUT_MS,
+          provider.name
+        );
 
         return {
           provider: provider.name,
-          success: result?.status === "success",
+          version: provider.version,
+          success: result?.status === "success" && Boolean(result?.data),
           status: result?.status || "unknown",
           message: result?.message || "",
           data: result?.data || null,
@@ -32,6 +53,7 @@ export async function getAllMatchData(home, away, env) {
       } catch (error) {
         return {
           provider: provider.name,
+          version: provider.version,
           success: false,
           status: "provider_error",
           message: error?.message || String(error),
