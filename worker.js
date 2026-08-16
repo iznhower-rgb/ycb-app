@@ -5,7 +5,7 @@
 import { getProviders } from "./providers.js";
 import { getAllMatchData } from "./providerRunner.js";
 import { mergeProviderData, buildTeamAnalysis } from "./statsCollector.js";
-import "./espnProvider.js";
+
 
 const VERSION = "3.1.0";
 
