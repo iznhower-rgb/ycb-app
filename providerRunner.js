@@ -4,6 +4,11 @@
 
 import { getProviderInstances } from "./providers.js";
 
+// استيراد جميع المزودين لضمان تسجيلهم في النظام
+import "./espnProvider.js";
+import "./bsdProvider.js";
+import "./theSportsDBProvider.js";
+
 export async function getAllMatchData(home, away, env) {
   const providers = getProviderInstances().filter(
     provider => provider.enabled !== false
