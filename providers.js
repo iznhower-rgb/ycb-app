@@ -1,56 +1,33 @@
 /* ==========================================================
-   1. PROVIDERS REGISTRY (providers.js)
+   PROVIDERS REGISTRY (providers.js)
 ========================================================== */
 
-const registry = [];
-
-export class DataProvider {
-  constructor(config = {}) {
-    this.name = config.name || "Unnamed Provider";
-    this.version = config.version || "3.1.0";
-    this.description = config.description || "";
-    this.enabled = config.enabled !== false;
+class DataProvider {
+  constructor(config) {
+    this.name = config.name;
+    this.version = config.version;
+    this.description = config.description;
+    this.enabled = true;
   }
 
+  // الدالة الأساسية التي يجب أن تُعرف في كل مزود
   async getMatchData(home, away, env) {
     throw new Error("getMatchData must be implemented by subclass");
   }
 }
 
-export function registerProvider(provider) {
-  if (!provider || typeof provider.getMatchData !== "function") {
-    throw new Error("Invalid provider registration");
+let providersRegistry = [];
+
+function registerProvider(providerInstance) {
+  if (providerInstance && typeof providerInstance.getMatchData === "function") {
+    providersRegistry.push(providerInstance);
+  } else {
+    console.error("Invalid provider registration: missing getMatchData function");
   }
-
-  const name = String(provider.name || "Unnamed Provider").trim();
-
-  if (!name) {
-    throw new Error("Provider name is required");
-  }
-
-  if (!registry.some(p => p.name === name)) {
-    registry.push({
-      ...provider,
-      name
-    });
-  }
-
-  return provider;
 }
 
-export function getProviderInstances() {
-  return [...registry];
+function getProviderInstances() {
+  return providersRegistry;
 }
 
-export function getProviders() {
-  return registry.map(provider => ({
-    name: provider.name,
-    version: provider.version || "3.1.0",
-    description: provider.description || "",
-    enabled: provider.enabled !== false
-  }));
-}
-
-export function clearProviders() {
-  registry.length = 0;
-}
+export { DataProvider, registerProvider, getProviderInstances };
