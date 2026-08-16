@@ -1,23 +1,24 @@
-// ==========================================================
-// Y.C.B BSD PROVIDER 3.1.0
-// ==========================================================
-//
-// BSD is optional.
-//
-// Configure:
-//
-//   BSD_API_URL
-//
-// Optional:
-//
-//   BSD_API_KEY
-//
-// The endpoint should accept:
-//
-//   ?home=...&away=...
-//
-// and return normalized Y.C.B data or raw match data.
-// ==========================================================
+/* ==========================================================
+   Y.C.B BSD PROVIDER 3.1.0
+========================================================== */
+
+/*
+ * BSD is optional.
+ *
+ * Configure:
+ *
+ *   BSD_API_URL
+ *
+ * Optional:
+ *
+ *   BSD_API_KEY
+ *
+ * The endpoint should accept:
+ *
+ *   ?home=...&away=...
+ *
+ * and return normalized Y.C.B data or raw match data.
+ */
 
 import {
   registerProvider
@@ -25,7 +26,7 @@ import {
 
 
 /* ==========================================================
-   NORMALIZE BSD DATA
+   NORMALIZE BSD DATA
 ========================================================== */
 
 function normalizeRaw(
@@ -82,7 +83,7 @@ function normalizeRaw(
 
     fixture,
 
-    recentMatches:{
+    recentMatches: {
 
       home:
         Array.isArray(
@@ -100,9 +101,12 @@ function normalizeRaw(
 
     },
 
-    requested:{
+    requested: {
+
       home,
+
       away
+
     }
 
   };
@@ -111,7 +115,7 @@ function normalizeRaw(
 
 
 /* ==========================================================
-   GET MATCH DATA
+   GET MATCH DATA
 ========================================================== */
 
 async function getMatchData(
@@ -170,7 +174,7 @@ async function getMatchData(
       url.toString(),
       {
 
-        headers:{
+        headers: {
 
           Accept:
             "application/json",
@@ -180,8 +184,10 @@ async function getMatchData(
             env?.BSD_API_KEY
 
               ? {
+
                   Authorization:
                     `Bearer ${env.BSD_API_KEY}`
+
                 }
 
               : {}
@@ -237,7 +243,7 @@ async function getMatchData(
 
 
 /* ==========================================================
-   REGISTER
+   REGISTER
 ========================================================== */
 
 registerProvider({
