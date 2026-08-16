@@ -1,21 +1,21 @@
-// ==========================================================
-// Y.C.B STATS COLLECTOR 3.1.0
-// ==========================================================
-//
-// Responsibilities:
-//
-//   mergeProviderData()
-//   dedupeMatches()
-//   buildTeamAnalysis()
-//   calculateTeamStats()
-//   normalizeName()
-//   namesMatch()
-//
-// ==========================================================
+/* ==========================================================
+   Y.C.B STATS COLLECTOR 3.1.0
+========================================================== */
+
+/*
+ * Responsibilities:
+ *
+ *   mergeProviderData()
+ *   dedupeMatches()
+ *   buildTeamAnalysis()
+ *   calculateTeamStats()
+ *   normalizeName()
+ *   namesMatch()
+ */
 
 
 /* ==========================================================
-   MERGE PROVIDER DATA
+   MERGE PROVIDER DATA
 ========================================================== */
 
 export function mergeProviderData(
@@ -40,7 +40,9 @@ export function mergeProviderData(
 
   for (
     const item
-    of Array.isArray(results)
+    of Array.isArray(
+      results
+    )
       ? results
       : []
   ) {
@@ -123,12 +125,13 @@ export function mergeProviderData(
         awayMatches
       ),
 
-    sourceProviders:
-      [
-        ...new Set(
-          sourceProviders
-        )
-      ]
+    sourceProviders: [
+
+      ...new Set(
+        sourceProviders
+      )
+
+    ]
 
   };
 
@@ -136,7 +139,7 @@ export function mergeProviderData(
 
 
 /* ==========================================================
-   DEDUPE MATCHES
+   DEDUPE MATCHES
 ========================================================== */
 
 export function dedupeMatches(
@@ -153,7 +156,9 @@ export function dedupeMatches(
 
   for (
     const match
-    of Array.isArray(matches)
+    of Array.isArray(
+      matches
+    )
       ? matches
       : []
   ) {
@@ -179,7 +184,9 @@ export function dedupeMatches(
           match.awayTeam?.name,
           match.score?.fullTime?.home,
           match.score?.fullTime?.away
-        ].join("|")
+        ].join(
+          "|"
+        )
 
       );
 
@@ -224,7 +231,6 @@ export function dedupeMatches(
         a?.utcDate ||
         a?.date
       )
-
   );
 
 
@@ -237,7 +243,7 @@ export function dedupeMatches(
 
 
 /* ==========================================================
-   BUILD TEAM ANALYSIS
+   BUILD TEAM ANALYSIS
 ========================================================== */
 
 export function buildTeamAnalysis(
@@ -345,7 +351,7 @@ export function buildTeamAnalysis(
 
 
 /* ==========================================================
-   CALCULATE TEAM STATS
+   CALCULATE TEAM STATS
 ========================================================== */
 
 export function calculateTeamStats(
@@ -361,135 +367,137 @@ export function calculateTeamStats(
 
   const usable =
     (
-      Array.isArray(matches)
+      Array.isArray(
+        matches
+      )
         ? matches
         : []
     )
 
-    .map(
-      match => {
+      .map(
+        match => {
 
-        if (
-          !match
-        ) {
+          if (
+            !match
+          ) {
 
-          return null;
+            return null;
 
-        }
-
-
-        const home =
-          normalizeName(
-            match.homeTeam?.name
-          );
+          }
 
 
-        const away =
-          normalizeName(
-            match.awayTeam?.name
-          );
+          const home =
+            normalizeName(
+              match.homeTeam?.name
+            );
 
 
-        const homeGoals =
-          Number(
-            match.score?.fullTime?.home
-          );
+          const away =
+            normalizeName(
+              match.awayTeam?.name
+            );
 
 
-        const awayGoals =
-          Number(
-            match.score?.fullTime?.away
-          );
+          const homeGoals =
+            Number(
+              match.score?.fullTime?.home
+            );
 
 
-        if (
+          const awayGoals =
+            Number(
+              match.score?.fullTime?.away
+            );
 
-          !Number.isFinite(
-            homeGoals
-          )
 
-          ||
+          if (
 
-          !Number.isFinite(
-            awayGoals
-          )
+            !Number.isFinite(
+              homeGoals
+            )
 
-          ||
+            ||
 
-          (
+            !Number.isFinite(
+              awayGoals
+            )
 
-            !namesMatch(
+            ||
+
+            (
+
+              !namesMatch(
+                home,
+                team
+              )
+
+              &&
+
+              !namesMatch(
+                away,
+                team
+              )
+
+            )
+
+          ) {
+
+            return null;
+
+          }
+
+
+          const isHome =
+            namesMatch(
               home,
               team
-            )
+            );
 
-            &&
 
-            !namesMatch(
-              away,
-              team
-            )
+          const gf =
+            isHome
+              ? homeGoals
+              : awayGoals;
 
-          )
 
-        ) {
+          const ga =
+            isHome
+              ? awayGoals
+              : homeGoals;
 
-          return null;
+
+          return {
+
+            id:
+              match.id ||
+              null,
+
+            utcDate:
+              match.utcDate ||
+              match.date ||
+              null,
+
+            gf,
+
+            ga,
+
+            result:
+
+              gf > ga
+                ? "W"
+
+                : gf < ga
+                  ? "L"
+                  : "D"
+
+          };
 
         }
+      )
 
-
-        const isHome =
-          namesMatch(
-            home,
-            team
-          );
-
-
-        const gf =
-          isHome
-            ? homeGoals
-            : awayGoals;
-
-
-        const ga =
-          isHome
-            ? awayGoals
-            : homeGoals;
-
-
-        return {
-
-          id:
-            match.id ||
-            null,
-
-          utcDate:
-            match.utcDate ||
-            match.date ||
-            null,
-
-          gf,
-
-          ga,
-
-          result:
-
-            gf > ga
-              ? "W"
-
-              : gf < ga
-                ? "L"
-                : "D"
-
-        };
-
-      }
-    )
-
-    .filter(
-      Boolean
-    );
+      .filter(
+        Boolean
+      );
 
 
   const last5 =
@@ -665,7 +673,6 @@ export function calculateTeamStats(
       ),
 
     last5:
-
       last5.map(
         item => ({
 
@@ -687,7 +694,7 @@ export function calculateTeamStats(
 
 
 /* ==========================================================
-   NORMALIZE NAME
+   NORMALIZE NAME
 ========================================================== */
 
 export function normalizeName(
@@ -738,7 +745,7 @@ export function normalizeName(
 
 
 /* ==========================================================
-   NAME MATCH
+   NAME MATCH
 ========================================================== */
 
 export function namesMatch(
@@ -853,7 +860,7 @@ export function namesMatch(
 
 
 /* ==========================================================
-   DATE
+   DATE
 ========================================================== */
 
 function parseDate(
@@ -885,7 +892,7 @@ function parseDate(
 
 
 /* ==========================================================
-   CLAMP
+   CLAMP
 ========================================================== */
 
 function clamp(
@@ -926,7 +933,7 @@ function clamp(
 
 
 /* ==========================================================
-   ROUND
+   ROUND
 ========================================================== */
 
 function round(
@@ -959,5 +966,5 @@ function round(
 
 
 /* ==========================================================
-   END statsCollector.js
+   END statsCollector.js
 ========================================================== */
