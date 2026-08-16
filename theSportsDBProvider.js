@@ -1,6 +1,6 @@
-// ==========================================================
-// Y.C.B TheSportsDB PROVIDER 3.1.0
-// ==========================================================
+/* ==========================================================
+   Y.C.B TheSportsDB PROVIDER 3.1.0
+========================================================== */
 
 import {
   registerProvider
@@ -43,10 +43,14 @@ async function getJson(
     await fetch(
       url,
       {
-        headers:{
+
+        headers: {
+
           Accept:
             "application/json"
+
         }
+
       }
     );
 
@@ -131,7 +135,7 @@ function eventToMatch(
 
   const homeScore =
     event.intHomeScore ==
-      null
+    null
 
       ? null
 
@@ -142,7 +146,7 @@ function eventToMatch(
 
   const awayScore =
     event.intAwayScore ==
-      null
+    null
 
       ? null
 
@@ -169,20 +173,25 @@ function eventToMatch(
 
     date,
 
-    homeTeam:{
+    homeTeam: {
+
       name:
         event.strHomeTeam ||
         ""
+
     },
 
-    awayTeam:{
+    awayTeam: {
+
       name:
         event.strAwayTeam ||
         ""
+
     },
 
-    score:{
-      fullTime:{
+    score: {
+
+      fullTime: {
 
         home:
           Number.isFinite(
@@ -199,14 +208,19 @@ function eventToMatch(
             : null
 
       }
+
     },
 
     competition:
       event.strLeague
+
         ? {
+
             name:
               event.strLeague
+
           }
+
         : null
 
   };
@@ -275,7 +289,9 @@ async function findTeam(
           ""
         ).toLowerCase() ===
         target
+
           ? 0
+
           : 1;
 
 
@@ -285,7 +301,9 @@ async function findTeam(
           ""
         ).toLowerCase() ===
         target
+
           ? 0
+
           : 1;
 
 
@@ -326,7 +344,9 @@ async function lastEvents(
     Array.isArray(
       data?.results
     )
+
       ? data.results
+
       : []
 
   )
@@ -371,7 +391,9 @@ async function nextEvents(
     Array.isArray(
       data?.events
     )
+
       ? data.events
+
       : []
 
   )
@@ -531,7 +553,7 @@ async function getMatchData(
     message:
       "TheSportsDB data loaded",
 
-    data:{
+    data: {
 
       matchFound:
         Boolean(
@@ -540,7 +562,7 @@ async function getMatchData(
 
       fixture,
 
-      teams:{
+      teams: {
 
         home:
           cleanTeam(
@@ -554,7 +576,7 @@ async function getMatchData(
 
       },
 
-      recentMatches:{
+      recentMatches: {
 
         home:
           homeEvents.slice(
