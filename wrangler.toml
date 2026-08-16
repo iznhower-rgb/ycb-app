@@ -6,7 +6,18 @@ compatibility_date = "2026-08-11"
 
 [vars]
 
+# ESPN leagues scanned by the provider.
 ESPN_LEAGUES = "eng.1,esp.1,ger.1,ita.1,fra.1,ned.1,por.1,bel.1,sco.1,tur.1,usa.1,mex.1,bra.1,arg.1"
 
-# BSD_API_URL is optional.
-# Add it only if you have a compatible BSD endpoint.
+# Optional. The current free TheSportsDB V1 key is 123.
+THESPORTSDB_API_KEY = "123"
+
+# Optional provider timeout.
+YCB_PROVIDER_TIMEOUT_MS = "20000"
+
+# Optional BSD endpoint. If absent, BSD is reported as disabled.
+# BSD_API_URL = "https://your-bsd-endpoint.example/api/match"
+
+# Keep private BSD credentials out of wrangler.toml.
+# Set with:
+# wrangler secret put BSD_API_KEY
