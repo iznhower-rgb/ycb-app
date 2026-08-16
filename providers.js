@@ -1,33 +1,49 @@
 /* ==========================================================
-   PROVIDERS REGISTRY (providers.js)
+   Y.C.B PROVIDER REGISTRY 3.2.0
 ========================================================== */
 
 class DataProvider {
-  constructor(config) {
-    this.name = config.name;
-    this.version = config.version;
-    this.description = config.description;
-    this.enabled = true;
+  constructor(config = {}) {
+    this.name = String(config.name || "Unknown");
+    this.version = String(config.version || "1.0.0");
+    this.description = String(config.description || "");
+    this.enabled = config.enabled !== false;
   }
 
-  // الدالة الأساسية التي يجب أن تُعرف في كل مزود
-  async getMatchData(home, away, env) {
-    throw new Error("getMatchData must be implemented by subclass");
-  }
-}
-
-let providersRegistry = [];
-
-function registerProvider(providerInstance) {
-  if (providerInstance && typeof providerInstance.getMatchData === "function") {
-    providersRegistry.push(providerInstance);
-  } else {
-    console.error("Invalid provider registration: missing getMatchData function");
+  async getMatchData() {
+    throw new Error("getMatchData must be implemented");
   }
 }
 
-function getProviderInstances() {
-  return providersRegistry;
+const providersRegistry = [];
+
+export function registerProvider(provider) {
+  if (!provider || typeof provider.getMatchData !== "function") {
+    return false;
+  }
+
+  const exists = providersRegistry.some(
+    item => item.name === provider.name
+  );
+
+  if (!exists) {
+    providersRegistry.push(provider);
+  }
+
+  return true;
 }
 
-export { DataProvider, registerProvider, getProviderInstances };
+export function getProviderInstances() {
+  return [...providersRegistry];
+}
+
+export function getProviders() {
+  return providersRegistry.map(provider => ({
+    name: provider.name,
+    version: provider.version,
+    description: provider.description,
+    enabled: provider.enabled !== false
+  }));
+}
+
+export { DataProvider };
