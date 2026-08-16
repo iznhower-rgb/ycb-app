@@ -4,7 +4,6 @@
 
 import { registerProvider, DataProvider } from "./providers.js";
 
-// يمكن دمج مزود ESPN أو تخصيصه هنا بالاعتماد على الفئة الأساسية DataProvider
 class EspnProvider extends DataProvider {
   constructor() {
     super({
@@ -22,10 +21,17 @@ class EspnProvider extends DataProvider {
       data: {
         matchFound: true,
         fixture: null,
-        recentMatches: { home: [], away: [] }
+        recentMatches: { 
+          home: [], 
+          away: [] 
+        }
       }
     };
   }
 }
 
-registerProvider(new EspnProvider());
+// إنشاء وتصدير الكائن مسجلاً بشكل صحيح
+const espnProviderInstance = new EspnProvider();
+registerProvider(espnProviderInstance);
+
+export default espnProviderInstance;
