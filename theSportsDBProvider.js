@@ -1,95 +1,145 @@
 /* ==========================================================
-   Y.C.B TheSportsDB PROVIDER 3.1.0
+   Y.C.B TheSportsDB PROVIDER 3.2.0
 ========================================================== */
 
 import {
   registerProvider
 } from "./providers.js";
 
-
 const API_BASE =
   "https://www.thesportsdb.com/api/v1/json";
 
-
 const DEFAULT_KEY =
-  "3";
+  "123";
 
+const REQUEST_TIMEOUT_MS =
+  15000;
 
-/* ==========================================================
-   API KEY
-========================================================== */
+const MAX_HISTORY =
+  15;
 
-function apiKey(
-  env
-) {
-
+function apiKey(env) {
   return String(
     env?.THESPORTSDB_API_KEY ||
     DEFAULT_KEY
   ).trim();
-
 }
 
+function normalizeName(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(
+      /\b(fc|cf|afc|sc|ac|fk|club|the)\b/g,
+      " "
+    )
+    .replace(
+      /[^a-z0-9\u0600-\u06ff\s]/gi,
+      " "
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-/* ==========================================================
-   JSON
-========================================================== */
+function namesMatch(a, b) {
+  const x =
+    normalizeName(a);
 
-async function getJson(
-  url
-) {
+  const y =
+    normalizeName(b);
 
-  const response =
-    await fetch(
-      url,
-      {
+  if (!x || !y) {
+    return false;
+  }
 
-        headers: {
+  if (
+    x === y ||
+    x.includes(y) ||
+    y.includes(x)
+  ) {
+    return true;
+  }
 
-          Accept:
-            "application/json"
+  const ax =
+    new Set(
+      x.split(" ")
+        .filter(Boolean)
+    );
 
+  const by =
+    y.split(" ")
+      .filter(
+        token =>
+          token.length >= 3
+      );
+
+  if (!by.length) {
+    return false;
+  }
+
+  const overlap =
+    by.filter(
+      token =>
+        ax.has(token)
+    ).length;
+
+  return by.length === 1
+    ? overlap >= 1
+    : overlap >=
+      Math.min(
+        2,
+        by.length
+      );
+}
+
+async function getJson(url) {
+  const controller =
+    new AbortController();
+
+  const timer =
+    setTimeout(
+      () => controller.abort(),
+      REQUEST_TIMEOUT_MS
+    );
+
+  try {
+    const response =
+      await fetch(
+        url,
+        {
+          method: "GET",
+
+          headers: {
+            Accept:
+              "application/json"
+          },
+
+          signal:
+            controller.signal
         }
+      );
 
-      }
-    );
+    if (!response.ok) {
+      throw new Error(
+        `TheSportsDB HTTP ${response.status}`
+      );
+    }
 
+    return await response.json();
 
-  if (
-    !response.ok
-  ) {
-
-    throw new Error(
-      `TheSportsDB HTTP ${response.status}`
-    );
-
+  } finally {
+    clearTimeout(timer);
   }
-
-
-  return response.json();
-
 }
 
-
-/* ==========================================================
-   CLEAN TEAM
-========================================================== */
-
-function cleanTeam(
-  team
-) {
-
-  if (
-    !team
-  ) {
-
+function cleanTeam(team) {
+  if (!team) {
     return null;
-
   }
-
 
   return {
-
     id:
       team.idTeam ||
       null,
@@ -110,63 +160,51 @@ function cleanTeam(
     league:
       team.strLeague ||
       null
-
   };
-
 }
 
-
-/* ==========================================================
-   EVENT TO MATCH
-========================================================== */
-
-function eventToMatch(
-  event
-) {
-
-  if (
-    !event
-  ) {
-
+function eventToMatch(event) {
+  if (!event) {
     return null;
-
   }
 
+  const home =
+    event.strHomeTeam ||
+    "";
 
-  const homeScore =
+  const away =
+    event.strAwayTeam ||
+    "";
+
+  if (!home || !away) {
+    return null;
+  }
+
+  const h =
     event.intHomeScore ==
     null
-
       ? null
-
       : Number(
           event.intHomeScore
         );
 
-
-  const awayScore =
+  const a =
     event.intAwayScore ==
     null
-
       ? null
-
       : Number(
           event.intAwayScore
         );
-
 
   const date =
     event.strTimestamp ||
     event.dateEvent ||
     null;
 
-
   return {
-
     id:
       event.idEvent ||
-
-      `${event.strHomeTeam}|${event.strAwayTeam}|${date}`,
+      `${home}|${away}|${date}`,
 
     utcDate:
       date,
@@ -174,297 +212,291 @@ function eventToMatch(
     date,
 
     homeTeam: {
+      id:
+        event.idHomeTeam ||
+        null,
 
       name:
-        event.strHomeTeam ||
-        ""
-
+        home
     },
 
     awayTeam: {
+      id:
+        event.idAwayTeam ||
+        null,
 
       name:
-        event.strAwayTeam ||
-        ""
-
+        away
     },
 
     score: {
-
       fullTime: {
-
         home:
-          Number.isFinite(
-            homeScore
-          )
-            ? homeScore
+          Number.isFinite(h)
+            ? h
             : null,
 
         away:
-          Number.isFinite(
-            awayScore
-          )
-            ? awayScore
+          Number.isFinite(a)
+            ? a
             : null
-
       }
-
     },
 
     competition:
       event.strLeague
-
         ? {
-
             name:
-              event.strLeague
+              event.strLeague,
 
+            id:
+              event.idLeague ||
+              null
           }
-
         : null
-
   };
-
 }
-
-
-/* ==========================================================
-   FIND TEAM
-========================================================== */
 
 async function findTeam(
   name,
   key
 ) {
-
   const url =
-
     `${API_BASE}/${encodeURIComponent(
       key
     )}/searchteams.php?t=${encodeURIComponent(
       name
     )}`;
 
-
-  const data =
-    await getJson(
-      url
-    );
-
+  const payload =
+    await getJson(url);
 
   const teams =
     Array.isArray(
-      data?.teams
+      payload?.teams
     )
-
-      ? data.teams
-
+      ? payload.teams
       : [];
 
-
-  if (
-    !teams.length
-  ) {
-
+  if (!teams.length) {
     return null;
-
   }
 
+  const exact =
+    teams.find(
+      team =>
+        normalizeName(
+          team.strTeam
+        ) ===
+        normalizeName(name)
+    );
 
-  const target =
-    String(
-      name
-    ).toLowerCase();
-
-
-  return teams.sort(
-    (
-      a,
-      b
-    ) => {
-
-      const aa =
-        String(
-          a.strTeam ||
-          ""
-        ).toLowerCase() ===
-        target
-
-          ? 0
-
-          : 1;
-
-
-      const bb =
-        String(
-          b.strTeam ||
-          ""
-        ).toLowerCase() ===
-        target
-
-          ? 0
-
-          : 1;
-
-
-      return aa - bb;
-
-    }
-  )[0];
-
+  return (
+    exact ||
+    teams.find(
+      team =>
+        namesMatch(
+          team.strTeam,
+          name
+        )
+    ) ||
+    null
+  );
 }
-
-
-/* ==========================================================
-   LAST EVENTS
-========================================================== */
 
 async function lastEvents(
   teamId,
   key
 ) {
-
   const url =
-
     `${API_BASE}/${encodeURIComponent(
       key
     )}/eventslast.php?id=${encodeURIComponent(
       teamId
     )}`;
 
+  const payload =
+    await getJson(url);
 
-  const data =
-    await getJson(
-      url
-    );
-
-
-  return (
-
+  const events =
     Array.isArray(
-      data?.results
+      payload?.results
     )
+      ? payload.results
+      : Array.isArray(
+          payload?.events
+        )
+        ? payload.events
+        : [];
 
-      ? data.results
-
-      : []
-
-  )
-
-    .map(
-      eventToMatch
-    )
-
-    .filter(
-      Boolean
-    );
-
+  return events
+    .map(eventToMatch)
+    .filter(Boolean);
 }
-
-
-/* ==========================================================
-   NEXT EVENTS
-========================================================== */
 
 async function nextEvents(
   teamId,
   key
 ) {
-
   const url =
-
     `${API_BASE}/${encodeURIComponent(
       key
     )}/eventsnext.php?id=${encodeURIComponent(
       teamId
     )}`;
 
+  const payload =
+    await getJson(url);
 
-  const data =
-    await getJson(
-      url
-    );
-
-
-  return (
-
+  const events =
     Array.isArray(
-      data?.events
+      payload?.events
     )
+      ? payload.events
+      : Array.isArray(
+          payload?.results
+        )
+        ? payload.results
+        : [];
 
-      ? data.events
-
-      : []
-
-  )
-
-    .map(
-      eventToMatch
-    )
-
-    .filter(
-      Boolean
-    );
-
+  return events
+    .map(eventToMatch)
+    .filter(Boolean);
 }
 
+function findFixture(
+  homeNext,
+  awayNext,
+  home,
+  away
+) {
+  return (
+    homeNext.find(
+      event =>
+        namesMatch(
+          event?.homeTeam?.name,
+          home
+        ) &&
+        namesMatch(
+          event?.awayTeam?.name,
+          away
+        )
+    ) ||
 
-/* ==========================================================
-   GET MATCH DATA
-========================================================== */
+    awayNext.find(
+      event =>
+        namesMatch(
+          event?.homeTeam?.name,
+          home
+        ) &&
+        namesMatch(
+          event?.awayTeam?.name,
+          away
+        )
+    ) ||
+
+    null
+  );
+}
+
+function dedupe(matches) {
+  const seen =
+    new Set();
+
+  return matches
+    .filter(Boolean)
+
+    .filter(match => {
+      const key =
+        String(
+          match.id ||
+          [
+            match.utcDate,
+            match.homeTeam?.name,
+            match.awayTeam?.name,
+            match.score?.fullTime?.home,
+            match.score?.fullTime?.away
+          ].join("|")
+        );
+
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+
+      return true;
+    })
+
+    .sort(
+      (a, b) =>
+        new Date(
+          b.utcDate ||
+          b.date ||
+          0
+        ).getTime() -
+        new Date(
+          a.utcDate ||
+          a.date ||
+          0
+        ).getTime()
+    )
+
+    .slice(
+      0,
+      MAX_HISTORY
+    );
+}
 
 async function getMatchData(
   home,
   away,
-  env
+  env = {}
 ) {
+  if (!home || !away) {
+    return {
+      status: "invalid",
+      message:
+        "Home or Away team parameter is missing",
+      data: null
+    };
+  }
 
   const key =
-    apiKey(
-      env
-    );
-
+    apiKey(env);
 
   const [
     homeTeam,
     awayTeam
-  ] =
+  ] = await Promise.all([
+    findTeam(
+      home,
+      key
+    ),
 
-    await Promise.all([
-
-      findTeam(
-        home,
-        key
-      ),
-
-      findTeam(
-        away,
-        key
-      )
-
-    ]);
-
+    findTeam(
+      away,
+      key
+    )
+  ]);
 
   if (
     !homeTeam ||
     !awayTeam
   ) {
-
     return {
-
-      status:
-        "not_found",
-
+      status: "not_found",
       message:
         "TheSportsDB لم يجد أحد الفريقين.",
-
-      data:
-        null
-
+      data: null
     };
-
   }
 
+  const safe =
+    promise =>
+      promise.catch(
+        () => []
+      );
 
   const [
     homeEvents,
@@ -472,153 +504,107 @@ async function getMatchData(
     homeNext,
     awayNext
   ] =
-
     await Promise.all([
-
-      lastEvents(
-        homeTeam.idTeam,
-        key
+      safe(
+        lastEvents(
+          homeTeam.idTeam,
+          key
+        )
       ),
 
-      lastEvents(
-        awayTeam.idTeam,
-        key
+      safe(
+        lastEvents(
+          awayTeam.idTeam,
+          key
+        )
       ),
 
-      nextEvents(
-        homeTeam.idTeam,
-        key
+      safe(
+        nextEvents(
+          homeTeam.idTeam,
+          key
+        )
       ),
 
-      nextEvents(
-        awayTeam.idTeam,
-        key
+      safe(
+        nextEvents(
+          awayTeam.idTeam,
+          key
+        )
       )
-
     ]);
 
-
   const fixture =
+    findFixture(
+      homeNext,
+      awayNext,
+      homeTeam.strTeam ||
+        home,
+      awayTeam.strTeam ||
+        away
+    );
 
-    homeNext.find(
-      event =>
-
-        String(
-          event?.awayTeam?.name ||
-          ""
-        )
-
-          .toLowerCase()
-
-          .includes(
-            String(
-              awayTeam.strTeam ||
-              away
-            ).toLowerCase()
-          )
-
-    )
-
-    ||
-
-    awayNext.find(
-      event =>
-
-        String(
-          event?.homeTeam?.name ||
-          ""
-        )
-
-          .toLowerCase()
-
-          .includes(
-            String(
-              homeTeam.strTeam ||
-              home
-            ).toLowerCase()
-          )
-
-    )
-
-    ||
-
-    null;
-
+  const historyAvailable =
+    homeEvents.length > 0 ||
+    awayEvents.length > 0;
 
   return {
-
-    status:
-      "success",
+    status: "success",
 
     message:
-      "TheSportsDB data loaded",
+      fixture
+        ? "TheSportsDB data loaded and fixture checked"
+        : historyAvailable
+          ? "TheSportsDB history loaded; fixture not found"
+          : "TheSportsDB teams found; schedule endpoints returned no events",
 
     data: {
-
       matchFound:
-        Boolean(
-          fixture
-        ),
+        Boolean(fixture),
 
       fixture,
 
       teams: {
-
         home:
-          cleanTeam(
-            homeTeam
-          ),
+          cleanTeam(homeTeam),
 
         away:
-          cleanTeam(
-            awayTeam
-          )
-
+          cleanTeam(awayTeam)
       },
 
       recentMatches: {
-
         home:
-          homeEvents.slice(
-            0,
-            15
-          ),
+          dedupe(homeEvents),
 
         away:
-          awayEvents.slice(
-            0,
-            15
-          )
-
+          dedupe(awayEvents)
       }
-
     }
-
   };
-
 }
 
-
-/* ==========================================================
-   REGISTER
-========================================================== */
-
-registerProvider({
-
+const provider = {
   name:
     "TheSportsDB",
 
   version:
-    "3.1.0",
+    "3.2.0",
 
   description:
-    "TheSportsDB football provider",
+    "TheSportsDB V1 football provider",
+
+  enabled:
+    true,
 
   getMatchData
+};
 
-});
-
+registerProvider(
+  provider
+);
 
 export {
   getMatchData
 };
+
+export default provider;
