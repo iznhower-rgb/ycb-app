@@ -1,267 +1,216 @@
 /* ==========================================================
-   Y.C.B BSD PROVIDER 3.1.0
+   Y.C.B BSD PROVIDER 3.2.0
+   Optional compatible BSD endpoint
 ========================================================== */
-
-/*
- * BSD is optional.
- *
- * Configure:
- *
- *   BSD_API_URL
- *
- * Optional:
- *
- *   BSD_API_KEY
- *
- * The endpoint should accept:
- *
- *   ?home=...&away=...
- *
- * and return normalized Y.C.B data or raw match data.
- */
 
 import {
   registerProvider
 } from "./providers.js";
 
-
-/* ==========================================================
-   NORMALIZE BSD DATA
-========================================================== */
+const REQUEST_TIMEOUT_MS =
+  15000;
 
 function normalizeRaw(
   data,
   home,
   away
 ) {
-
   if (
     !data ||
-    typeof data !==
-      "object"
+    typeof data !== "object"
   ) {
-
     return null;
-
   }
-
-
-  if (
-    data.fixture ||
-    data.recentMatches
-  ) {
-
-    return data;
-
-  }
-
 
   const fixture =
     data.fixture ||
     data.match ||
     null;
 
-
-  const homeMatches =
+  const recentHome =
     data.recentMatches?.home ||
     data.homeMatches ||
+    data.home_history ||
     [];
 
-
-  const awayMatches =
+  const recentAway =
     data.recentMatches?.away ||
     data.awayMatches ||
+    data.away_history ||
     [];
 
-
   return {
-
     matchFound:
       Boolean(
+        data.matchFound ??
         fixture
       ),
 
     fixture,
 
     recentMatches: {
-
       home:
         Array.isArray(
-          homeMatches
+          recentHome
         )
-          ? homeMatches
+          ? recentHome
           : [],
 
       away:
         Array.isArray(
-          awayMatches
+          recentAway
         )
-          ? awayMatches
+          ? recentAway
           : []
-
     },
 
     requested: {
-
       home,
-
       away
-
     }
-
   };
-
 }
-
-
-/* ==========================================================
-   GET MATCH DATA
-========================================================== */
 
 async function getMatchData(
   home,
   away,
-  env
+  env = {}
 ) {
-
   const endpoint =
     String(
       env?.BSD_API_URL ||
       ""
     ).trim();
 
-
-  if (
-    !endpoint
-  ) {
-
+  if (!endpoint) {
     return {
-
-      status:
-        "disabled",
-
+      status: "disabled",
       message:
         "BSD_API_URL غير مضبوط.",
-
-      data:
-        null
-
+      data: null
     };
-
   }
 
+  let url;
 
-  const url =
-    new URL(
-      endpoint
-    );
+  try {
+    url =
+      new URL(endpoint);
 
+  } catch {
+    return {
+      status: "invalid_config",
+      message:
+        "BSD_API_URL غير صالح.",
+      data: null
+    };
+  }
 
   url.searchParams.set(
     "home",
     home
   );
 
-
   url.searchParams.set(
     "away",
     away
   );
 
+  const controller =
+    new AbortController();
 
-  const response =
-    await fetch(
-      url.toString(),
-      {
+  const timer =
+    setTimeout(
+      () =>
+        controller.abort(),
 
-        headers: {
+      Number(
+        env.YCB_BSD_TIMEOUT_MS
+      ) ||
+        REQUEST_TIMEOUT_MS
+    );
 
-          Accept:
-            "application/json",
+  try {
+    const headers = {
+      Accept:
+        "application/json"
+    };
 
-          ...(
+    if (
+      env?.BSD_API_KEY
+    ) {
+      headers.Authorization =
+        `Bearer ${env.BSD_API_KEY}`;
+    }
 
-            env?.BSD_API_KEY
-
-              ? {
-
-                  Authorization:
-                    `Bearer ${env.BSD_API_KEY}`
-
-                }
-
-              : {}
-
-          )
-
+    const response =
+      await fetch(
+        url.toString(),
+        {
+          method: "GET",
+          headers,
+          signal:
+            controller.signal
         }
+      );
 
-      }
-    );
+    if (!response.ok) {
+      throw new Error(
+        `BSD HTTP ${response.status}`
+      );
+    }
 
+    const raw =
+      await response.json();
 
-  if (
-    !response.ok
-  ) {
+    const data =
+      normalizeRaw(
+        raw,
+        home,
+        away
+      );
 
-    throw new Error(
-      `BSD HTTP ${response.status}`
-    );
+    return {
+      status:
+        data
+          ? "success"
+          : "empty",
 
+      message:
+        data
+          ? "BSD data loaded"
+          : "BSD returned no usable data",
+
+      data
+    };
+
+  } finally {
+    clearTimeout(timer);
   }
-
-
-  const raw =
-    await response.json();
-
-
-  const data =
-    normalizeRaw(
-      raw,
-      home,
-      away
-    );
-
-
-  return {
-
-    status:
-      data
-        ? "success"
-        : "empty",
-
-    message:
-      data
-        ? "BSD data loaded"
-        : "BSD returned no usable data",
-
-    data
-
-  };
-
 }
 
-
-/* ==========================================================
-   REGISTER
-========================================================== */
-
-registerProvider({
-
+const provider = {
   name:
     "BSD",
 
   version:
-    "3.1.0",
+    "3.2.0",
 
   description:
     "Optional BSD football data provider",
 
+  enabled:
+    true,
+
   getMatchData
+};
 
-});
-
+registerProvider(
+  provider
+);
 
 export {
   getMatchData
 };
+
+export default provider;
