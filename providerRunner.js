@@ -1,18 +1,19 @@
-// ==========================================================
-// Y.C.B PROVIDER RUNNER 3.1.0
-// ==========================================================
-//
-// Executes all registered providers.
-//
-// ==========================================================
-
 import {
   getProviderInstances
 } from "./providers.js";
 
 
 /* ==========================================================
-   EXECUTE ALL PROVIDERS
+   Y.C.B PROVIDER RUNNER 3.1.0
+========================================================== */
+
+/*
+ * Executes all registered providers.
+ */
+
+
+/* ==========================================================
+   EXECUTE ALL PROVIDERS
 ========================================================== */
 
 export async function getAllMatchData(
@@ -25,7 +26,8 @@ export async function getAllMatchData(
     getProviderInstances()
       .filter(
         provider =>
-          provider.enabled !== false
+          provider.enabled !==
+          false
       );
 
 
@@ -114,5 +116,5 @@ export async function getAllMatchData(
 
 
 /* ==========================================================
-   END providerRunner.js
+   END providerRunner.js
 ========================================================== */
