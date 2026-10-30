@@ -1514,40 +1514,7 @@ export function normalizeName(
    * Common club suffixes.
    */
 
-  name =
-    name.replace(
-
-      /\b(
-
-        fc|
-
-        cf|
-
-        afc|
-
-        sc|
-
-        ac|
-
-        fk|
-
-        sk|
-
-        as|
-
-        cd|
-
-        ud|
-
-        ca|
-
-        club
-
-      )\b/gi,
-
-      " "
-
-    );
+  name = name.replace(/\b(fc|cf|afc|sc|ac|fk|sk|as|cd|ud|ca|club)\b/gi, " ");
 
 
   /*

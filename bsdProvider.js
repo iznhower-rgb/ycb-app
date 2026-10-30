@@ -26,6 +26,11 @@
 import {
   registerProvider
 } from "./providers.js";
+import {
+  teamsMatch,
+  resolveTeamAlias,
+  cleanRawName
+} from "./teamAliases.js";
 
 
 // ==========================================================
@@ -58,7 +63,7 @@ const GLOBAL_FORWARD_DAYS =
 
 
 // ==========================================================
-// CACHE
+// CACHE & RATE LIMIT
 // ==========================================================
 
 const TEAM_CACHE =
@@ -67,6 +72,7 @@ const TEAM_CACHE =
 const FIXTURE_CACHE =
   new Map();
 
+let RATE_LIMIT_UNTIL = 0;
 
 // ==========================================================
 // PROVIDER
@@ -95,6 +101,15 @@ const provider = {
 
     const startedAt =
       Date.now();
+
+    if (Date.now() < RATE_LIMIT_UNTIL) {
+      const remainingSec = Math.ceil((RATE_LIMIT_UNTIL - Date.now()) / 1000);
+      return {
+        status: "rate_limited",
+        message: `BSD: تجاوز مؤقت لمعدل الطلبات المسموح (Rate limit). سيعاد الاتصال تلقائياً خلال ${remainingSec} ثانية.`,
+        data: null
+      };
+    }
 
 
     const homeName =
@@ -623,7 +638,7 @@ async function findTeam(
 
 
   const url =
-    `${API}/teams/?search=${encoded}&limit=${PAGE_LIMIT}&offset=0`;
+    `${API}/teams/?name=${encoded}&limit=${PAGE_LIMIT}&offset=0`;
 
 
   const data =
@@ -753,20 +768,20 @@ async function collectTeamEvents(
   const urls = [
 
     //
-    // Primary:
-    //
-
-    `${API}/teams/${encodeURIComponent(
-      teamId
-    )}/fixtures/?limit=${PAGE_LIMIT}&offset=0`,
-
-    //
-    // Team events fallback:
+    // 1. Latest finished matches for accurate recent team form:
     //
 
     `${API}/events/?team_id=${encodeURIComponent(
       teamId
-    )}&limit=${PAGE_LIMIT}&offset=0`
+    )}&status=finished&limit=20&offset=0`,
+
+    //
+    // 2. Scheduled upcoming fixtures & general match list:
+    //
+
+    `${API}/events/?team_id=${encodeURIComponent(
+      teamId
+    )}&limit=30&offset=0`
 
   ];
 
@@ -1133,14 +1148,16 @@ function getEventTeams(
 
   //
   // Common BSD fields:
+  // In BSD, event.home_team is often a direct string (e.g. "Arsenal")
+  // or an object { name: "Arsenal" }.
   //
 
   const homeName =
-    home?.name ||
+    (typeof home === "string" ? home : home?.name) ||
 
-    event?.home_team?.name ||
+    (typeof event?.home_team === "string" ? event.home_team : event?.home_team?.name) ||
 
-    event?.homeTeam?.name ||
+    (typeof event?.homeTeam === "string" ? event.homeTeam : event?.homeTeam?.name) ||
 
     event?.home_team_name ||
 
@@ -1150,11 +1167,11 @@ function getEventTeams(
 
 
   const awayName =
-    away?.name ||
+    (typeof away === "string" ? away : away?.name) ||
 
-    event?.away_team?.name ||
+    (typeof event?.away_team === "string" ? event.away_team : event?.away_team?.name) ||
 
-    event?.awayTeam?.name ||
+    (typeof event?.awayTeam === "string" ? event.awayTeam : event?.awayTeam?.name) ||
 
     event?.away_team_name ||
 
@@ -1478,6 +1495,8 @@ function getEventDate(
 
   const value =
 
+    event?.event_date ||
+
     event?.date ||
 
     event?.datetime ||
@@ -1676,29 +1695,24 @@ function isFinishedEvent(
   //
 
   if (
-    !raw &&
     home !== null &&
-    away !== null
+    away !== null &&
+    !["notstarted", "scheduled", "fixture", "postponed", "cancelled"].includes(raw)
   ) {
-
     const date =
       getEventDate(
         event
       );
 
-
     if (
-      date &&
+      !date ||
       Date.parse(
         date
-      ) <
+      ) <=
       Date.now()
     ) {
-
       return true;
-
     }
-
   }
 
 
@@ -1970,61 +1984,34 @@ async function fetchJSON(
       );
 
 
-    const text =
-      await response.text();
+    const text = await response.text();
 
-
-    let data =
-      null;
-
-
-    if (
-      text
-    ) {
-
-      try {
-
-        data =
-          JSON.parse(
-            text
-          );
-
-      } catch {
-
-        throw new Error(
-          `BSD invalid JSON (${response.status})`
-        );
-
+    if (!response.ok) {
+      if (response.status === 429) {
+        RATE_LIMIT_UNTIL = Date.now() + 45000;
+        throw new Error("BSD HTTP 429: Too Many Requests (Rate limit)");
       }
-
+      let detail = "";
+      try {
+        if (text) {
+          const errObj = JSON.parse(text);
+          detail = errObj?.detail || errObj?.error || errObj?.message || "";
+        }
+      } catch {
+        detail = text ? text.slice(0, 80) : "";
+      }
+      throw new Error(`BSD HTTP ${response.status}${detail ? `: ${detail}` : ""}`);
     }
 
+    let data = null;
 
-    if (
-      !response.ok
-    ) {
-
-      const detail =
-        data?.detail ||
-        data?.error ||
-        data?.message ||
-        "";
-
-
-      throw new Error(
-
-        `BSD HTTP ${response.status}` +
-
-        (
-          detail
-            ? `: ${detail}`
-            : ""
-        )
-
-      );
-
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(`BSD invalid JSON response`);
+      }
     }
-
 
     return data;
 
@@ -2174,17 +2161,25 @@ function teamNameScore(
   }
 
 
+  let score = 0;
+
   if (
     candidate ===
     target
   ) {
 
-    return 100;
+    score = 100;
 
-  }
+  } else if (
+    namesMatch(
+      candidate,
+      target
+    )
+  ) {
 
+    score = 95;
 
-  if (
+  } else if (
     candidate.includes(
       target
     ) ||
@@ -2193,14 +2188,25 @@ function teamNameScore(
     )
   ) {
 
-    return 90;
+    score = 85;
 
-  }
+  } else {
 
+    const a =
+      new Set(
+        candidate
+          .split(
+            " "
+          )
+          .filter(
+            token =>
+              token.length >=
+              3
+          )
+      );
 
-  const a =
-    new Set(
-      candidate
+    const b =
+      target
         .split(
           " "
         )
@@ -2208,69 +2214,30 @@ function teamNameScore(
           token =>
             token.length >=
             3
-        )
-    );
+        );
 
-
-  const b =
-    target
-      .split(
-        " "
-      )
-      .filter(
-        token =>
-          token.length >=
-          3
-      );
-
-
-  if (
-    !a.size ||
-    !b.length
-  ) {
-
-    return 0;
-
-  }
-
-
-  let overlap =
-    0;
-
-
-  for (
-    const token
-      of b
-  ) {
-
-    if (
-      a.has(
-        token
-      )
-    ) {
-
-      overlap++;
-
+    if (a.size && b.length) {
+      let overlap = 0;
+      for (const token of b) {
+        if (a.has(token)) {
+          overlap++;
+        }
+      }
+      if (overlap > 0) {
+        score = Math.min(80, 45 + overlap * 15);
+      }
     }
 
   }
 
-
-  if (
-    overlap === 0
-  ) {
-
-    return 0;
-
+  // Penalize youth/reserve squads if target did not specify youth
+  const isYouthCandidate = /\b(u18|u19|u20|u21|u23|women|fem|reserves?|ii)\b/i.test(candidate);
+  const isYouthTarget = /\b(u18|u19|u20|u21|u23|women|fem|reserves?|ii)\b/i.test(target);
+  if (isYouthCandidate && !isYouthTarget) {
+    score -= 35;
   }
 
-
-  return Math.min(
-    85,
-    45 +
-    overlap *
-    15
-  );
+  return Math.max(0, score);
 
 }
 
@@ -2911,13 +2878,11 @@ function classifyError(
 
 
   if (
-    message.includes(
-      "http 429"
-    )
+    message.includes("429") ||
+    message.includes("rate limit") ||
+    message.includes("too many")
   ) {
-
     return "rate_limited";
-
   }
 
 

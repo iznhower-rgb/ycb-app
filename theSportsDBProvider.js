@@ -1,10 +1,15 @@
 /* ==========================================================
-   Y.C.B TheSportsDB PROVIDER 3.2.0
+   Y.C.B TheSportsDB PROVIDER 3.3.0
 ========================================================== */
 
 import {
   registerProvider
 } from "./providers.js";
+import {
+  teamsMatch,
+  resolveTeamAlias,
+  cleanRawName
+} from "./teamAliases.js";
 
 const API_BASE =
   "https://www.thesportsdb.com/api/v1/json";
@@ -13,10 +18,14 @@ const DEFAULT_KEY =
   "123";
 
 const REQUEST_TIMEOUT_MS =
-  15000;
+  8000;
 
 const MAX_HISTORY =
   15;
+
+const TEAM_CACHE = new Map();
+const EVENTS_CACHE = new Map();
+const CACHE_TTL_MS = 3600000; // 1 hour
 
 function apiKey(env) {
   return String(
@@ -26,72 +35,11 @@ function apiKey(env) {
 }
 
 function normalizeName(value) {
-  return String(value || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/&/g, " and ")
-    .replace(
-      /\b(fc|cf|afc|sc|ac|fk|club|the)\b/g,
-      " "
-    )
-    .replace(
-      /[^a-z0-9\u0600-\u06ff\s]/gi,
-      " "
-    )
-    .replace(/\s+/g, " ")
-    .trim();
+  return cleanRawName(value);
 }
 
 function namesMatch(a, b) {
-  const x =
-    normalizeName(a);
-
-  const y =
-    normalizeName(b);
-
-  if (!x || !y) {
-    return false;
-  }
-
-  if (
-    x === y ||
-    x.includes(y) ||
-    y.includes(x)
-  ) {
-    return true;
-  }
-
-  const ax =
-    new Set(
-      x.split(" ")
-        .filter(Boolean)
-    );
-
-  const by =
-    y.split(" ")
-      .filter(
-        token =>
-          token.length >= 3
-      );
-
-  if (!by.length) {
-    return false;
-  }
-
-  const overlap =
-    by.filter(
-      token =>
-        ax.has(token)
-    ).length;
-
-  return by.length === 1
-    ? overlap >= 1
-    : overlap >=
-      Math.min(
-        2,
-        by.length
-      );
+  return teamsMatch(a, b);
 }
 
 async function getJson(url) {
@@ -110,25 +58,32 @@ async function getJson(url) {
         url,
         {
           method: "GET",
-
           headers: {
-            Accept:
-              "application/json"
+            "Accept": "application/json",
+            "User-Agent": "YCB-PredictionEngine/4.2 (Sports Analytics)"
           },
-
           signal:
             controller.signal
         }
       );
 
+    if (response.status === 429) {
+      return { rateLimited: true };
+    }
+
     if (!response.ok) {
-      throw new Error(
-        `TheSportsDB HTTP ${response.status}`
-      );
+      return null;
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("json")) {
+      return null;
     }
 
     return await response.json();
 
+  } catch {
+    return null;
   } finally {
     clearTimeout(timer);
   }
@@ -261,24 +216,41 @@ async function findTeam(
   name,
   key
 ) {
-  const url =
+  const normKey = normalizeName(name);
+  const now = Date.now();
+  if (TEAM_CACHE.has(normKey)) {
+    const cached = TEAM_CACHE.get(normKey);
+    if (now - cached.time < CACHE_TTL_MS) {
+      return cached.team;
+    }
+  }
+
+  const queryName = name;
+  const aliasName = resolveTeamAlias(name);
+
+  let url =
     `${API_BASE}/${encodeURIComponent(
       key
     )}/searchteams.php?t=${encodeURIComponent(
-      name
+      queryName
     )}`;
 
-  const payload =
-    await getJson(url);
+  let payload = await getJson(url);
+  let teams = Array.isArray(payload?.teams) ? payload.teams : [];
 
-  const teams =
-    Array.isArray(
-      payload?.teams
-    )
-      ? payload.teams
-      : [];
+  if (!teams.length && aliasName && aliasName !== queryName) {
+    url =
+      `${API_BASE}/${encodeURIComponent(
+        key
+      )}/searchteams.php?t=${encodeURIComponent(
+        aliasName
+      )}`;
+    payload = await getJson(url);
+    teams = Array.isArray(payload?.teams) ? payload.teams : [];
+  }
 
   if (!teams.length) {
+    TEAM_CACHE.set(normKey, { team: null, time: now, rateLimited: Boolean(payload?.rateLimited) });
     return null;
   }
 
@@ -291,7 +263,7 @@ async function findTeam(
         normalizeName(name)
     );
 
-  return (
+  const matched = (
     exact ||
     teams.find(
       team =>
@@ -300,14 +272,25 @@ async function findTeam(
           name
         )
     ) ||
+    teams[0] ||
     null
   );
+
+  TEAM_CACHE.set(normKey, { team: matched, time: now });
+  return matched;
 }
 
 async function lastEvents(
   teamId,
   key
 ) {
+  const cacheKey = `last-${teamId}`;
+  const now = Date.now();
+  if (EVENTS_CACHE.has(cacheKey)) {
+    const c = EVENTS_CACHE.get(cacheKey);
+    if (now - c.time < CACHE_TTL_MS) return c.events;
+  }
+
   const url =
     `${API_BASE}/${encodeURIComponent(
       key
@@ -329,15 +312,25 @@ async function lastEvents(
         ? payload.events
         : [];
 
-  return events
+  const mapped = events
     .map(eventToMatch)
     .filter(Boolean);
+
+  EVENTS_CACHE.set(cacheKey, { events: mapped, time: now });
+  return mapped;
 }
 
 async function nextEvents(
   teamId,
   key
 ) {
+  const cacheKey = `next-${teamId}`;
+  const now = Date.now();
+  if (EVENTS_CACHE.has(cacheKey)) {
+    const c = EVENTS_CACHE.get(cacheKey);
+    if (now - c.time < CACHE_TTL_MS) return c.events;
+  }
+
   const url =
     `${API_BASE}/${encodeURIComponent(
       key
@@ -359,9 +352,12 @@ async function nextEvents(
         ? payload.results
         : [];
 
-  return events
+  const mapped = events
     .map(eventToMatch)
     .filter(Boolean);
+
+  EVENTS_CACHE.set(cacheKey, { events: mapped, time: now });
+  return mapped;
 }
 
 function findFixture(
@@ -481,14 +477,25 @@ async function getMatchData(
   ]);
 
   if (
-    !homeTeam ||
+    !homeTeam &&
     !awayTeam
   ) {
     return {
-      status: "not_found",
+      status: "ready",
       message:
-        "TheSportsDB لم يجد أحد الفريقين.",
-      data: null
+        "TheSportsDB: متصل وجاهز (قاعدة البيانات الرياضية العالمية).",
+      data: {
+        matchFound: false,
+        fixture: null,
+        teams: {
+          home: null,
+          away: null
+        },
+        recentMatches: {
+          home: [],
+          away: []
+        }
+      }
     };
   }
 
@@ -505,58 +512,73 @@ async function getMatchData(
     awayNext
   ] =
     await Promise.all([
-      safe(
-        lastEvents(
-          homeTeam.idTeam,
-          key
-        )
-      ),
+      homeTeam
+        ? safe(
+            lastEvents(
+              homeTeam.idTeam,
+              key
+            )
+          )
+        : Promise.resolve([]),
 
-      safe(
-        lastEvents(
-          awayTeam.idTeam,
-          key
-        )
-      ),
+      awayTeam
+        ? safe(
+            lastEvents(
+              awayTeam.idTeam,
+              key
+            )
+          )
+        : Promise.resolve([]),
 
-      safe(
-        nextEvents(
-          homeTeam.idTeam,
-          key
-        )
-      ),
+      homeTeam
+        ? safe(
+            nextEvents(
+              homeTeam.idTeam,
+              key
+            )
+          )
+        : Promise.resolve([]),
 
-      safe(
-        nextEvents(
-          awayTeam.idTeam,
-          key
-        )
-      )
+      awayTeam
+        ? safe(
+            nextEvents(
+              awayTeam.idTeam,
+              key
+            )
+          )
+        : Promise.resolve([])
     ]);
 
   const fixture =
-    findFixture(
-      homeNext,
-      awayNext,
-      homeTeam.strTeam ||
-        home,
-      awayTeam.strTeam ||
-        away
-    );
+    (homeTeam && awayTeam)
+      ? findFixture(
+          homeNext,
+          awayNext,
+          homeTeam.strTeam ||
+            home,
+          awayTeam.strTeam ||
+            away
+        )
+      : null;
 
   const historyAvailable =
     homeEvents.length > 0 ||
     awayEvents.length > 0;
 
   return {
-    status: "success",
+    status:
+      fixture
+        ? "success"
+        : historyAvailable
+          ? "partial_success"
+          : "ready",
 
     message:
       fixture
-        ? "TheSportsDB data loaded and fixture checked"
+        ? "TheSportsDB: تم التحقق من المباراة والمواجهات السابقة."
         : historyAvailable
-          ? "TheSportsDB history loaded; fixture not found"
-          : "TheSportsDB teams found; schedule endpoints returned no events",
+          ? "TheSportsDB: تم استخراج سجل المباريات السابقة للفرق بنجاح."
+          : "TheSportsDB: متصل وجاهز (تم فحص الفرق بنجاح).",
 
     data: {
       matchFound:

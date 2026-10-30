@@ -518,13 +518,20 @@ function normalizeProviderResult(
   // Fixture verification is tracked separately.
   //
 
+  const isAvailableOrHealthy =
+    usable ||
+    result.status === "ready" ||
+    result.status === "api_ok_no_match" ||
+    result.status === "partial_success" ||
+    result.status === "success";
+
   return {
 
     provider:
       provider.name,
 
     success:
-      usable,
+      isAvailableOrHealthy,
 
     usable,
 

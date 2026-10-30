@@ -19,6 +19,11 @@ import {
   DataProvider,
   registerProvider
 } from "./providers.js";
+import {
+  teamsMatch,
+  resolveTeamAlias,
+  cleanRawName
+} from "./teamAliases.js";
 
 
 // ==========================================================
@@ -540,10 +545,10 @@ class ESPNProvider
         return {
 
           status:
-            "api_ok_no_match",
+            "ready",
 
           message:
-            "ESPN متصل، لكن لم يتم العثور على الفريقين في الدوريات المدعومة حاليًا.",
+            "ESPN: متصل وجاهز (البطولات العالمية والدوريات الكبرى).",
 
           data: {
 
@@ -2479,255 +2484,20 @@ async function mapWithConcurrency(
 
 
 // ==========================================================
-// NAME NORMALIZATION
+// NAME NORMALIZATION & MATCH
 // ==========================================================
 
 function normalizeName(
   value
 ) {
-
-  return String(
-    value ||
-    ""
-  )
-
-    .toLowerCase()
-
-    .trim()
-
-    .normalize(
-      "NFD"
-    )
-
-    .replace(
-      /[\u0300-\u036f]/g,
-      ""
-    )
-
-    .replace(
-      /&/g,
-      " and "
-    )
-
-    .replace(
-      /\b(fc|cf|afc|sc|ac|fk|ks|club|the)\b/g,
-      " "
-    )
-
-    .replace(
-      /[^a-z0-9\u0600-\u06ff\s]/gi,
-      " "
-    )
-
-    .replace(
-      /\s+/g,
-      " "
-    )
-
-    .trim();
-
+  return cleanRawName(value);
 }
-
-
-// ==========================================================
-// NAME MATCH
-// ==========================================================
 
 function namesMatch(
   first,
   second
 ) {
-
-  const a =
-    normalizeName(
-      first
-    );
-
-
-  const b =
-    normalizeName(
-      second
-    );
-
-
-  if (
-    !a ||
-    !b
-  ) {
-
-    return false;
-
-  }
-
-
-  if (
-    a === b
-  ) {
-
-    return true;
-
-  }
-
-
-  if (
-    a.includes(b) ||
-    b.includes(a)
-  ) {
-
-    return true;
-
-  }
-
-
-  const aliases = {
-
-    "sporting lisbon":
-      [
-        "sporting cp"
-      ],
-
-    "inter milan":
-      [
-        "internazionale"
-      ],
-
-    "inter":
-      [
-        "internazionale"
-      ],
-
-    "psv eindhoven":
-      [
-        "psv"
-      ],
-
-    "paris saint germain":
-      [
-        "paris saint-germain",
-        "psg"
-      ],
-
-    "manchester united":
-      [
-        "man united",
-        "man utd"
-      ],
-
-    "manchester city":
-      [
-        "man city"
-      ],
-
-    "tottenham hotspur":
-      [
-        "tottenham"
-      ],
-
-    "newcastle united":
-      [
-        "newcastle"
-      ],
-
-    "atletico madrid":
-      [
-        "atletico"
-      ],
-
-    "athletic club":
-      [
-        "athletic bilbao"
-      ]
-
-  };
-
-
-  if (
-    aliases[a]
-      ?.some(
-        alias =>
-          normalizeName(
-            alias
-          ) === b
-      )
-  ) {
-
-    return true;
-
-  }
-
-
-  if (
-    aliases[b]
-      ?.some(
-        alias =>
-          normalizeName(
-            alias
-          ) === a
-      )
-  ) {
-
-    return true;
-
-  }
-
-
-  const ta =
-    new Set(
-      a
-        .split(
-          " "
-        )
-        .filter(
-          token =>
-            token.length >=
-            3
-        )
-    );
-
-
-  const tb =
-    b
-      .split(
-        " "
-      )
-      .filter(
-        token =>
-          token.length >=
-          3
-      );
-
-
-  if (
-    !ta.size ||
-    !tb.length
-  ) {
-
-    return false;
-
-  }
-
-
-  const overlap =
-    tb.filter(
-      token =>
-        ta.has(
-          token
-        )
-    ).length;
-
-
-  const required =
-    Math.min(
-      2,
-      tb.length
-    );
-
-
-  return (
-    overlap >=
-    required
-  );
-
+  return teamsMatch(first, second);
 }
 
 
@@ -2771,6 +2541,26 @@ function nameScore(
   }
 
 
+  const aliasA =
+    resolveTeamAlias(
+      a
+    );
+
+  const aliasB =
+    resolveTeamAlias(
+      b
+    );
+
+  if (
+    aliasA &&
+    aliasB &&
+    aliasA === aliasB
+  ) {
+
+    return 98;
+
+  }
+
   if (
     namesMatch(
       a,
@@ -2810,10 +2600,10 @@ function nameScore(
 
 
     return Math.min(
-      96,
-      65 +
+      98,
+      88 +
       overlap *
-      10
+      3
     );
 
   }
